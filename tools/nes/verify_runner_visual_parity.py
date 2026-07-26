@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential visual acceptance for RetroSharp issue #327."""
+"""Optional AprNes physical smoke with a historical #327 differential replay."""
 
 from __future__ import annotations
 
@@ -168,17 +168,21 @@ SNAPSHOT_ADDRESS_FIELDS = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Hold RIGHT on the exact tracked runner and compare every frame across "
-            "AprNes/NesMcp, RetroArch FCEUmm, and Nestopia."
+            "Run the optional AprNes physical smoke check for the tracked runner. "
+            "The retired multi-emulator acceptance can only be replayed explicitly "
+            "as historical forensic evidence."
         )
     )
     parser.add_argument("--rom", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--runtime-abi", type=Path, default=DEFAULT_RUNTIME_ABI)
     parser.add_argument(
-        "--gate",
-        choices=("physical", "full"),
-        default="full",
-        help="Run only AprNes physical-write validation or the full three-emulator gate.",
+        "--mode",
+        choices=("physical", "historical-differential"),
+        default="physical",
+        help=(
+            "Run the AprNes-only physical smoke check (default), or explicitly "
+            "replay the non-gating historical FCEUmm/Nestopia differential."
+        ),
     )
     parser.add_argument("--fceumm-core", type=Path, default=DEFAULT_FCEUMM_CORE)
     parser.add_argument("--nestopia-core", type=Path)
@@ -3349,7 +3353,7 @@ def consensus_visible_mismatches(
     return mismatches, repeated_runs
 
 
-def run_physical_gate(
+def run_physical_smoke(
     args: argparse.Namespace,
     rom: Path,
     artifacts: Path,
@@ -3384,7 +3388,7 @@ def run_physical_gate(
         )
         valid = focal_traces_valid and observations_valid
         summary = {
-            "gate": "physical",
+            "mode": "physical",
             "rom": str(rom),
             "rom_sha256": sha256(rom),
             "aprnes_server": aprnes["server"],
@@ -3419,8 +3423,8 @@ def main() -> int:
     artifacts = args.artifacts.resolve()
     if not rom.is_file():
         raise FileNotFoundError(rom)
-    if args.gate == "physical":
-        return run_physical_gate(args, rom, artifacts)
+    if args.mode == "physical":
+        return run_physical_smoke(args, rom, artifacts)
 
     fceumm_core = args.fceumm_core.resolve()
     if not fceumm_core.is_file():
@@ -3440,7 +3444,7 @@ def main() -> int:
         text=True,
     )
     summary: dict[str, object] = {
-        "gate": "full",
+        "mode": "historical-differential",
         "rom": str(rom),
         "rom_sha256": sha256(rom),
         "fceumm_core": str(fceumm_core),
@@ -3825,7 +3829,7 @@ def main() -> int:
                 "bounded": input_progress_bounded,
             }
             summary["defect_reproduced"] = defect_reproduced or returned_defect
-            summary["acceptance_converged"] = (
+            summary["historical_differential_converged"] = (
                 state_parity
                 and collision_aligned
                 and reference_nametables_match
@@ -3855,7 +3859,8 @@ def main() -> int:
         str(path): sha256(path) for path in persistent_paths
     }
     summary["verified"] = (
-        not summary["defect_reproduced"] and summary["acceptance_converged"]
+        not summary["defect_reproduced"]
+        and summary["historical_differential_converged"]
     )
     summary_path = artifacts / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -3868,7 +3873,7 @@ def main() -> int:
             f"repeated_runs={summary['fceumm_repeated_tile_runs']}."
         )
         return 1
-    if not summary["acceptance_converged"]:
+    if not summary["historical_differential_converged"]:
         print(
             "INVALID: physical state, transient commit frames, real PPU traces, "
             "bidirectional runtime state, jump, input, or collision did not converge."

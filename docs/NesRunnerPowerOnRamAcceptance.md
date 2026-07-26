@@ -41,9 +41,9 @@ No whole-RAM clear is emitted. OAM, mapper state, audio state, game-owned
 variables, canonical WorldPack ROM bytes, and memory after the staging layout
 remain under their existing owners.
 
-## FCEUmm matrix
+## Historical FCEUmm matrix
 
-The checked-in harness drives RetroArch through its network control and remote
+The historical harness drove RetroArch through its network control and remote
 RetroPad interfaces, using the same isolated RetroArch session as the visual
 parity harness:
 
@@ -51,8 +51,8 @@ parity harness:
 tools/nes/verify_runner_power_on_ram.py
 ```
 
-It requires FCEUmm `(SVN) 3a84a6f`, fills all 2 KiB of CPU RAM, resets the real
-tracked runner, settles 500 frames, then advances exactly 120 paused frontend
+It required FCEUmm `(SVN) 3a84a6f`, filled all 2 KiB of CPU RAM, reset the real
+tracked runner, settled 500 frames, then advanced exactly 120 paused frontend
 frames while holding only RIGHT. The shared session uses a complete disposable
 RetroArch config with saves disabled and all output paths isolated. The tested
 core SHA-256 was
@@ -90,10 +90,10 @@ NesMcp `auto` routed that ROM to AprNes as mapper 4. After 500 idle frames and
   and a final 32-tile/8-attribute commit;
 - PPUCTRL `$80`, PPUMASK `$18`, four-screen rendering enabled.
 
-The current tracked ROM's AprNes behavior, including right/left crossings,
-jump/collision, exact physical nametables, and lifecycle convergence with
-FCEUmm and Nestopia, is recorded in
+Historical right/left, jump/collision, physical-nametable, and lifecycle
+observations across AprNes, FCEUmm, and Nestopia are recorded in
 [`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md).
+That differential is not required for current validation.
 
 ## Validation
 

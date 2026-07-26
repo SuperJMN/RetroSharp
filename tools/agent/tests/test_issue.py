@@ -299,6 +299,10 @@ class IssueCliTests(unittest.TestCase):
             "1",
             "--first-signature",
             "first failure",
+            "--evidence-gain",
+            "hypothesis-eliminated",
+            "--consecutive-no-gain",
+            "0",
             "--next-check",
             "next falsifiable check",
             "--active-minutes",
@@ -742,6 +746,23 @@ class IssueCliTests(unittest.TestCase):
         second = self.invoke(self.clone_b, *self.checkpoint_args())
         second_report = json.loads(second.stdout.splitlines()[0])
         self.assertNotEqual(first_report["diff_sha256"], second_report["diff_sha256"])
+
+    def test_second_consecutive_no_gain_requires_stop_checkpoint(self) -> None:
+        self.claim(self.clone_a)
+        self.worktree()
+        args = self.checkpoint_args()
+        gain_index = args.index("--evidence-gain") + 1
+        count_index = args.index("--consecutive-no-gain") + 1
+        args[gain_index] = "verification-only"
+        args[count_index] = "2"
+
+        self.invoke(self.clone_b, *args, expect=33)
+
+        args[gain_index] = "no-gain-stop"
+        result = self.invoke(self.clone_b, *args)
+        report = json.loads(result.stdout.splitlines()[0])
+        self.assertTrue(report["stop_required"])
+        self.assertEqual(2, report["consecutive_no_gain"])
 
     def test_worktree_retry_is_idempotent_for_recorded_path(self) -> None:
         self.claim(self.clone_a)

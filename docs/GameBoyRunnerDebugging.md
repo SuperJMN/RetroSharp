@@ -1,7 +1,7 @@
 # Game Boy Runner Debugging Workflow
 
 Status: operational debugging guide.
-Last updated: 2026-07-19.
+Last updated: 2026-07-26.
 
 Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
@@ -42,7 +42,9 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 ## Reproduce
 
-Use at least one automated screenshot path before making code changes.
+Use an automated screenshot when the symptom is visual. For cadence, input,
+audio, or performance regressions, prefer the matching behavioral timeline or
+counter evidence; a screenshot is neither required nor sufficient.
 
 Run the full diagnostic matrix:
 
@@ -80,37 +82,29 @@ flatpak run --command=retroarch org.libretro.RetroArch \
 
 Use original DMG hardware reports as backend evidence, not as sample quirks. Input bugs that reproduce only on hardware can still be target-runtime bugs, especially around `JOYP` row settling.
 
-### NES four-screen differential
+### Optional NES physical smoke check
 
-When the shared runner fails only on NES, use the tracked NES ROM and the
-single three-emulator acceptance instead of inferring correctness from RGB
-occupancy or synthetic screenshots:
-
-```bash
-python3 tools/nes/verify_runner_visual_parity.py
-```
-
-The default `--gate full` runs that complete three-emulator comparison. While
-iterating on NES frame scheduling, use the independent AprNes physical gate:
+When the shared runner fails only on NES, reproduce it first with the
+in-process behavioral simulation on a freshly compiled ROM. If independent
+emulator evidence would help isolate physical PPU/OAM timing, run the optional
+AprNes-only smoke check:
 
 ```bash
-python3 tools/nes/verify_runner_visual_parity.py --gate physical
+python3 tools/nes/verify_runner_visual_parity.py --mode physical
 ```
 
-That mode does not require FCEUmm, Nestopia, or persistent RetroArch
-configuration. It replays five focal commits and requires the retained OAM
-stream, every sensitive `$2000-$2007` write, exact PPU address/data order, and
-the selected-slot lifecycle transition to remain coherent inside physical
-VBlank. It does not perform or weaken the RGB/nametable comparison owned by
-`full`.
+`physical` is also the default. It does not require FCEUmm, Nestopia, or
+persistent RetroArch configuration. It replays five focal commits and reports
+retained OAM, sensitive `$2000-$2007` writes, PPU address/data order, and
+selected-slot lifecycle transitions. This is diagnostic evidence; it is not a
+sample closeout gate and does not replace in-process gameplay acceptance.
 
-It drives Right beyond camera X 300, exercises jump/collision, then returns
-Left through X 256 in AprNes/NesMcp, isolated RetroArch/FCEUmm, and Nestopia.
-The comparison includes framebuffer captures, lifecycle and PPU evidence, all
-four physical nametables, exact visible tile IDs and attribute palette
-selectors, and authored collision cells. See
+The old three-emulator differential remains reproducible only through the
+explicit `--mode historical-differential` option. It preserves evidence from
+closed issue #327 and must not be copied into an issue, PR, or validation
+checklist. See
 [`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md) for
-the accepted hashes, red reproduction, runtime invariants, and artifact layout.
+that historical capture.
 
 ## Diagnostic Ladder
 
@@ -227,7 +221,7 @@ When handing off or opening an issue, include:
 - Symptom and expected behavior.
 - Full runner result: emulator/tool, frame count, input scenario, screenshot path.
 - First failing diagnostic step and scenario.
-- Whether PyBoy, RetroArch/Gambatte, SameBoy/debug MCP, and hardware agree or disagree.
+- External-emulator or hardware observations, if any; these are not required.
 - Suspected layer and why.
 - Files changed.
 - Validation commands and results.

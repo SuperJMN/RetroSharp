@@ -11,7 +11,10 @@ SCHEMA_VERSION = "aex-1"
 KINDS = {"implementation", "certification-gate", "investigation", "epic/integrator"}
 LAYERS = {"language", "sdk-2d", "target-intrinsic", "documentation", "validation"}
 TARGETS = {"none", "gb", "nes", "gb+nes"}
-POLICY = "90-minute checkpoint / 120-minute hard stop"
+POLICY = (
+    "90-minute checkpoint / 120-minute hard stop / "
+    "two consecutive no-gain experiments stop"
+)
 REQUIRED = (
     "Kind",
     "Parent",

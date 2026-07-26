@@ -51,6 +51,7 @@ PUSH_DENIED = 29
 REMOTE_ERROR = 30
 MIGRATION_ERROR = 31
 NOT_READY = 32
+DIMINISHING_RETURNS = 33
 
 
 def utcnow() -> dt.datetime:
@@ -796,6 +797,18 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
             WORKTREE_DENIED,
             {"issue": args.number, "error": "checkpoint-head-not-based-on-claim"},
         )
+    if (
+        args.consecutive_no_gain >= 2
+        and args.evidence_gain != "no-gain-stop"
+    ):
+        raise CliError(
+            DIMINISHING_RETURNS,
+            {
+                "issue": args.number,
+                "error": "two-consecutive-no-gain-steps-require-stop",
+                "required_evidence_gain": "no-gain-stop",
+            },
+        )
     pushed = False
     if args.allow_checkpoint_push:
         push_checkpoint(args, claim_store, record, worktree, gateway_repo)
@@ -815,6 +828,13 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
         "first_signature": args.first_signature,
         "rom_identity": args.rom_identity,
         "hypotheses": args.hypothesis[:3],
+        "evidence_gain": args.evidence_gain,
+        "consecutive_no_gain": args.consecutive_no_gain,
+        "stop_required": (
+            args.evidence_gain == "no-gain-stop"
+            or args.consecutive_no_gain >= 2
+            or args.active_minutes >= 120
+        ),
         "next_falsifiable_check": args.next_check,
         "active_minutes": args.active_minutes,
         "dispatch_metadata": record["dispatch_metadata"],
@@ -973,6 +993,24 @@ def parser() -> argparse.ArgumentParser:
     checkpoint.add_argument("--first-signature", required=True)
     checkpoint.add_argument("--rom-identity", default="not-applicable")
     checkpoint.add_argument("--hypothesis", action="append", default=[])
+    checkpoint.add_argument(
+        "--evidence-gain",
+        choices=(
+            "reproduction-established",
+            "hypothesis-eliminated",
+            "owner-localized",
+            "decision-changed",
+            "verification-only",
+            "no-gain-stop",
+        ),
+        required=True,
+    )
+    checkpoint.add_argument(
+        "--consecutive-no-gain",
+        type=int,
+        choices=range(0, 3),
+        required=True,
+    )
     checkpoint.add_argument("--next-check", required=True)
     checkpoint.add_argument("--active-minutes", type=int, choices=range(0, 121), required=True)
     checkpoint.add_argument("--validation", action="append", default=[])

@@ -131,8 +131,11 @@ publisher shape in this slice.
 Kind: implementation. Owner seam: NES runtime ABI projection plus the visual
 parity validation adapter.
 
-Add `--gate physical|full` to
-`tools/nes/verify_runner_visual_parity.py`; `full` remains the default.
+Historical implementation note: this child introduced separate physical and
+three-emulator modes in `tools/nes/verify_runner_visual_parity.py`. Its former
+`full` default has since been retired. The current CLI defaults to `physical`;
+the old matrix is available only as explicit, non-gating
+`historical-differential` forensic replay.
 
 The physical gate requires:
 
@@ -148,7 +151,8 @@ Generated runtime ABI sidecars expose semantic phase/cursor aliases per slot.
 Python must resolve those names through `runtime_abi.py`; it must not calculate
 CPU RAM addresses.
 
-This child does not relax or reinterpret the existing full raster gate.
+At the time, this child did not reinterpret the then-existing raster gate.
+That raster gate is no longer part of current acceptance.
 
 ## NFS-2.1 — Make stale-to-fresh publication atomic
 
@@ -253,10 +257,10 @@ the order #409, #408, then #322 and its parent #318.
 
 Kind: investigation. This child is independent and does not block #410.
 
-Compare the three transient cross-emulator endpoints through palette indices,
-camera/lifecycle continuity, and the incoming strip on both sides of each
-sample. It may not change the runtime or add allowlists unless it demonstrates
-real corruption. Its result is a bounded evidence report, not a scheduler patch.
+This closed investigation compared three transient cross-emulator endpoints
+through palette indices, camera/lifecycle continuity, and the incoming strip
+on both sides of each sample. Its result was historical evidence and does not
+define a current validation requirement.
 
 ## Execution rules
 

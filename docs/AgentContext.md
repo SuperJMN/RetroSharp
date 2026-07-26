@@ -182,5 +182,7 @@ evidence relevant to the changed owner:
   and validate the affected behavior.
 - Documentation only: `git diff --check`; run executable checks when commands,
   examples, generated artifacts, or enforced navigation contracts changed.
+- External-emulator runs are opt-in diagnostics. Multi-emulator comparison is
+  historical forensic evidence and must never be a handoff or closeout gate.
 
 Keep local validation, commit state, push state, and merge state distinct.

@@ -7,7 +7,10 @@ body:
     attributes:
       value: |
         This form is the `aex-1` contract consumed by `tools/agent/issue.py`.
-        The active engineering policy is mandatory for every dispatch: **90-minute checkpoint / 120-minute hard stop**.
+        The active engineering policy is mandatory for every dispatch:
+        **90-minute checkpoint / 120-minute hard stop / two consecutive
+        no-gain experiments stop**. Two matching deterministic runs suffice;
+        require a third only when they disagree or a concrete risk justifies it.
   - type: dropdown
     id: schema
     attributes: {label: Schema, options: [aex-1]}
@@ -59,9 +62,13 @@ body:
     id: verification
     attributes:
       label: Verification
-      description: Commands required before handoff/close.
+      description: |
+        Smallest commands that can decide the observable. Run broad validation
+        once on the final candidate when production or shared .NET behavior
+        changed; never after every diagnostic/refinement step.
       placeholder: |
-        dotnet test RetroSharp.sln -m:1
+        dotnet test <focused-owner-project> -m:1 --filter <observable>
+        dotnet test RetroSharp.sln -m:1  # final candidate, when applicable
         dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/bin/runner.gb samples/runner/runner.retrosharp.json
         git diff --check
     validations: {required: true}

@@ -1,7 +1,7 @@
 # Autonomous Agent Execution
 
 Status: operational guide.
-Last updated: 2026-07-18.
+Last updated: 2026-07-26.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
 
@@ -120,6 +120,30 @@ agent waits, queued CI, and infrastructure waits are recorded separately and do
 not consume the active budget. A long build or test does not authorize unrelated
 exploration while it runs.
 
+### Evidence-yield stop rule
+
+Elapsed time is a backstop, not permission to spend the whole budget refining
+the same conclusion. Before each experiment, minimization step, or validation
+run, state which resolution branch its result can change. A result has material
+information gain only when it does at least one of these:
+
+- establishes or removes reproducibility;
+- eliminates a falsifiable hypothesis;
+- changes the ranked owner seam; or
+- changes the implementation, acceptance, split, or handoff decision.
+
+Two consecutive completed steps with no material information gain stop the
+investigation immediately. Checkpoint the best evidence and return to the
+integrator; adding another metric, phase, emulator, confirmation run, or
+rephrased version of the same hypothesis does not reset the count.
+
+Two matching deterministic runs are sufficient confirmation. A third is
+allowed only when the first two disagree or the live issue names the concrete
+risk that requires it. Run the complete solution or other broad closeout gate
+once after selecting the final candidate, not between diagnostic iterations.
+At the 90-minute checkpoint, add no new dimensions or hypotheses: run only the
+cheapest already-named discriminator or hand off.
+
 ## Machine-checkable issue gateway
 
 `tools/agent/issue.py` owns the versioned `aex-1` issue contract and remote
@@ -162,6 +186,11 @@ Every checkpoint, whether local or pushed, requires the recorded claim base to
 remain an ancestor of its head. A verified release that already wrote its
 canonical receipt and exclusive `agent:verified` label can also resume the final
 claim-ref deletion safely.
+
+Every checkpoint records `--evidence-gain` and
+`--consecutive-no-gain`. The gateway rejects a second consecutive no-gain step
+unless the checkpoint is explicitly `no-gain-stop`, making the required
+handoff visible instead of silently authorizing another refinement loop.
 
 Checkpoint pushes are disabled unless all of these are true:
 
@@ -393,3 +422,4 @@ Stop and return to the integrator if:
 - Two agents need to modify the same builder/compiler code in incompatible ways.
 - A target cannot support the requested behavior within declared capabilities.
 - The runner cannot be kept working without broad unrelated rewrites.
+- Two consecutive experiments produce no material information gain.

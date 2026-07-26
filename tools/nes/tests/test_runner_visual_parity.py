@@ -864,7 +864,7 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
     def test_complete_frame_runs_align_by_runtime_state_and_reject_one_bad_frame(self) -> None:
         self.assertTrue(
             hasattr(parity, "compare_transient_frame_runs"),
-            "The three emulator frame sequences must be compared automatically.",
+            "The historical differential replay compares its retained frame sequences.",
         )
         aprnes_frames = []
         fceumm_frames = []
@@ -1016,7 +1016,7 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
             len(aprnes_corrupt["emulators"]["aprnes"]["corrupt_frames"]),
         )
 
-    def test_compact_acceptance_rejects_any_unmatched_retained_frame(self) -> None:
+    def test_historical_differential_rejects_any_unmatched_retained_frame(self) -> None:
         state = self.frame_state(0)
         indices = [0] * 4
         digest = f"sha256:{hashlib.sha256(bytes(indices)).hexdigest()}"
@@ -1462,16 +1462,22 @@ class PpuCommitTraceTests(unittest.TestCase):
         self.assertEqual(0, report["tile_writes"])
         self.assertEqual(6, report["attribute_writes"])
 
-    def test_cli_defaults_to_full_and_accepts_explicit_physical_gate(self) -> None:
+    def test_cli_defaults_to_physical_and_requires_explicit_historical_differential(
+        self,
+    ) -> None:
         with mock.patch("sys.argv", ["verify_runner_visual_parity.py"]):
-            self.assertEqual("full", parity.parse_args().gate)
+            self.assertEqual("physical", parity.parse_args().mode)
         with mock.patch(
             "sys.argv",
-            ["verify_runner_visual_parity.py", "--gate", "physical"],
+            [
+                "verify_runner_visual_parity.py",
+                "--mode",
+                "historical-differential",
+            ],
         ):
-            self.assertEqual("physical", parity.parse_args().gate)
+            self.assertEqual("historical-differential", parity.parse_args().mode)
 
-    def test_physical_gate_does_not_require_external_emulator_files(self) -> None:
+    def test_physical_smoke_does_not_require_external_emulator_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             rom = root / "runner.nes"
@@ -1480,7 +1486,7 @@ class PpuCommitTraceTests(unittest.TestCase):
                 rom=rom,
                 runtime_abi=root / "runner.nes.runtime-abi.json",
                 artifacts=root / "artifacts",
-                gate="physical",
+                mode="physical",
                 fceumm_core=root / "missing-fceumm.so",
             )
             abi = object()
@@ -1488,11 +1494,11 @@ class PpuCommitTraceTests(unittest.TestCase):
                 mock.patch.object(parity, "parse_args", return_value=args),
                 mock.patch.object(parity.NesRuntimeAbi, "load", return_value=abi),
                 mock.patch.object(parity, "activate_runtime_abi"),
-                mock.patch.object(parity, "run_physical_gate", return_value=0) as gate,
+                mock.patch.object(parity, "run_physical_smoke", return_value=0) as smoke,
             ):
                 self.assertEqual(0, parity.main())
 
-            gate.assert_called_once_with(args, rom.resolve(), args.artifacts.resolve())
+            smoke.assert_called_once_with(args, rom.resolve(), args.artifacts.resolve())
 
     def test_commit_trace_requires_one_contiguous_76_byte_oam_publication(self) -> None:
         trace = self.valid_trace()
