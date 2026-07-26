@@ -87,6 +87,37 @@ class SameCounterComparisonTests(unittest.TestCase):
             mismatches["packedAudioTick"],
         )
 
+    def test_camera_mismatch_values_are_relative_to_each_backend_baseline(self) -> None:
+        expected = {
+            321: {"frame": 321, "state": {"camera": {"commit": 11}}},
+            322: {"frame": 322, "state": {"camera": {"commit": 12}}},
+        }
+        actual = {
+            321: {"frame": 321, "state": {"camera": {"commit": 101}}},
+            322: {"frame": 322, "state": {"camera": {"commit": 103}}},
+        }
+        expected_baseline = {"frame": 320, "state": {"camera": {"commit": 10}}}
+        actual_baseline = {"frame": 320, "state": {"camera": {"commit": 100}}}
+
+        mismatch = MODULE.first_counter_delta_mismatches(
+            expected,
+            actual,
+            expected_baseline,
+            actual_baseline,
+            ("camera.commit",),
+        )
+
+        self.assertEqual(
+            {
+                "frame": 322,
+                "expectedDelta": 1,
+                "actualDelta": 2,
+                "expectedValue": 2,
+                "actualValue": 3,
+            },
+            mismatch["camera.commit"],
+        )
+
     def test_rom_identity_requires_the_same_bytes_for_both_artifacts(self) -> None:
         rom = b"same bytes"
         sha = hashlib.sha256(rom).hexdigest()

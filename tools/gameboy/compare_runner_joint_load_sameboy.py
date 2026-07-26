@@ -24,6 +24,7 @@ B = 1 << 5
 PALETTE = 0xFF47
 REPORT_SCHEMA = "retrosharp-rph62-in-process-v2"
 REPLAY_SCHEMA = "retrosharp-rph62-replay-v1"
+COMPARISON_SCHEMA = "retrosharp-rph62-same-counter-comparison-v4"
 LAYOUT_FIELDS = (
     "playerX", "playerY", "gameplayTick", "audioTick",
     "cameraRequest", "cameraResident", "cameraCommit", "cameraVisible",
@@ -328,6 +329,9 @@ def first_counter_delta_mismatches(
             expected_delta = (expected_value - state_value(expected_previous, field)) & 0xFF
             actual_delta = (actual_value - state_value(actual_previous, field)) & 0xFF
             if expected_delta != actual_delta:
+                if field.startswith("camera."):
+                    expected_value = (expected_value - state_value(expected_baseline, field)) & 0xFF
+                    actual_value = (actual_value - state_value(actual_baseline, field)) & 0xFF
                 mismatch = {
                     "frame": frame,
                     "expectedDelta": expected_delta,
@@ -585,8 +589,11 @@ def main() -> int:
         "GameBoyTestCpu fixed-cycle frame bucketing; not production runtime or lowering",
     )
     result = {
-        "schema": "retrosharp-rph62-same-counter-comparison-v3",
+        "schema": COMPARISON_SCHEMA,
+        "generatorSha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "sameBoyLibrarySha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
         "romSha256": rom_sha256,
+        "timelineSha256": hashlib.sha256(args.timeline.read_bytes()).hexdigest(),
         "timelineSchema": replay["schema"],
         "observedFrames": len(in_process),
         "sameboyReplayCount": len(replays),

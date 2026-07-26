@@ -117,6 +117,150 @@ in-process-report argument. `GameBoyTestCpu` remains the fast behavioral
 simulation and authored background/OAM oracle; it is not a physical-frame
 clock.
 
+## Full-load phase matrix
+
+RPH-6.3 keeps the complete ROM and 680-frame descriptor fixed. `RIGHT+B`
+remains held for all 360 observation frames. The only mutation moves the same
+six-frame A/jump/SFX span to every physical start frame from 330 through 350,
+covering both parities and the authored frame 340 without shortening movement,
+streaming, collision, BGM, or SFX load.
+The command rejects any descriptor that changes the 320-frame warm-up,
+360-frame observation, authored A start/duration, or reviewed cadence/camera
+budgets; this is also the compatibility boundary for a deferred bisect.
+
+```bash
+mkdir -p /tmp/rph63
+RETROSHARP_RPH62_REPORT="/tmp/rph63/in-process.json" \
+  dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1 \
+  --filter 'FullyQualifiedName~GameBoyRunnerJointLoadCadenceTests.Shared_runner_joint_load_cadence_gate'
+
+python3 tools/gameboy/compare_runner_joint_load_sameboy.py \
+  --library /home/jmn/Repos/GameboyMcp/native/out/linux-x64/libgameboy_debug_sameboy.so \
+  --rom /tmp/rph63/in-process.gb \
+  --timeline /tmp/rph63/in-process.timeline.json \
+  --in-process-report /tmp/rph63/in-process.json \
+  --out /tmp/rph63/comparison.json
+
+python3 tools/gameboy/sweep_runner_joint_load_sameboy.py \
+  --library /home/jmn/Repos/GameboyMcp/native/out/linux-x64/libgameboy_debug_sameboy.so \
+  --rom /tmp/rph63/in-process.gb \
+  --timeline /tmp/rph63/in-process.timeline.json \
+  --in-process-comparison /tmp/rph63/comparison.json \
+  --out /tmp/rph63/phase-matrix.json
+```
+
+The matrix makes two complete passes over all 21 phases. Every pass invokes
+the physical observer, which itself executes three fresh SameBoy replays.
+Consequently a green closeout covers 42 case runs and 126 emulator replays.
+It stops sweeping new phases on a physical RED, then repeats that phase to
+two matching matrix runs before returning exit 1. If two runs disagree, it
+runs that phase once more and returns exit 125. An invalid observer contract,
+missing full-load coverage, failed canary, behavioral-observer disagreement,
+cross-pass digest/verdict disagreement, or non-cadence physical failure returns
+exit 125 instead. Only the reviewed gameplay/audio cadence codes can become a
+bisect `bad` result.
+
+The 2026-07-26 run from `ac86494` used fresh runner ROM SHA-256
+`1617f7c82464beb042e444a39686237d68ebfd686e5e3c43a781abdcae9ac3a6`.
+All 21 phases were `NOT_REPRODUCED`; the matrix digest was
+`34144bf86555eb636c3a1fa8a2fb0aeb1633e246a226f5b6f6fef30aaf08fbb1`.
+Every phase retained 360 `RIGHT+B` frames, six A frames, player X range
+73..430, player Y range 234..273, 41 camera requests, active BGM and SFX, and
+changing retained-background and OAM digests. The in-process behavioral
+classification and the independent SameBoy comparison were also
+`NOT_REPRODUCED`.
+
+The deterministic artifacts are
+[`validation/gameboy/runner-joint-load-comparison.json`](../validation/gameboy/runner-joint-load-comparison.json)
+and
+[`validation/gameboy/runner-joint-load-phase-matrix.json`](../validation/gameboy/runner-joint-load-phase-matrix.json).
+The comparison is bound to the exact ROM and base timeline hashes. Every
+physical case is independently bound to its mutated timeline, ROM, SameBoy
+library, observer schema, three replay digests, canary proofs, and enforced
+load-coverage checks. `GameBoyTestCpu` disagreement can therefore invalidate a
+closeout but cannot yield a physical RED or a `git bisect` bad exit.
+The paired comparison covers the exact authored base timeline. Phase mutations
+run only through the SameBoy physical authority: synthesizing phase-shifted
+`GameBoyTestCpu` rows would reintroduce the fixed-cycle bucket as a frame clock,
+so those rows may neither establish nor veto a phase-specific physical RED.
+
+These hashes record provenance and repeatability, not byte-identity product
+requirements. The conclusion is bounded to the reviewed cadence, camera, and
+forbidden-work budgets. Because no phase produced a canonical RED, RPH-6.3
+does not delete dimensions, rank a production owner, or run a historical
+bisect.
+
+### Deferred bisect contract
+
+There is no compatible good/bad pair today. The isolated `d4f7837` checkpoint
+is the earliest commit containing the manifest/scenario/descriptor/observer
+contract and is behaviorally identical to `ac86494` for those inputs, but it is
+not an ancestor of `ac86494` and therefore cannot be its `git bisect` good
+endpoint. On the `master` ancestry, `ac86494` is the first compatible revision.
+The historical `f612a7e` report predates the scenario, descriptor, observer,
+and current runtime layout, so it is not a valid good endpoint either.
+
+Only after one phase records a deterministic physical RED and a distinct
+compatible revision records `NOT_REPRODUCED` may a bisect use the single-case
+exit code. The RPH-6.3 harness must be an immutable checkout outside the
+worktree whose `HEAD` is being bisected:
+
+```bash
+export RPH63_A_START=340
+export RPH63_SAMEBOY_LIBRARY=/home/jmn/Repos/GameboyMcp/native/out/linux-x64/libgameboy_debug_sameboy.so
+export RPH63_HARNESS=/absolute/path/to/immutable-rph63-harness
+export RPH63_HARNESS_COMMIT=replace-with-merged-rph63-commit
+: "${BAD:?set BAD}"
+: "${GOOD:?set GOOD}"
+test -n "$RPH63_HARNESS" && test -n "$RPH63_HARNESS_COMMIT" || exit 2
+test "$(git -C "$RPH63_HARNESS" rev-parse HEAD)" = "$RPH63_HARNESS_COMMIT" || exit 2
+test -z "$(git -C "$RPH63_HARNESS" status --porcelain)" || exit 2
+test "$(git -C "$RPH63_HARNESS" rev-parse --show-toplevel)" != "$(git rev-parse --show-toplevel)" || exit 2
+git merge-base --is-ancestor "$GOOD" "$BAD" || exit 2
+git bisect start "$BAD" "$GOOD" || exit 2
+git bisect run bash -lc '
+  test "$(git -C "$RPH63_HARNESS" rev-parse HEAD)" = "$RPH63_HARNESS_COMMIT" || exit 125
+  test -z "$(git -C "$RPH63_HARNESS" status --porcelain)" || exit 125
+  for path in \
+    samples/runner/runner.retrosharp.json \
+    validation/scenarios/runner-joint-load.gb.json \
+    src/RetroSharp.GameBoy.Tests/GameBoyRunnerJointLoadCadenceTests.cs
+  do
+    git cat-file -e "HEAD:$path" || exit 125
+  done
+  test -f "$RPH63_HARNESS/tools/gameboy/compare_runner_joint_load_sameboy.py" || exit 125
+  test -f "$RPH63_HARNESS/tools/gameboy/sweep_runner_joint_load_sameboy.py" || exit 125
+  out=$(mktemp -d /tmp/rph63-bisect.XXXXXX)
+  trap "rm -rf \"$out\"" EXIT
+  RETROSHARP_RPH62_REPORT="$out/in-process.json" \
+    dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1 \
+    --filter "FullyQualifiedName~GameBoyRunnerJointLoadCadenceTests.Shared_runner_joint_load_cadence_gate" \
+    || {
+      test -s "$out/in-process.json" \
+        && test -s "$out/in-process.gb" \
+        && test -s "$out/in-process.timeline.json" \
+        || exit 125
+    }
+  python3 "$RPH63_HARNESS/tools/gameboy/compare_runner_joint_load_sameboy.py" \
+    --library "$RPH63_SAMEBOY_LIBRARY" \
+    --rom "$out/in-process.gb" \
+    --timeline "$out/in-process.timeline.json" \
+    --in-process-report "$out/in-process.json" \
+    --out "$out/comparison.json" || exit 125
+  python3 "$RPH63_HARNESS/tools/gameboy/sweep_runner_joint_load_sameboy.py" \
+    --library "$RPH63_SAMEBOY_LIBRARY" \
+    --rom "$out/in-process.gb" \
+    --timeline "$out/in-process.timeline.json" \
+    --in-process-comparison "$out/comparison.json" \
+    --a-start-frame "$RPH63_A_START" \
+    --out "$out/matrix.json"
+'
+```
+
+Exit 125 skips contract-incompatible revisions. Exit 0 is a compatible green
+case and exit 1 is a compatible RED. Without both `$BAD` and `$GOOD`, this
+command is documentation, not authority to start a bisect.
+
 ## Observation-layer canaries
 
 The focused Game Boy test keeps the same ROM and inputs while injecting only

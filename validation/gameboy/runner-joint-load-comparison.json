@@ -1,0 +1,195 @@
+{
+  "schema": "retrosharp-rph62-same-counter-comparison-v4",
+  "generatorSha256": "1bdde2f0b47eb85b079ec8bc2aa184a4bf8bcd2c0a45994da3d56250264b1738",
+  "sameBoyLibrarySha256": "6caae96d9c24b2f3889af340741ebdab8c990b530b397114f055138a4fe3beb0",
+  "romSha256": "1617f7c82464beb042e444a39686237d68ebfd686e5e3c43a781abdcae9ac3a6",
+  "timelineSha256": "26a9d808cd32afb49031e4caa3b4e2b0cab79cc0e28fcc7a59821f15afcfc648",
+  "timelineSchema": "retrosharp-rph62-replay-v1",
+  "observedFrames": 360,
+  "sameboyReplayCount": 3,
+  "sameboyReplayDigests": [
+    "578a8de6c2ae3225185782faff69a5e225d6ba39274a91fe7b169d5b607a67fc",
+    "578a8de6c2ae3225185782faff69a5e225d6ba39274a91fe7b169d5b607a67fc",
+    "578a8de6c2ae3225185782faff69a5e225d6ba39274a91fe7b169d5b607a67fc"
+  ],
+  "sameboyDeterministic": true,
+  "sameCounterFirstMismatch": {
+    "gameplay": {
+      "frame": 346,
+      "expectedDelta": 0,
+      "actualDelta": 1,
+      "expectedValue": 81,
+      "actualValue": 80
+    },
+    "audio": {
+      "frame": 326,
+      "expectedDelta": 0,
+      "actualDelta": 1,
+      "expectedValue": 65,
+      "actualValue": 64
+    }
+  },
+  "counterDeltaFirstMismatch": {
+    "romGameplayTick": {
+      "frame": 346,
+      "expectedDelta": 0,
+      "actualDelta": 1,
+      "expectedValue": 81,
+      "actualValue": 80
+    },
+    "packedAudioTick": {
+      "frame": 326,
+      "expectedDelta": 0,
+      "actualDelta": 1,
+      "expectedValue": 65,
+      "actualValue": 64
+    },
+    "camera.request": null,
+    "camera.resident": null,
+    "camera.commit": {
+      "frame": 337,
+      "expectedDelta": 1,
+      "actualDelta": 0,
+      "expectedValue": 1,
+      "actualValue": 0
+    },
+    "camera.visible": {
+      "frame": 337,
+      "expectedDelta": 1,
+      "actualDelta": 0,
+      "expectedValue": 1,
+      "actualValue": 0
+    }
+  },
+  "stateFirstMismatch": {
+    "playerX": {
+      "frame": 348,
+      "expected": 124,
+      "actual": 123
+    },
+    "playerY": null,
+    "visibleCameraX": {
+      "frame": 334,
+      "expected": 2,
+      "actual": 0
+    },
+    "visibleCameraY": null,
+    "shadowRomBank": {
+      "frame": 326,
+      "expected": 3,
+      "actual": 1
+    },
+    "forbiddenVideoWork": null,
+    "musicActive": null,
+    "sfxActive": null
+  },
+  "visualFirstMismatch": {
+    "backgroundDigest": {
+      "frame": 334,
+      "expected": "83293efe1a17aef7cac801b47ff070dd91557220b401f04a7044f681a0fa767b",
+      "actual": "c0238ec92254d3791f15df487b1f4a63a151dccae1e593b8bed6a1034dcd970a"
+    },
+    "oamDigest": {
+      "frame": 322,
+      "expected": "a0de0c012d38aa61edfebaed95932bcb901cd92ac49e5cc36951de4658729007",
+      "actual": "8e593a3d8af4dfb6d3db662c519c9d2ead93931a46c3363c0b700b80bb3cc5f4"
+    }
+  },
+  "counterDeltaAlignment": {
+    "gameplay": {
+      "bestFrameOffset": 1,
+      "comparisons": 358,
+      "mismatchCount": 0,
+      "mismatchRows": []
+    },
+    "audio": {
+      "bestFrameOffset": -1,
+      "comparisons": 358,
+      "mismatchCount": 164,
+      "mismatchRows": [
+        {
+          "frame": 326,
+          "sameboyFrame": 325,
+          "expectedDelta": 0,
+          "actualDelta": 1
+        },
+        {
+          "frame": 327,
+          "sameboyFrame": 326,
+          "expectedDelta": 2,
+          "actualDelta": 1
+        },
+        {
+          "frame": 332,
+          "sameboyFrame": 331,
+          "expectedDelta": 0,
+          "actualDelta": 1
+        },
+        {
+          "frame": 333,
+          "sameboyFrame": 332,
+          "expectedDelta": 2,
+          "actualDelta": 1
+        },
+        {
+          "frame": 337,
+          "sameboyFrame": 336,
+          "expectedDelta": 0,
+          "actualDelta": 1
+        },
+        {
+          "frame": 339,
+          "sameboyFrame": 338,
+          "expectedDelta": 2,
+          "actualDelta": 1
+        },
+        {
+          "frame": 340,
+          "sameboyFrame": 339,
+          "expectedDelta": 0,
+          "actualDelta": 1
+        },
+        {
+          "frame": 342,
+          "sameboyFrame": 341,
+          "expectedDelta": 2,
+          "actualDelta": 1
+        }
+      ]
+    }
+  },
+  "sameCounterVerdict": "BACKEND_FRAME_BOUNDARY_DISCREPANCY",
+  "hostProjectionFirstMismatch": {
+    "gameplay": null,
+    "audio": {
+      "frame": 326,
+      "expectedDelta": 1,
+      "actualDelta": 0
+    }
+  },
+  "stateVisualVerdict": "STATE_OR_VISUAL_DISCREPANCY",
+  "projectionVerdict": "COUNTER_PROJECTION_DISCREPANCY",
+  "cadenceClassification": {
+    "inProcess": {
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "gameplayTickRatio": 0.9888888888888889
+    },
+    "sameboy": {
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "gameplayTickRatio": 0.9888888888888889
+    }
+  },
+  "overallVerdict": {
+    "backendFrameBoundary": "BACKEND_FRAME_BOUNDARY_DISCREPANCY",
+    "hostCounterProjection": "COUNTER_PROJECTION_DISCREPANCY",
+    "stateOrVisual": "STATE_OR_VISUAL_DISCREPANCY"
+  },
+  "owners": {
+    "backendFrameBoundary": "GameBoyTestCpu fixed-cycle frame bucketing; not production runtime or lowering",
+    "hostCounterProjection": "AudioUpdateCalls projection; not production runtime or lowering",
+    "stateOrVisual": "GameBoyTestCpu frame observation boundary; not production runtime or lowering",
+    "cadence": null
+  }
+}

@@ -1,0 +1,2678 @@
+{
+  "schema": "retrosharp-rph63-runner-phase-matrix-v2",
+  "generator": {
+    "sweepSha256": "d4634dab8c855edf489089938070b236588b25502e376ee017961f60664002f7",
+    "comparisonSha256": "1bdde2f0b47eb85b079ec8bc2aa184a4bf8bcd2c0a45994da3d56250264b1738",
+    "observerSha256": "683785c9d9c7d6405655fd76a799d7b7fba96bd4dc95f94d97c110ab529d12bc"
+  },
+  "romSha256": "1617f7c82464beb042e444a39686237d68ebfd686e5e3c43a781abdcae9ac3a6",
+  "baseTimelineSha256": "26a9d808cd32afb49031e4caa3b4e2b0cab79cc0e28fcc7a59821f15afcfc648",
+  "inProcessComparisonDigest": "4405c4022bd1ce846b245c722b4774cfa33f0c468946fd0e48a6423d921554dd",
+  "behavioralObserver": {
+    "role": "behavioral diagnostics; not physical-frame authority",
+    "inProcess": {
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "gameplayTickRatio": 0.9888888888888889
+    },
+    "sameBoyComparison": {
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "gameplayTickRatio": 0.9888888888888889
+    }
+  },
+  "physicalAuthority": {
+    "backend": "SameBoy",
+    "boundary": "GB_run_frame",
+    "observerSchema": "retrosharp-rph62a-sameboy-physical-timeline-v1",
+    "sameBoyLibrarySha256": "6caae96d9c24b2f3889af340741ebdab8c990b530b397114f055138a4fe3beb0",
+    "replaysPerRun": 3,
+    "canaryIds": [
+      "audio-freeze",
+      "camera-visible-delay",
+      "gameplay-freeze",
+      "oam-corruption"
+    ],
+    "gameBoyTestCpuPhysicalAuthority": false
+  },
+  "matrix": {
+    "input": "A jump/SFX",
+    "authoredStartFrame": 340,
+    "radiusFrames": 10,
+    "phaseStarts": [
+      330,
+      331,
+      332,
+      333,
+      334,
+      335,
+      336,
+      337,
+      338,
+      339,
+      340,
+      341,
+      342,
+      343,
+      344,
+      345,
+      346,
+      347,
+      348,
+      349,
+      350
+    ],
+    "rightBSpan": [
+      321,
+      680
+    ],
+    "repeatCount": 2,
+    "disagreementRepeatCount": 3,
+    "sameBoyReplaysPerRun": 3
+  },
+  "verdict": "NOT_REPRODUCED",
+  "behavioralRed": null,
+  "firstRed": null,
+  "observerInvalid": null,
+  "completedCases": 21,
+  "cases": [
+    {
+      "caseId": "a-start-330",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 330,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "1bb19ec2bf887fccfc95d2e358bcdd1e1d6b982ec47eee09b760a1dc513f7d87",
+      "physicalDigest": "c0125305772e1a93293c959134334d8bf9513a4c0cbbfd1db18c000e9abbe9f5",
+      "runDigests": [
+        "c0125305772e1a93293c959134334d8bf9513a4c0cbbfd1db18c000e9abbe9f5",
+        "c0125305772e1a93293c959134334d8bf9513a4c0cbbfd1db18c000e9abbe9f5"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "f19cf7a5dca9d95fe59274d27661e914b03b4d8db97861e0b86727ec722b253e",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "9ef426bc6e6188bce631955cad8a5ae5c0bc1667b431f5c3f6e8efa485ca45ba",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "b9cba4890e0f6cf799eb40bd3cea35e193bbddeb6d3e82b87b002916d7c9d7f3",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "0101eb88e6e0560c503bf63de4adfb6802154fe957219bf398d6a3743ca94807",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 54,
+        "backgroundDigests": 84,
+        "oamDigests": 41
+      }
+    },
+    {
+      "caseId": "a-start-331",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 331,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "485cb1f210e78c468d5606992361e48f9c31843ba399def0acc11caadffefe9f",
+      "physicalDigest": "7996f595bd28056be933ad6ced2482cfaeee9aa123a04d1319168abd7f10ff94",
+      "runDigests": [
+        "7996f595bd28056be933ad6ced2482cfaeee9aa123a04d1319168abd7f10ff94",
+        "7996f595bd28056be933ad6ced2482cfaeee9aa123a04d1319168abd7f10ff94"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "aaf56f3d29d82f82b6c5386b9eab54546057e7a42b31a6399b44844e8362005e",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "ee95ee66a6829dd32abb4f44aa0f034e2a9c4e5856cc444872f1572bc5207027",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "87e5ed421496ed572890a63de82aeadafe13033cef4dc5392361e6257a245cb7",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "a98ba5fbae474ddc6eccf031f204514cb4f2e00c7c70a56600f807b176b52f1a",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 55,
+        "backgroundDigests": 84,
+        "oamDigests": 42
+      }
+    },
+    {
+      "caseId": "a-start-332",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 332,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "e94c87dc28e6d140d9a5b36c518e9c15d1215edc2bc52f1d489c4bfd206cc2cd",
+      "physicalDigest": "64e05847b1042b9d47d62e6386babf6227b0289c76406f2fae04507497ce958e",
+      "runDigests": [
+        "64e05847b1042b9d47d62e6386babf6227b0289c76406f2fae04507497ce958e",
+        "64e05847b1042b9d47d62e6386babf6227b0289c76406f2fae04507497ce958e"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "6ec1968108ef8cbaa992e92533a7c9ca72abea6f1db92e161e17a55e7bf8b010",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "a62bfa4e40673195f48d36b3e600a3f793c88da28be27335c2bc00b51c40cd6a",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "c2807312a404115dbf0f22e72e56af2897c3a192b3b71b3dca40f30f7de71041",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "642467a385f17b19bc9ac9ad4d8406a7ef0c61de229797885dbfbd3994e5b9dc",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 58,
+        "backgroundDigests": 84,
+        "oamDigests": 43
+      }
+    },
+    {
+      "caseId": "a-start-333",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 333,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "3953e7b99d1971596b3c8b2a76bf43f8ebc259b466abe297e5b37f5a8a46710e",
+      "physicalDigest": "2031351a4bd47115ea1bbea26996a4de93b9cf054b4c597adbec2136137f97fe",
+      "runDigests": [
+        "2031351a4bd47115ea1bbea26996a4de93b9cf054b4c597adbec2136137f97fe",
+        "2031351a4bd47115ea1bbea26996a4de93b9cf054b4c597adbec2136137f97fe"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "beb1293d10b0fb32beb823c6d499fc0d3a2c9f5d8edaa1e74adba3883d7c1917",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "bbea1341039be1abb06b471726908b5adb4909dcf83b80d919f026bf93f9b4cb",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "4b5ba54ee4488cdd1fd4238d38fdfb3c7e5b4e52b51ba5802a0c35cf56b3d309",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "5c8934250a965c1db1f60a700d1d6b5e2ddf24a2328b52b21c236805f17245f2",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 57,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-334",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 334,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "291780a237771171eae34dbbfeb09ef84b0f42ddface8a3fe6b4231980cb960c",
+      "physicalDigest": "3be17a89628fba6f1448d7af8d8acd493850c64dde329a6582fbde8ca0d7d55c",
+      "runDigests": [
+        "3be17a89628fba6f1448d7af8d8acd493850c64dde329a6582fbde8ca0d7d55c",
+        "3be17a89628fba6f1448d7af8d8acd493850c64dde329a6582fbde8ca0d7d55c"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "2bcc32c25e83efe5f54472556ebaca8c587261b3cd015737dfd3277779351a2d",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "c84e00a0d141830363977b1f116ad122dd4c384dfab8bfc33f19b39ab544b793",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "6358eb607bd9727459992d2d779014141e4a038f6c939cb509f6ab1f5b2d6ce3",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "57fa62a559288a38fec84447041d4c295896f02988d3c9c2c67a5c0744d14235",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 56,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-335",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 335,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "357a519e67ffbcdb25a94c8adac8017cbe48c3815cc478575e78f4dbc85546f1",
+      "physicalDigest": "d34c8304ff9f00a57a14716d14551d37444815b52ada131eb7102e3b0d9e82c1",
+      "runDigests": [
+        "d34c8304ff9f00a57a14716d14551d37444815b52ada131eb7102e3b0d9e82c1",
+        "d34c8304ff9f00a57a14716d14551d37444815b52ada131eb7102e3b0d9e82c1"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "3110cc782577a8545d3a5e39b79efa600743ed00fd9748df971cc118d24f5471",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "c4b2e0737573234717a7da174e960b0d675b53f624253570844351ff18a7105d",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "4cec374c695faba1bed15c0cca4d5b95087413fe5f60ef5c160e2b2998ac891d",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "75b1dd76ef45d75240155302fb5d1da661fd3556ccdfb17450ce850680025abb",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 57,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-336",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 336,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "4770296767acc236b446788fa0ab19d29c223cca6273c5a66be689d3d21d1e3a",
+      "physicalDigest": "e670080f972c48a037cb7a32e1174e61e52befd44210c7785e7fb7457b65c6f7",
+      "runDigests": [
+        "e670080f972c48a037cb7a32e1174e61e52befd44210c7785e7fb7457b65c6f7",
+        "e670080f972c48a037cb7a32e1174e61e52befd44210c7785e7fb7457b65c6f7"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "baa81aa0aa6b88a8fb3dbeb5abf8a51df0b896e8c76f5d3b1f90f8926d20f4b1",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "01791cdbe7de55bc14f4dedbe74d069630e118cc2a3d152ffed221b508ab5e7b",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "df35751c2dbcaf831624a36fc7b879b50d08bc67eb73641fc754b9c068312399",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "dca77894dff3f6c63dc17aff0fcb8a7a325f5ce2f0583786f795c329747aaaf5",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 58,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-337",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 337,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "80069804c1539ff0ac324eaa41aa70160ce9fca5552554fec7a4081677667f99",
+      "physicalDigest": "345a81a4d8080fa1cc7595688e7fb3a43c89b4efc484214aec2d5d5ff44e6341",
+      "runDigests": [
+        "345a81a4d8080fa1cc7595688e7fb3a43c89b4efc484214aec2d5d5ff44e6341",
+        "345a81a4d8080fa1cc7595688e7fb3a43c89b4efc484214aec2d5d5ff44e6341"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "d994678e7d6671ddfdf0c8d110ead8671e09cd98100e3aeef30962fef20b1292",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "7b4dea053073d7f43a662618db54d0de3c0bea4581c84c96445c1e7e2d0490db",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "fa3ca3d5352ffbcb926b17f8da25044532d6b5c99a37c232333bbafc2cbe1118",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "a71a1222acd118e9c30f2d0755cb50eb0f3062af806b409de55c5cb7e41aeaf7",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 57,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-338",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 338,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "b0bbc5e00d41ece6ccbf61eef2d51fe237b586fb96e43d1051b978c06f6086fb",
+      "physicalDigest": "7773bbfe80e54e8ab87d760e1f693473647ba88fa1ed8792c1aca533064bc920",
+      "runDigests": [
+        "7773bbfe80e54e8ab87d760e1f693473647ba88fa1ed8792c1aca533064bc920",
+        "7773bbfe80e54e8ab87d760e1f693473647ba88fa1ed8792c1aca533064bc920"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "a18fbd217db55d41f0397468fbf52500e707492c76215487414524cf9e875bc8",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "4390d6e2165bf2a1c8012de4df8daba7682dadad7363e18272099bf7a4349d33",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "39028489770c88d80cab177a7108cbd4349c510475c3900d5c2c926d0965866d",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "4c7fcb335d6bcce9119d508edebe88f7d756ec9580410c8c7256f2fdb850bfe3",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 56,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-339",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 339,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "ef15a4a36eddc55e8f170a973e6002cf308628dcd9300989d82ba841d6bb15bd",
+      "physicalDigest": "f39dbbec77c1ece1527fd3e276b1b51e1e54a8e724ef181f4020f0d9db237a7d",
+      "runDigests": [
+        "f39dbbec77c1ece1527fd3e276b1b51e1e54a8e724ef181f4020f0d9db237a7d",
+        "f39dbbec77c1ece1527fd3e276b1b51e1e54a8e724ef181f4020f0d9db237a7d"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "b85d84eb2dd16ecc0bb75eaa742ff10d1c10959434101cdd7728f495dd5ec83f",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "1fc713d3faf7dfd05230d3ddea9339c149397db33eed72bb02679ab8350600e2",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "45297df907e8e96de3497989d50bb20ac4fcf69da6ec3e8cd4dd0a4cac44631f",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "846080d877442b14ecc055e16657cf0732973a9cc0aa79832d3e8ae88b743296",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 56,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-340",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 340,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "614b66ef463a4c4a5045ac36c35e2df14396ecdfb51c8659ebde47dd5f65c952",
+      "physicalDigest": "1f979ff06ab62c5129b872569bd065e8c7d45a2a074d00648230714641e601a7",
+      "runDigests": [
+        "1f979ff06ab62c5129b872569bd065e8c7d45a2a074d00648230714641e601a7",
+        "1f979ff06ab62c5129b872569bd065e8c7d45a2a074d00648230714641e601a7"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "cb7432ed8066202fdacdfa2a5692b1374f6aa5b2ac153d07ee468a0d804fee58",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "c35982cb30137fab4bd7756e4910794f38bcfaf35bcc3b51be23b2c345ad1cbd",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "551036095ee52bea5408832e9b0bc55fd280daa6117c13a52132c793e7dadee3",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "33fd4966f4435ff2450c0ccf5d14d018a22c4b58745b28e670ca605d000acfd6",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 56,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-341",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 341,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "a2a968fe30096df4d94706942824a7a354631b9d4c186502155e0046de10e7a1",
+      "physicalDigest": "d6b75b6d8021425f95ba5769350db213cc4cefbd5d18255acb8ff120d81e1a65",
+      "runDigests": [
+        "d6b75b6d8021425f95ba5769350db213cc4cefbd5d18255acb8ff120d81e1a65",
+        "d6b75b6d8021425f95ba5769350db213cc4cefbd5d18255acb8ff120d81e1a65"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "074529ba6a8592f0827e4278cd3adbd0672847b309158125ac84457bb0483924",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "ad1fa1c450125867c483693aac672e6cc302caac115025baada72e8c9835235c",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "c2b012a5757fb110619601ea768dcbbc804ca2dbc5d2a370e1b0129691e41ba3",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "fa98c38b188bd8dc85208363854559a522fd31ffec716ab65bd2278e2229df52",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 56,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-342",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 342,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "4210e5f4c7b5f1e078f264c9e6b4c66bc42b3730cc29aa35c937d989267af90b",
+      "physicalDigest": "763d394eb1961821431f56e87cff3d68864333036f5759f5f99b2db78634fd69",
+      "runDigests": [
+        "763d394eb1961821431f56e87cff3d68864333036f5759f5f99b2db78634fd69",
+        "763d394eb1961821431f56e87cff3d68864333036f5759f5f99b2db78634fd69"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "7c76301350cb05857f8057bfadd1fe8dca47289691481f2c5ac7e1fff4cfd637",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "aad70f15858403189a62dae8fdebb6f3c3663cdee42495b2922dc4c89446a185",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "c8cbe1bde4c7071a9f2736c0421f0cd5daead22ae04511df1614ff580a7a71d6",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "b49f1f257094a6673e70b99bea262529d4e5f646ce49e53d20a42e4c8676c122",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 55,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-343",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 343,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "61f1894a892744541fc443024add989e3559962185750124daf3bc11981a6f44",
+      "physicalDigest": "139779e3dcb8e0f8c190f0b45f447d4fa6ab25c7e773cb4fa8f42b42063723ec",
+      "runDigests": [
+        "139779e3dcb8e0f8c190f0b45f447d4fa6ab25c7e773cb4fa8f42b42063723ec",
+        "139779e3dcb8e0f8c190f0b45f447d4fa6ab25c7e773cb4fa8f42b42063723ec"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "433b57862a292de5d353d145dc171944bc83a059c9db6dd4396b43412605a3ee",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "9552af93aa8a2c141b3bc5c852c6fee5751ebbffab0961c0d6b5cf8394858365",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "395af1fa1ea4d75402cf647e33ccaa3096d4b35625f39482fc0b169bda1d17fb",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "8f53241f662b1db9649fd6fc9f2d5c0afc3291e8ef8f5984399a64f3eff8ae04",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 54,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-344",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 344,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "6e43a4b118e8d451c8faf5f5f1de4110f7a4418445bd4f2ad5664d28103335c4",
+      "physicalDigest": "111a38e785b35548f4e74d7bbaf3f924f7c47fe4929025918726aff11c3c861d",
+      "runDigests": [
+        "111a38e785b35548f4e74d7bbaf3f924f7c47fe4929025918726aff11c3c861d",
+        "111a38e785b35548f4e74d7bbaf3f924f7c47fe4929025918726aff11c3c861d"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "71112063e9d6693e04c800012ea47f0e4b91b629f9e35e7ef7102f3dfe904902",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "31cf317f123e1f3ed63e0a8fa125de341b138544bc7437fec587e965b8dcb0d7",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "3c2377d4817b569ce459a0d1310602aaa4fef54d60316db1117f827010fcbf52",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "951edcbf83d4ff843e0b0f1d90fd73f722006f9536c1539945fcda8104ceb707",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 54,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-345",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 345,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "d0292928050c7c26ebdafd64a30230da648eddf40b7c809a79d3719c8f1ac77e",
+      "physicalDigest": "01a4355b766a478aaaf0c6ccc592c2ff74387b50ad2fa7eb7c259337516f602c",
+      "runDigests": [
+        "01a4355b766a478aaaf0c6ccc592c2ff74387b50ad2fa7eb7c259337516f602c",
+        "01a4355b766a478aaaf0c6ccc592c2ff74387b50ad2fa7eb7c259337516f602c"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "f7d1721830e9c223abcfade2218c2d23786d795104c80d3b450ed260695e7903",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "7e9aa151d16899812e726a543e46ce599363645e196894a729eeb660603f8758",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "9c6c636b919d0ef48705468649a76bfcc9d7864d81b6fa68e2b572cbf32e9bd5",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "31bdf6cdc59e4ff0bc2196edbf28b8abcdf3dcfb462fa294494ec718fb4bc44a",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1,
+          2
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 54,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-346",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 346,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "dc09a9dbc9e0fc7fdd7d679e0dbb84f9d9dcd19935d5500044cd2b97cc3841b8",
+      "physicalDigest": "944e0feb96408020f9a1362e1ccd78802980f9db9443b8088828fa3f92cecea6",
+      "runDigests": [
+        "944e0feb96408020f9a1362e1ccd78802980f9db9443b8088828fa3f92cecea6",
+        "944e0feb96408020f9a1362e1ccd78802980f9db9443b8088828fa3f92cecea6"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "7becb4018fc24becd2815a030d3a6313317808f1e4c42ac29f1b9871a1faca20",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "1d8c354404aca08127579a5d567375de18e8e4306b6f77a4b6fa6216e755d3a2",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "52069bb98076901b92eda8d0cb66b65ba04dfb251642cefba414ec2945240407",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "532b505bede25d3cf569d79a3dd4f00ec341fc478fc3f246d51ca0e554ef6ebf",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 53,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-347",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 347,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "152ca0eefd8d89e072d51cdce24fb01eaaf0447948ac683060e6de102ab2eaa3",
+      "physicalDigest": "3a5b3c56e516b5a2e76890d4d9f02151f471a6233884195ae74ae30205d9f21d",
+      "runDigests": [
+        "3a5b3c56e516b5a2e76890d4d9f02151f471a6233884195ae74ae30205d9f21d",
+        "3a5b3c56e516b5a2e76890d4d9f02151f471a6233884195ae74ae30205d9f21d"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "c64ab00d2d8531624f1efe68ff8910c5a8a8a61763a4b7579ca1897446a33b22",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "b16e4ba3f90e8d1fb68c2849fc48b9254baefc7a3ddb5f67a687940904c20de5",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "4d3a7f7799cfc8c9ff1e8e28af40f08e4979ab97dbea44531b535bbd1d252284",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "25212627d03058a6af91f6595b4762057b003b3f7b5178f7575f922e6ceedf0e",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 53,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-348",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 348,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "bf2c3000781cb3283929e36b5475041c0f76070686087ef7d33311cfd1210cc2",
+      "physicalDigest": "6977aa04507e544f1a9e5c6d0b0a5d8efe9520de8e4675efe61ba06ea1376ac1",
+      "runDigests": [
+        "6977aa04507e544f1a9e5c6d0b0a5d8efe9520de8e4675efe61ba06ea1376ac1",
+        "6977aa04507e544f1a9e5c6d0b0a5d8efe9520de8e4675efe61ba06ea1376ac1"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "baea2a0c2c909997807be0b843280469d67930a8a59f82e6b9ab3ac25af972a8",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "b7e66229dea739ef32d99a58b80df39fa704f7e1a35a6af7ca5484796f4a557b",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "9c0d7b77629718e9ce9f4c64165a7e6069b7b658dd56c1b44a2b20ca37fbda32",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "00910f52c5af4bf3e5ec3ee94aaf0e5ed74a766ccc97f5dd76f481d6a9f89e7f",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 53,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-349",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 349,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "85e8367c89b58e271cbefab71ad6660d658362e6092c75421e5d56f066600815",
+      "physicalDigest": "300032bd0475d6c1729c75cbca7995ec393c8fa789fbc8d01ff07a3dc4fe71a5",
+      "runDigests": [
+        "300032bd0475d6c1729c75cbca7995ec393c8fa789fbc8d01ff07a3dc4fe71a5",
+        "300032bd0475d6c1729c75cbca7995ec393c8fa789fbc8d01ff07a3dc4fe71a5"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "f9dee71f7e7601c78ac7f51ca3e4e78d5f9f0a08480d045a22f800aa2c456eb7",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "979d65eb7e8e326bd2fbe384a6304ca826360d57844ae996a1d4a73699120296",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "c6caa03c827b5e98aa83260e792dc1988ef9081d903ecae25dfdadbebdfedbce",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "964f16fd9c10a43c3ed2daf5c2b543453586307bd12dc53fe44e54bbd9aad0f7",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 53,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    },
+    {
+      "caseId": "a-start-350",
+      "parentCaseId": null,
+      "mutation": {
+        "input": "A",
+        "startFrame": 350,
+        "durationFrames": 6,
+        "rightBSpan": [
+          321,
+          680
+        ]
+      },
+      "runCount": 2,
+      "validObserverContract": true,
+      "repeatable": true,
+      "verdict": "NOT_REPRODUCED",
+      "firstFailure": null,
+      "timelineSha256": "70a192a65fe984fdb848421ba2cce50efaef23bce717099ecc3f394fea3cad1e",
+      "physicalDigest": "b88be41cb4cd05e0255b67eee909c9d9023f7e7d6a9bb0751d89072d4b141696",
+      "runDigests": [
+        "b88be41cb4cd05e0255b67eee909c9d9023f7e7d6a9bb0751d89072d4b141696",
+        "b88be41cb4cd05e0255b67eee909c9d9023f7e7d6a9bb0751d89072d4b141696"
+      ],
+      "runVerdicts": [
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        },
+        {
+          "verdict": "NOT_REPRODUCED",
+          "firstFailure": null
+        }
+      ],
+      "contractErrors": [],
+      "loadCoverageErrors": [],
+      "canaries": [
+        {
+          "id": "gameplay-freeze",
+          "expectedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "gameplay-cadence-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "e67f80296fb07101ba8c14164822e7e27a6532b37fd3bbf95f721ac391559f60",
+          "passed": true
+        },
+        {
+          "id": "audio-freeze",
+          "expectedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331
+          },
+          "observedFirstFailure": {
+            "code": "audio-service-gap",
+            "frame": 331,
+            "missedFrames": 2
+          },
+          "transcriptDigest": "b28216d3c381dfb0b2f191e8bfc02fda2e452bdd323fd2bf2a3d2319ce1af59a",
+          "passed": true
+        },
+        {
+          "id": "camera-visible-delay",
+          "expectedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340
+          },
+          "observedFirstFailure": {
+            "code": "camera-visible-gap",
+            "frame": 340,
+            "sequence": 1,
+            "requestedFrame": 337,
+            "maximumFrames": 2
+          },
+          "transcriptDigest": "683605b163fc0c86d5b9dcd6de30af04d5977690816e96ea9e0f226d32b1b04c",
+          "passed": true
+        },
+        {
+          "id": "oam-corruption",
+          "expectedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "observedFirstFailure": {
+            "code": "sprite-oam",
+            "frame": 344
+          },
+          "transcriptDigest": "656f64629e0787c3fe0d9246fc75b06f124f941ba9090e3fadb280c074b7becd",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "rightBInputFrames": 360,
+        "aInputFrames": 6,
+        "playerXRange": [
+          73,
+          430
+        ],
+        "playerYRange": [
+          234,
+          273
+        ],
+        "playerYEndpoints": [
+          273,
+          273
+        ],
+        "visibleCameraXRange": [
+          0,
+          334
+        ],
+        "cameraRequestDelta": 41,
+        "visibleBanks": [
+          1
+        ],
+        "musicActiveFrames": 360,
+        "sfxActiveFrames": 53,
+        "backgroundDigests": 84,
+        "oamDigests": 44
+      }
+    }
+  ],
+  "matrixDigest": "34144bf86555eb636c3a1fa8a2fb0aeb1633e246a226f5b6f6fef30aaf08fbb1"
+}
