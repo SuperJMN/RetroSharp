@@ -159,7 +159,7 @@ Classify a regression by its primary observable:
 | Trap | Correct action |
 | --- | --- |
 | Asking CodeGraph to interpret prose | Query a concrete symbol, file path, or short literal; verify candidates in source and tests |
-| Assuming `RetroSharp.Cli --help` exists | Read `src/RetroSharp.Cli/Program.cs`, `README.md`, or `WARP.md`; unknown options fail |
+| Assuming `RetroSharp.Cli --help` exists | Read `src/RetroSharp.Cli/Program.cs` or `README.md`; unknown options fail |
 | Running several `dotnet` builds/tests in one checkout | Serialize them and use `-m:1`; shared build outputs can race |
 | Testing a stale tracked ROM | Compile once for the scenario and execute that fresh ROM |
 | Treating ROM equality or a dry-run diff as the product gate | Diagnose the change, then judge observable behavior and bounded CPU work |

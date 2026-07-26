@@ -305,7 +305,7 @@ Candidate file names are guidance; inspect the real code paths first.
 - Candidate files: `docs/GameBoyTarget.md`, `docs/NesTarget.md`,
   `docs/Portable2DSdkV1.md`, `samples/README.md`,
   `samples/actor-framework/README.md`, `samples/manifest.json`,
-  `README.md`, `WARP.md`, `llms.txt`, `docs/AgentContext.md`, and
+  `README.md`, `llms.txt`, `docs/AgentContext.md`, and
   `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] Document the actor API and the emitted storage/cost model after AF-5.1..AF-5.7:

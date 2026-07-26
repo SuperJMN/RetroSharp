@@ -30,7 +30,7 @@ contracts unless the task explicitly names them.
 | GitHub roadmap execution | `docs/AgentExecution.md` |
 | Archived Z80 compiler history | `docs/LegacyZ80Compiler.md` |
 
-`WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
+`llms.txt` is a compact index for agents and RAG systems.
 
 ## Local Source Code
 
@@ -124,7 +124,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/runner/runner.retrosharp.json
 ```
 
-The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md`, `WARP.md`, or `src/RetroSharp.Cli/Program.cs`.
+The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md` or `src/RetroSharp.Cli/Program.cs`.
 
 Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln --verify-no-changes --no-restore` has been noisy in this repo because of older or vendored whitespace debt; prefer targeted formatting for touched files plus `git diff --check`.
 

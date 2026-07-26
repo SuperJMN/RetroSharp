@@ -121,4 +121,4 @@ Game Boy lowerer ──or── NES lowerer
 Cartridge ROM (.gb / .nes)
 ```
 
-For detailed architecture information, see `WARP.md`.
+For detailed architecture information, see `docs/SdkArchitecture.md` and `docs/ArchitectureRoadmap.md`.
