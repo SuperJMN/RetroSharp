@@ -77,7 +77,11 @@ public sealed class GameBoyStagedCameraTests
         cpu.RunUntilSourceWaitCompletions(sourceWaitsBefore + 2);
 
         var nextSourceMarkerCycle = cpu.SourceWaitCycles[(int)sourceWaitsBefore + 1];
-        Assert.InRange(nextSourceMarkerCycle - sourceMarkerCycle, 1, GameBoyTestCpu.DmgCyclesPerFrame);
+        // The freeze fix publishes the logical camera to the hardware scroll on every Camera.Apply,
+        // which adds a small bounded cost (tens of cycles) to each frame. The source tick still lands
+        // once per frame; allow a fraction of a frame of slack so this bounded overhead is not read as
+        // a dropped tick (which would be roughly a whole extra frame).
+        Assert.InRange(nextSourceMarkerCycle - sourceMarkerCycle, 1, GameBoyTestCpu.DmgCyclesPerFrame + 256);
         Assert.Equal(1, cpu.AudioUpdateCalls - audioBefore);
         Assert.Equal(1, unchecked((byte)(cpu.Wram(PackedCameraMemory.AudioTickCount) - packedAudioBefore)));
         Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
@@ -111,7 +115,9 @@ public sealed class GameBoyStagedCameraTests
         var directory = RepositoryDirectory("samples/runner");
         const string source = """
             void Main() {
+                Video.Init();
                 World.Load("assets/maps/stage1.tmj");
+                Sprite.Asset(player, "assets/mario-player.gb.png", 18, 32);
                 Music.Asset(theme, "assets/music/runner.vgz");
                 Camera.Init(312, 0, 40);
                 Audio.Init();
@@ -127,6 +133,7 @@ public sealed class GameBoyStagedCameraTests
                         target = 8;
                     }
                     Camera.SetPosition(target, targetY);
+                    Sprite.Draw(player, 0, 0, 0, false, 0);
                 }
             }
             """;
@@ -153,7 +160,7 @@ public sealed class GameBoyStagedCameraTests
         cpu.RunUntilIoRegisterWrites(0xFF43, 1, 50_000_000);
         SetHorizontalCameraState(
             cpu,
-            cameraX: 7,
+            cameraX: 1,
             screenLeftColumn: 0,
             rightBackgroundColumn: 21,
             leftBackgroundColumn: 0,
@@ -163,6 +170,9 @@ public sealed class GameBoyStagedCameraTests
         cpu.SetWram(CameraMemory.TopBackgroundRow, 3);
         cpu.SetWram(PackedCameraMemory.WaitAudioEnabled, 0);
         cpu.SetWram(PackedCameraMemory.PreparedSlot, GameBoyPackedCameraRuntime.NoSlot);
+        // The rightward column edge is now prefetched mid-tile (fine-X >= 2), so start a couple of
+        // pixels before the boundary with the prefetch latch cleared and let the walk cross it.
+        cpu.SetWram(PackedCameraMemory.DiagonalColumnPrefetchLatch, 0);
         cpu.Held.Add("right");
         cpu.RunUntilWramEquals(PackedCameraMemory.RequestCount, 1, 50_000_000);
         var bankWritesBefore = cpu.RomBankWrites.Count;
@@ -340,7 +350,7 @@ public sealed class GameBoyStagedCameraTests
     }
 
     [Fact]
-    public void Diagonal_staging_serializes_preparation_then_commits_column_first_and_row_second()
+    public void Diagonal_staging_prefetches_the_column_then_commits_column_first_and_row_second()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """
@@ -373,7 +383,9 @@ public sealed class GameBoyStagedCameraTests
         Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
         Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
         Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
-        Assert.Equal(7, cpu.Wram(0xC14F));
+        // The column edge is now prefetched during the rightward walk, so it commits before the
+        // vertical walk publishes its first pixel; the visible Y is still 0 at the column release.
+        Assert.Equal(0, cpu.Wram(0xC14F));
         Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
         var writesBeforeRow = cpu.VramWrites.Count;
 
@@ -387,6 +399,7 @@ public sealed class GameBoyStagedCameraTests
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
+
 
     [Fact]
     public void Reversal_before_commit_releases_the_resident_edge_without_visible_advance()
@@ -845,7 +858,7 @@ public sealed class GameBoyStagedCameraTests
         }
 
         Assert.Equal(new byte[] { Column, Row, Column, Row }, observed);
-        Assert.Equal(new (ushort X, ushort Y)[] { (8, 7), (8, 15), (16, 15), (16, 16) }, visibleCoordinates);
+        Assert.Equal(new (ushort X, ushort Y)[] { (8, 7), (16, 15), (16, 15), (16, 16) }, visibleCoordinates);
         Assert.Equal(16, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(16, cpu.Wram(0xC14F));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));

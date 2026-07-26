@@ -18,7 +18,6 @@ public sealed class GameBoyFramePlanTests
         Assert.True(plan.UsesRetainedOam);
         Assert.True(plan.UsesPackedCameraRuntime);
         Assert.Equal(16, plan.MaximumCameraWalkStepsPerFrame);
-        Assert.True(plan.SerializePackedDiagonalPreparation);
         Assert.Equal(
             [
                 (SdkCpuWorkWindowIds.Frame, 70_224L),

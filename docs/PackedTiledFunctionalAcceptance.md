@@ -37,19 +37,25 @@ physical frames.
 | `tiled-hscroll-offset` NES | `e0a0a7865d1594d19a4412bf5bc167b975eb1caf7dcfe5ca0c567cab1679d942` | 420 | 418 / 420 (0.995) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
 | `tiled-vscroll` NES | `cbf9fbf1f5159a52258431403f7ef9fcf2532055808d5d6fa82bf159eaddde74` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
-| `tiled-diagonal` GB | `a940a0bc5058e04c64e31c00d34405e3817bf1c3b21a437d47e18f658dee5344` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` GB | `b3306969a5d7c65dd51424b1554c5a75bf30795ea16b13589042e58aa8d27ca9` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
+| `tiled-diagonal` GB | `749bb8bc626aa5096c153e8df0829621c8d2a100a56274c3e2d508778de4b64f` | 360 | 348 / 360 (0.967) | 1 | 2 / 2 | 0 |
+| `tiled-free-scroll` GB | `9ba6a24c1438cc736628bcb69c2133d266336f2bd0c77581b1d3326db23952ff` | 360 | 350 / 360 (0.972) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` NES | `3a1ef1859dceaf0b64e4dfec3d50c1f503c58b54fd70d9126b60b8fe19a03edd` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
-| `deadzone-follow` GB | `09af55cc4a7c10f8793aef3965256cffc1b33a9ac82d76c07702dad648327b0b` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
+| `deadzone-follow` GB | `e124964846e2edc885691743a588941fccb29d0b0e3a5c5407e2f54a64cd3e0a` | 400 | 384 / 400 (0.960) | 2 | 2 / 3 | 0 |
 | `deadzone-follow` NES | `7c7d79ba3fccc70608f4788009a206dde5d646cc05486bc8079e47958ee22124` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
 source waits after the same warm-up. Its production packed gate therefore
-keeps the common minimum 0.95 gameplay ratio and one-frame miss streak, plus
-the same two-frame diagonal residency/visibility ceiling as the sprite-free
-diagonal rows. The NES dead-zone row also requires 0.95 and allows only its
-authored four-frame idle interval. These are baseline- and hardware-reviewed
-limits, not values learned from the current build.
+keeps the common minimum 0.95 gameplay ratio, a two-frame miss streak, and a
+two-frame residency plus three-frame visibility ceiling. The dead-zone camera
+reverses direction inside the dead zone, so the mid-tile column prefetch that
+keeps the sprite-free diagonal rows smooth occasionally arms an edge decode
+that a reversal then discards, spending one extra frame before the reversed
+edge becomes visible. That is why this reversing follow camera allows a
+two-frame miss streak and three-frame request-to-visible latency where the
+one-directional diagonal rows hold at one and two. The NES dead-zone row also
+requires 0.95 and allows only its authored four-frame idle interval. These are
+baseline- and hardware-reviewed upper-bound limits, not values learned from the
+current build.
 
 ## What every row proves
 

@@ -1276,7 +1276,11 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         return target switch
         {
-            "gb" when sampleId is "runner" or "audio-mixed-load" => 131072,
+            // The runner stays banked. audio-mixed-load queues diagonal streaming but runs horizontally,
+            // so removing the serialized diagonal-preparation scheduler (now prefetch + reactive) shrinks
+            // it just below the 32 KiB banking threshold and it builds ROM-only. Audio order and gameplay
+            // cadence are unchanged (identical ordered-register SHA-256, gameplay-tick-ratio 1.0).
+            "gb" when sampleId is "runner" => 131072,
             "gb" => 32768,
             "nes" when sampleId is "runner" or "audio-mixed-load" or "tiled-hscroll-full" or "tiled-hscroll-offset" => 81936,
             "nes" => 40976,

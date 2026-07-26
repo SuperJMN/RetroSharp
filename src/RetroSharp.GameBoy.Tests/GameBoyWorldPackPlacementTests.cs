@@ -50,7 +50,7 @@ public sealed class GameBoyWorldPackPlacementTests
 
         Assert.Equal(2_568, originalSerializedBytes.Length);
         Assert.Equal(12_480, expectedColumnTiles.Length);
-        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5 }, result.Report.OccupiedBanks);
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, result.Report.OccupiedBanks);
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
         Assert.Equal(128 * 1024, result.Rom.Length);
         Assert.Equal(2, packSegment.Bank);

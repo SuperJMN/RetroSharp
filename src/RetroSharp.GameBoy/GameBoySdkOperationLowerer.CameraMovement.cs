@@ -444,6 +444,7 @@ internal sealed partial class GameBoySdkOperationLowerer
         var crossing = builder.CreateLabel("packed_camera_move_right_crossing");
         var advanceCrossing = builder.CreateLabel("packed_camera_move_right_advance_crossing");
         var end = builder.CreateLabel("packed_camera_move_right_end");
+        var diagonal = ProgramQueuesDiagonalStreaming();
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineX);
         builder.CompareImmediate(7);
         builder.JumpAbsolute(0xCA, crossing);
@@ -451,15 +452,52 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineX);
         builder.AddAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.FineX);
+        if (diagonal)
+        {
+            // A holds the new fine-X. Prefetch this tile's right column edge once, a couple of pixels
+            // in, so its decode/commit finishes before the next crossing reveals it.
+            builder.CompareImmediate(DiagonalColumnPrefetchFineOffset);
+            builder.JumpAbsolute(0xDA, end); // JP C: fine-X below the prefetch offset, not yet
+            // Skip the prefetch when the camera has not scrolled vertically recently; a purely
+            // horizontal crossing is handled reactively without an early ~full-frame edge decode.
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xCA, end); // no recent vertical motion -> skip the prefetch
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+            builder.CompareImmediate(GameBoyPackedCameraRuntime.Positive);
+            builder.JumpAbsolute(0xCA, end); // already prefetched a rightward edge for this tile
+            EmitRequestPackedColumn(
+                GameBoyPackedCameraRuntime.Positive,
+                GameBoyRuntimeMemoryLayout.Camera.RightSourceColumn,
+                config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.RightSourceColumnHigh : null,
+                GameBoyRuntimeMemoryLayout.Camera.RightBackgroundColumn);
+            builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+            builder.JumpAbsolute(0xCA, end); // no free slot yet, retry next frame
+            EmitQueuePreparedPackedColumn(
+                GameBoyPackedCameraRuntime.Positive,
+                GameBoyRuntimeMemoryLayout.Camera.RightBackgroundColumn,
+                GameBoyRuntimeMemoryLayout.Camera.RightSourceColumn,
+                config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.RightSourceColumnHigh : null);
+            builder.LoadAImmediate(GameBoyPackedCameraRuntime.Positive);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+        }
+
         builder.JumpAbsolute(end);
 
         builder.Label(crossing);
         EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Column, GameBoyPackedCameraRuntime.Negative);
         builder.CompareImmediate(1);
-        builder.JumpAbsolute(0xCA, advanceCrossing);
-        EmitPackedDiagonalPreparationAllowed(GameBoyPackedCameraRuntime.Column);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, end);
+        builder.JumpAbsolute(0xCA, advanceCrossing); // reverse cancelled the pending edge -> advance
+        if (diagonal)
+        {
+            // While the camera scrolls vertically the column edge is prefetched (and retried) across
+            // the tile, so trust it to be resident and just advance. Only purely horizontal motion,
+            // which never armed the prefetch, requests the edge reactively at the crossing.
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xC2, advanceCrossing);
+        }
+
         EmitRequestPackedColumn(
             GameBoyPackedCameraRuntime.Positive,
             GameBoyRuntimeMemoryLayout.Camera.RightSourceColumn,
@@ -467,12 +505,12 @@ internal sealed partial class GameBoySdkOperationLowerer
             GameBoyRuntimeMemoryLayout.Camera.RightBackgroundColumn);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
         builder.JumpAbsolute(0xCA, end);
-        EmitRecordPackedDiagonalPreparedAxis(GameBoyPackedCameraRuntime.Column);
         EmitQueuePreparedPackedColumn(
             GameBoyPackedCameraRuntime.Positive,
             GameBoyRuntimeMemoryLayout.Camera.RightBackgroundColumn,
             GameBoyRuntimeMemoryLayout.Camera.RightSourceColumn,
             config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.RightSourceColumnHigh : null);
+
         builder.Label(advanceCrossing);
         EmitIncrement16(GameBoyRuntimeMemoryLayout.Camera.XLow, GameBoyRuntimeMemoryLayout.Camera.XHigh);
         builder.LoadAImmediate(0);
@@ -492,6 +530,12 @@ internal sealed partial class GameBoySdkOperationLowerer
             EmitIncrementWordAddressModulo(GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn, GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumnHigh, config.MapWidth);
         }
 
+        if (diagonal)
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+        }
+
         builder.Label(end);
     }
 
@@ -500,6 +544,7 @@ internal sealed partial class GameBoySdkOperationLowerer
         var crossing = builder.CreateLabel("packed_camera_move_left_crossing");
         var advanceCrossing = builder.CreateLabel("packed_camera_move_left_advance_crossing");
         var end = builder.CreateLabel("packed_camera_move_left_end");
+        var diagonal = ProgramQueuesDiagonalStreaming();
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineX);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, crossing);
@@ -507,15 +552,52 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineX);
         builder.SubtractAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.FineX);
+        if (diagonal)
+        {
+            // A = new fine-X (moving left). Prefetch this tile's left column edge once, a couple of
+            // pixels in from the right edge of the tile (fine-X at or below 7 - offset).
+            builder.CompareImmediate((7 - DiagonalColumnPrefetchFineOffset) + 1);
+            builder.JumpAbsolute(0xD2, end); // JP NC: fine-X above the prefetch offset, not yet
+            // Skip the prefetch when the camera has not scrolled vertically recently; a purely
+            // horizontal crossing is handled reactively without an early ~full-frame edge decode.
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xCA, end); // no recent vertical motion -> skip the prefetch
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+            builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
+            builder.JumpAbsolute(0xCA, end); // already prefetched a leftward edge for this tile
+            EmitRequestPackedColumn(
+                GameBoyPackedCameraRuntime.Negative,
+                GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn,
+                config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumnHigh : null,
+                GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn);
+            builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+            builder.JumpAbsolute(0xCA, end); // no free slot yet, retry next frame
+            EmitQueuePreparedPackedColumn(
+                GameBoyPackedCameraRuntime.Negative,
+                GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn,
+                GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn,
+                config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumnHigh : null);
+            builder.LoadAImmediate(GameBoyPackedCameraRuntime.Negative);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+        }
+
         builder.JumpAbsolute(end);
 
         builder.Label(crossing);
         EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Column, GameBoyPackedCameraRuntime.Positive);
         builder.CompareImmediate(1);
-        builder.JumpAbsolute(0xCA, advanceCrossing);
-        EmitPackedDiagonalPreparationAllowed(GameBoyPackedCameraRuntime.Column);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, end);
+        builder.JumpAbsolute(0xCA, advanceCrossing); // reverse cancelled the pending edge -> advance
+        if (diagonal)
+        {
+            // While the camera scrolls vertically the column edge is prefetched (and retried) across
+            // the tile, so trust it to be resident and just advance. Only purely horizontal motion,
+            // which never armed the prefetch, requests the edge reactively at the crossing.
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xC2, advanceCrossing);
+        }
+
         EmitRequestPackedColumn(
             GameBoyPackedCameraRuntime.Negative,
             GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn,
@@ -523,12 +605,12 @@ internal sealed partial class GameBoySdkOperationLowerer
             GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
         builder.JumpAbsolute(0xCA, end);
-        EmitRecordPackedDiagonalPreparedAxis(GameBoyPackedCameraRuntime.Column);
         EmitQueuePreparedPackedColumn(
             GameBoyPackedCameraRuntime.Negative,
             GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn,
             GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn,
             config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumnHigh : null);
+
         builder.Label(advanceCrossing);
         EmitDecrement16(GameBoyRuntimeMemoryLayout.Camera.XLow, GameBoyRuntimeMemoryLayout.Camera.XHigh);
         builder.LoadAImmediate(7);
@@ -548,6 +630,12 @@ internal sealed partial class GameBoySdkOperationLowerer
             EmitDecrementWordAddressModulo(GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumn, GameBoyRuntimeMemoryLayout.Camera.LeftSourceColumnHigh, config.MapWidth);
         }
 
+        if (diagonal)
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+        }
+
         builder.Label(end);
     }
 
@@ -557,6 +645,14 @@ internal sealed partial class GameBoySdkOperationLowerer
         var cancelledCrossing = builder.CreateLabel("packed_camera_move_down_cancelled_crossing");
         var advanceCamera = builder.CreateLabel("packed_camera_move_down_advance_camera");
         var end = builder.CreateLabel("packed_camera_move_down_end");
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            // This step only runs while the camera actually scrolls down, so refill the countdown the
+            // horizontal column prefetch consults to recognise ongoing diagonal motion.
+            builder.LoadAImmediate(DiagonalVerticalMotionFrames);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+        }
+
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineY);
         builder.CompareImmediate(7);
         builder.JumpAbsolute(0xCA, crossing);
@@ -570,9 +666,6 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Row, GameBoyPackedCameraRuntime.Negative);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, cancelledCrossing);
-        EmitPackedDiagonalPreparationAllowed(GameBoyPackedCameraRuntime.Row);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, end);
         EmitRequestPackedRow(
             GameBoyPackedCameraRuntime.Positive,
             GameBoyRuntimeMemoryLayout.Camera.BottomSourceRow,
@@ -581,7 +674,6 @@ internal sealed partial class GameBoySdkOperationLowerer
             cursorDelta: 1);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
         builder.JumpAbsolute(0xCA, end);
-        EmitRecordPackedDiagonalPreparedAxis(GameBoyPackedCameraRuntime.Row);
         EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.TopBackgroundRow, 32);
         EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.BottomBackgroundRow, 32);
         EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.TopSourceRow, config.SourceHeight);
@@ -610,6 +702,14 @@ internal sealed partial class GameBoySdkOperationLowerer
         var cancelledCrossing = builder.CreateLabel("packed_camera_move_up_cancelled_crossing");
         var advanceCamera = builder.CreateLabel("packed_camera_move_up_advance_camera");
         var end = builder.CreateLabel("packed_camera_move_up_end");
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            // This step only runs while the camera actually scrolls up, so refill the countdown the
+            // horizontal column prefetch consults to recognise ongoing diagonal motion.
+            builder.LoadAImmediate(DiagonalVerticalMotionFrames);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+        }
+
         builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.FineY);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, crossing);
@@ -623,9 +723,6 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Row, GameBoyPackedCameraRuntime.Positive);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, cancelledCrossing);
-        EmitPackedDiagonalPreparationAllowed(GameBoyPackedCameraRuntime.Row);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, end);
         EmitRequestPackedRow(
             GameBoyPackedCameraRuntime.Negative,
             GameBoyRuntimeMemoryLayout.Camera.TopSourceRow,
@@ -634,7 +731,6 @@ internal sealed partial class GameBoySdkOperationLowerer
             cursorDelta: -1);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
         builder.JumpAbsolute(0xCA, end);
-        EmitRecordPackedDiagonalPreparedAxis(GameBoyPackedCameraRuntime.Row);
         EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.TopBackgroundRow, 32);
         EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.BottomBackgroundRow, 32);
         EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.Camera.TopSourceRow, config.SourceHeight);
@@ -655,44 +751,6 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.LoadAImmediate(7);
         builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.FineY);
         builder.Label(end);
-    }
-
-    private void EmitPackedDiagonalPreparationAllowed(byte axis)
-    {
-        if (!framePlan.SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
-        {
-            builder.LoadAImmediate(1);
-            return;
-        }
-
-        var allowed = builder.CreateLabel("packed_diagonal_preparation_allowed");
-        var denied = builder.CreateLabel("packed_diagonal_preparation_denied");
-        var done = builder.CreateLabel("packed_diagonal_preparation_check_done");
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparedAxis);
-        builder.CompareImmediate(axis);
-        builder.JumpAbsolute(0xCA, allowed);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.JumpAbsolute(0xC2, denied);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-        builder.CompareImmediate(axis);
-        builder.JumpAbsolute(0xC2, denied);
-        builder.Label(allowed);
-        builder.LoadAImmediate(1);
-        builder.JumpAbsolute(done);
-        builder.Label(denied);
-        builder.XorA();
-        builder.Label(done);
-    }
-
-    private void EmitRecordPackedDiagonalPreparedAxis(byte axis)
-    {
-        if (!framePlan.SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
-        {
-            return;
-        }
-
-        builder.LoadAImmediate(axis);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparedAxis);
     }
 
     private void EmitTryCancelPackedReverse(byte axis, byte pendingDirection)

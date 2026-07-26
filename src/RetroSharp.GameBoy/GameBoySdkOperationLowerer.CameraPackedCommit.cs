@@ -8,11 +8,6 @@ internal sealed partial class GameBoySdkOperationLowerer
 {
     private void EmitApplyPackedCamera(GameBoyCameraConfig config)
     {
-        if (framePlan.SerializePackedDiagonalPreparation && ProgramQueuesDiagonalStreaming())
-        {
-            EmitResumePackedDiagonalPreparation(config);
-        }
-
         builder.LoadAImmediate(0);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitSucceeded);
         if (ProgramQueuesDiagonalStreaming())
@@ -76,44 +71,6 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.StoreHighRamA(0x43);
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow);
         builder.StoreHighRamA(0x42);
-    }
-
-    private void EmitResumePackedDiagonalPreparation(GameBoyCameraConfig config)
-    {
-        var resume = builder.CreateLabel("packed_diagonal_resume_preparation");
-        var done = builder.CreateLabel("packed_diagonal_resume_done");
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetFresh);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, resume);
-        builder.XorA();
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetFresh);
-        builder.JumpAbsolute(done);
-
-        builder.Label(resume);
-        builder.XorA();
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparedAxis);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalNextPreparationAxis);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-        EmitCameraSetAxisPosition(
-            GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow,
-            GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh,
-            GameBoyRuntimeMemoryLayout.Camera.XLow,
-            GameBoyRuntimeMemoryLayout.Camera.XHigh,
-            () => EmitCameraMoveLeftStep(config),
-            () => EmitCameraMoveRightStep(config),
-            "camera_resume_position_right",
-            "camera_resume_position_x_end");
-        EmitCameraSetAxisPosition(
-            GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow,
-            GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh,
-            GameBoyRuntimeMemoryLayout.Camera.YLow,
-            GameBoyRuntimeMemoryLayout.Camera.YHigh,
-            () => EmitCameraMoveUpStep(config),
-            () => EmitCameraMoveDownStep(config),
-            "camera_resume_position_down",
-            "camera_resume_position_y_end");
-        EmitAdvancePackedDiagonalPreparationAxis();
-        builder.Label(done);
     }
 
     private void EmitApplyPackedDiagonalCamera(GameBoyCameraConfig config)
@@ -198,6 +155,13 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.LoadAImmediate(PendingStreamColumn);
         builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalNextStreamKind);
         builder.Label(done);
+        // Publish the logical camera to the visible/hardware scroll every frame. The column edge is
+        // prefetched a full tile ahead and the reactive row edge commits before its 1px sliver is
+        // revealed, so the freshly revealed edges are always resident and the camera never needs to
+        // freeze on the last resident viewport. Verified in SameBoy: without this the hardware scroll
+        // freezes for a frame at every tile boundary and then jumps two pixels (the diagonal stutter).
+        EmitCopyWord(GameBoyRuntimeMemoryLayout.Camera.XLow, GameBoyRuntimeMemoryLayout.Camera.XHigh, GameBoyRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow, GameBoyRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh);
+        EmitCopyWord(GameBoyRuntimeMemoryLayout.Camera.YLow, GameBoyRuntimeMemoryLayout.Camera.YHigh, GameBoyRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, GameBoyRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh);
     }
 
     private void EmitCommitPackedPendingEdge(
