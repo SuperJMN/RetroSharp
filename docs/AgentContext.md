@@ -49,6 +49,7 @@ targets does not make every call in it a portable API contract.
 | How do frontend preparation, Actor lowering, and SDK lowering fit together? | `SdkArchitecture.md` |
 | What does a target support now? | `GameBoyTarget.md` or `NesTarget.md` |
 | How should runner behavior be reproduced? | `GameBoyRunnerDebugging.md` |
+| What owns Game Boy runner physical-frame cadence? | `GameBoyRunnerObserverFidelity.md` |
 | Is a sample portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md` and the scenario-specific acceptance document |
 | Is the task about large maps or banking? | `LargeWorldsRoadmap.md` |
@@ -84,6 +85,9 @@ can make an old constraint look current.
   layout members rather than recreating addresses.
 - Physical frame policy is target-private. NES executable scheduling goes
   through `NesPhysicalFrameScheduler`.
+- Game Boy runner cadence investigations use SameBoy's `GB_run_frame` timeline
+  as physical-frame authority. `GameBoyTestCpu` remains a behavioral simulator,
+  not a physical-frame clock.
 - Transitional public forms remain supported until an explicit removal slice
   changes their contract.
 

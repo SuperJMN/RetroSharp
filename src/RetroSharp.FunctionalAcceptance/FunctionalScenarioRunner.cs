@@ -77,6 +77,7 @@ public static class FunctionalScenarioRunner
                     var failures = new List<FunctionalIntegrityFailure>();
                     AddFramePrerequisiteFailures(scenario, frames[frame], frames[0].ResetCount, failures);
                     AddFailFastCadenceFailures(scenario, frames, failures);
+                    AddFailFastCameraFailures(scenario, frames, failures);
                     AddFramePublicationFailures(scenario, frames[frame], failures);
                     AddCheckpointFailures(scenario, frames[frame], failures);
                     if (failures.Count > 0)
@@ -453,6 +454,64 @@ public static class FunctionalScenarioRunner
                     current.Frame,
                     $"Audio service did not advance for {missed} physical frames; the reviewed upper bound is {scenario.Budgets.MaximumUnplannedAudioGapFrames}."));
             }
+        }
+    }
+
+    private static void AddFailFastCameraFailures(
+        FunctionalScenario scenario,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        if (!scenario.ExpectedFeatures.CameraLifecycle)
+        {
+            return;
+        }
+
+        AddFailFastCameraStageFailures(
+            scenario,
+            frames,
+            scenario.Budgets.MaximumRequestToResidentFrames,
+            "camera-resident-gap",
+            "resident",
+            observation => observation.ResidentSequence,
+            failures);
+        AddFailFastCameraStageFailures(
+            scenario,
+            frames,
+            scenario.Budgets.MaximumRequestToVisibleFrames,
+            "camera-visible-gap",
+            "visible",
+            observation => observation.VisibleSequence,
+            failures);
+    }
+
+    private static void AddFailFastCameraStageFailures(
+        FunctionalScenario scenario,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int? limit,
+        string code,
+        string stage,
+        Func<FunctionalCameraLifecycleObservation, long?> sequence,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        if (limit is not { } stageLimit)
+        {
+            return;
+        }
+
+        var currentFrame = frames[^1].Frame;
+        foreach (var request in RequestedSequences(frames, scenario.WarmUpFrames, currentFrame))
+        {
+            if (currentFrame <= request.Frame + stageLimit ||
+                HasCameraStage(request, frames, currentFrame, sequence))
+            {
+                continue;
+            }
+
+            failures.Add(new(
+                code,
+                currentFrame,
+                $"Camera request sequence {request.Sequence} was not {stage} within {stageLimit} physical frames."));
         }
     }
 

@@ -85,6 +85,54 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Equal(frozenFrame + 1, stalledReport.FrameEvidence[^1].Observed.Frame);
         AssertVisualsIntact(stalledReport.FrameEvidence[^1]);
 
+        var gameplayOnlyFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var gameplayOnly = FunctionalScenarioRunner.Run(
+            scenario,
+            artifact,
+            Adapter(new FrozenServiceMachineFactory(
+                gameplayOnlyFactory,
+                frozenFrame,
+                frozenFrames: 2,
+                freezeAudioService: false)),
+            new RunnerJointLoadOracle(map, program, gameplayOnlyFactory),
+            failFast);
+        Assert.Contains(gameplayOnly.IntegrityFailures, failure =>
+            failure.Code == "gameplay-cadence-gap" && failure.Frame == frozenFrame + 1);
+        Assert.DoesNotContain(gameplayOnly.IntegrityFailures, failure => failure.Code == "audio-service-gap");
+
+        var audioOnlyFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var audioOnly = FunctionalScenarioRunner.Run(
+            scenario,
+            artifact,
+            Adapter(new FrozenServiceMachineFactory(
+                audioOnlyFactory,
+                frozenFrame,
+                frozenFrames: 2,
+                freezeGameplay: false)),
+            new RunnerJointLoadOracle(map, program, audioOnlyFactory),
+            failFast);
+        Assert.Contains(audioOnly.IntegrityFailures, failure =>
+            failure.Code == "audio-service-gap" && failure.Frame == frozenFrame + 1);
+        Assert.DoesNotContain(audioOnly.IntegrityFailures, failure => failure.Code == "gameplay-cadence-gap");
+
+        var delayedVisibleFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var delayedVisibleCanary = new DelayedVisibleCameraMachineFactory(
+            delayedVisibleFactory,
+            scenario.WarmUpFrames + 1,
+            delayedFrames: 4);
+        var delayedVisible = FunctionalScenarioRunner.Run(
+            scenario,
+            artifact,
+            Adapter(delayedVisibleCanary),
+            new RunnerJointLoadOracle(map, program, delayedVisibleFactory),
+            failFast);
+        var delayedFailure = Assert.Single(delayedVisible.IntegrityFailures, failure => failure.Code == "camera-visible-gap");
+        var injectedRequestFrame = Assert.IsType<int>(delayedVisibleCanary.InjectedRequestFrame);
+        Assert.NotNull(delayedVisibleCanary.InjectedFrame);
+        Assert.Equal(
+            injectedRequestFrame + scenario.Budgets.MaximumRequestToVisibleFrames!.Value + 1,
+            delayedFailure.Frame);
+
         var retainedPoseScenario = scenario with
         {
             ObservationFrames = RetainedPoseRegressionOffset,
@@ -150,15 +198,37 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             Adapter(secondFactory),
             new RunnerJointLoadOracle(map, program, secondFactory),
             failFast);
+        var thirdFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var third = FunctionalScenarioRunner.Run(
+            scenario,
+            artifact,
+            Adapter(thirdFactory),
+            new RunnerJointLoadOracle(map, program, thirdFactory),
+            failFast);
+
+        var delayedRecoveryFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var delayedRecovery = FunctionalScenarioRunner.Run(
+            scenario,
+            artifact,
+            Adapter(new DelayedVisibleCameraMachineFactory(
+                delayedRecoveryFactory,
+                scenario.WarmUpFrames + 1,
+                delayedFrames: 4)),
+            new RunnerJointLoadOracle(map, program, delayedRecoveryFactory));
 
         Assert.Equal(build.Rom, firstFactory.LoadedRom);
         Assert.Equal(build.Rom, secondFactory.LoadedRom);
+        Assert.Equal(build.Rom, thirdFactory.LoadedRom);
         Assert.Equal(first.Passed, second.Passed);
+        Assert.Equal(first.Passed, third.Passed);
         Assert.Equal(first.ToJson(), second.ToJson());
+        Assert.Equal(first.ToJson(), third.ToJson());
+        Assert.Equal(first.Summary.CameraVisible, delayedRecovery.Summary.CameraVisible);
         WriteDiagnostic("injected-stall", stalledReport);
         WriteDiagnostic("corrupted-oam", corrupted);
-        Assert.NotNull(firstFactory.WarmUpObservation);
-        var baselineDiagnostic = WriteDiagnostic("baseline", first, firstFactory.WarmUpObservation);
+        var warmUpObservation = Assert.IsType<FunctionalFrameObservation>(firstFactory.WarmUpObservation);
+        var baselineDiagnostic = WriteDiagnostic("baseline", first, warmUpObservation);
+        WriteReplayArtifacts(scenario, artifact, first, warmUpObservation, addresses);
         Assert.Contains(
             baselineDiagnostic,
             line => line.Contains(
@@ -197,6 +267,15 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Equal("STRUCTURAL_RED", ClassifyVerdict(reportPassed: true, cadenceFailure: false, forbiddenVideoWork: true));
     }
 
+    [Fact]
+    public void Replay_descriptor_path_cannot_overwrite_the_rom()
+    {
+        Assert.Equal(
+            Path.Combine("tmp", "runner.gb"),
+            ReplayRomPath(Path.Combine("tmp", "runner.timeline.json")));
+        Assert.Throws<InvalidOperationException>(() => ReplayRomPath(Path.Combine("tmp", "runner.gb")));
+    }
+
     private static GameBoyFunctionalRomAdapter Adapter(IFunctionalRomMachineFactory factory) => new(
         factory,
         new FunctionalAdapterCapabilities(
@@ -221,7 +300,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 Assert.All(
                     new[]
                     {
-                        "cpuCycle", "lcdPhase", "sourceWait", "packedAudioTick", "inputMask",
+                        "cpuCycle", "lcdPhase", "sourceWait", "romGameplayTick", "packedAudioTick", "inputMask",
                         "playerX", "playerY", "playerGrounded", "cameraRequest", "cameraPrepare",
                         "cameraResident", "cameraCommit", "cameraRelease", "visibleCameraX",
                         "visibleCameraY", "sourceCameraX", "sourceCameraY", "visibleRomBank", "forbiddenVideoWork",
@@ -332,6 +411,168 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
         return lines;
     }
+
+    private static void WriteReplayArtifacts(
+        FunctionalScenario scenario,
+        FunctionalRomArtifact artifact,
+        FunctionalAcceptanceReport report,
+        FunctionalFrameObservation warmUpObservation,
+        RunnerVariableAddresses addresses)
+    {
+        var reportPath = Environment.GetEnvironmentVariable("RETROSHARP_RPH62_REPORT");
+        var replayPath = Environment.GetEnvironmentVariable("RETROSHARP_RPH62_REPLAY");
+        if (string.IsNullOrWhiteSpace(reportPath) && string.IsNullOrWhiteSpace(replayPath))
+        {
+            return;
+        }
+
+        string? absoluteReportPath = null;
+        if (!string.IsNullOrWhiteSpace(reportPath))
+        {
+            absoluteReportPath = Path.GetFullPath(reportPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(absoluteReportPath)!);
+            // The ordinary report includes every captured write and is useful for local
+            // diagnosis, but it is far too large to be a replay contract. Keep only the
+            // normalized baseline and frame rows consumed by the comparison tool.
+            var compactReport = new
+            {
+                schema = "retrosharp-rph62-in-process-v2",
+                romSha256 = report.RomSha256,
+                baseline = ReplayRow(warmUpObservation),
+                frames = report.FrameEvidence.Select(evidence => ReplayRow(evidence.Observed)),
+            };
+            File.WriteAllText(
+                absoluteReportPath,
+                System.Text.Json.JsonSerializer.Serialize(compactReport, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        var absoluteReplayPath = !string.IsNullOrWhiteSpace(replayPath)
+            ? Path.GetFullPath(replayPath)
+            : Path.ChangeExtension(absoluteReportPath!, ".timeline.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(absoluteReplayPath)!);
+        var romPath = ReplayRomPath(absoluteReplayPath);
+        File.WriteAllBytes(romPath, artifact.Bytes);
+
+        var frames = Enumerable.Range(1, scenario.WarmUpFrames + scenario.ObservationFrames)
+            .Select(frame => new
+            {
+                frame,
+                inputMask = ReplayInputMask(scenario.Inputs
+                    .Where(input => frame >= input.StartFrame && frame < input.StartFrame + input.DurationFrames)
+                    .SelectMany(input => input.Buttons)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)),
+                audioServiceExpected = ReplayAudioServiceExpected(scenario, frame),
+            });
+        var replay = new
+        {
+            schema = "retrosharp-rph62-replay-v1",
+            romSha256 = report.RomSha256,
+            id = scenario.Id,
+            warmUpFrames = scenario.WarmUpFrames,
+            observationFrames = scenario.ObservationFrames,
+            layout = new
+            {
+                playerX = addresses.PlayerXLow,
+                playerY = addresses.PlayerYLow,
+                gameplayTick = GameBoyRuntimeMemoryLayout.Collision.GameplayTickCount,
+                audioTick = PackedCameraMemory.AudioTickCount,
+                cameraRequest = PackedCameraMemory.RequestCount,
+                cameraResident = PackedCameraMemory.ResidentCount,
+                cameraCommit = PackedCameraMemory.CommitCount,
+                cameraVisible = PackedCameraMemory.ReleaseCount,
+                visibleCameraX = PackedCameraMemory.VisibleCameraXLow,
+                visibleCameraY = PackedCameraMemory.VisibleCameraYLow,
+                shadowBank = GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank,
+                musicActive = GameBoyRuntimeMemoryLayout.Audio.MusicActive,
+                sfxActive = GameBoyRuntimeMemoryLayout.Audio.SfxActive,
+                forbiddenCounters = new[]
+                {
+                    PackedCameraMemory.BankWorkInCommit,
+                    PackedCameraMemory.DecodeWorkInCommit,
+                    PackedCameraMemory.DirectoryWorkInVBlank,
+                    PackedCameraMemory.DirectoryWorkInCommit,
+                    PackedCameraMemory.DecodeWorkInVBlank,
+                },
+            },
+            cadence = new
+            {
+                minimumGameplayTickRatio = scenario.Budgets.MinimumGameplayTickRatio,
+                maximumConsecutiveMissedGameplayTicks = scenario.Budgets.MaximumConsecutiveMissedGameplayTicks,
+                maximumUnplannedAudioGapFrames = scenario.Budgets.MaximumUnplannedAudioGapFrames,
+                maximumRequestToVisibleFrames = scenario.Budgets.MaximumRequestToVisibleFrames,
+            },
+            frames,
+        };
+        File.WriteAllText(
+            absoluteReplayPath,
+            System.Text.Json.JsonSerializer.Serialize(replay, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string ReplayRomPath(string replayPath)
+    {
+        const string TimelineSuffix = ".timeline.json";
+        if (!replayPath.EndsWith(TimelineSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "RETROSHARP_RPH62_REPLAY must end with '.timeline.json' so the descriptor cannot overwrite the ROM.");
+        }
+
+        return replayPath[..^TimelineSuffix.Length] + ".gb";
+    }
+
+    private static object ReplayRow(FunctionalFrameObservation observation)
+    {
+        var signals = observation.StateSignals!;
+        return new
+        {
+            frame = observation.Frame,
+            gameplayTicks = observation.GameplayTicks,
+            audioServiceTicks = observation.AudioServiceTicks,
+            state = new
+            {
+                romGameplayTick = signals["romGameplayTick"],
+                packedAudioTick = signals["packedAudioTick"],
+                playerX = signals["playerX"],
+                playerY = signals["playerY"],
+                visibleCameraX = signals["visibleCameraX"],
+                visibleCameraY = signals["visibleCameraY"],
+                shadowRomBank = signals["shadowRomBank"],
+                forbiddenVideoWork = signals["forbiddenVideoWork"],
+                musicActive = signals["musicActive"],
+                sfxActive = signals["sfxActive"],
+                camera = new
+                {
+                    request = observation.Camera!.RequestedSequence ?? 0,
+                    resident = observation.Camera.ResidentSequence ?? 0,
+                    commit = observation.Camera.CommittedSequence ?? 0,
+                    visible = observation.Camera.VisibleSequence ?? 0,
+                },
+                backgroundDigest = ReplayDigest(observation.Background!
+                    .OrderBy(cell => cell.Location, StringComparer.Ordinal)
+                    .Select(cell => $"{cell.Location}:{cell.Tile}:{cell.Palette}")),
+                oamDigest = ReplayDigest(observation.Sprites!
+                    .OrderBy(sprite => sprite.OamSlot)
+                    .SelectMany(sprite => sprite.Oam)
+                    .Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+            },
+        };
+    }
+
+    private static string ReplayDigest(IEnumerable<string> values)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(string.Join('|', values));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    private static int ReplayInputMask(IReadOnlySet<string> heldInputs) =>
+        (heldInputs.Contains("right", StringComparer.OrdinalIgnoreCase) ? 1 : 0)
+        | (heldInputs.Contains("b", StringComparer.OrdinalIgnoreCase) ? 2 : 0)
+        | (heldInputs.Contains("a", StringComparer.OrdinalIgnoreCase) ? 4 : 0);
+
+    private static bool ReplayAudioServiceExpected(FunctionalScenario scenario, int frame) =>
+        scenario.Audio.ServiceExpectedByDefault
+        && !scenario.Audio.AuthoredSilence.Any(span =>
+            frame >= span.StartFrame && frame < span.StartFrame + span.DurationFrames);
 
     private static IReadOnlyList<string> DiagnosticLines(
         string run,
@@ -681,12 +922,15 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 ["cpuCycle"] = cpu.Cycles,
                 ["lcdPhase"] = cpu.IoRegister(0xFF44) >= 144 ? 1 : 0,
                 ["sourceWait"] = cpu.SourceWaitCompletions,
+                // This counter is written by the ROM at the packed Input.Poll tick boundary.
+                // Keep it distinct from the host's opcode-marker projection above.
+                ["romGameplayTick"] = cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.GameplayTickCount),
                 ["packedAudioTick"] = cpu.Wram(PackedCameraMemory.AudioTickCount),
                 ["apuEventCount"] = audio.RegisterEventCount,
                 ["sfxStarts"] = audio.SoundEffect.Starts,
-                ["sfxActive"] = audio.SoundEffect.Active ? 1 : 0,
+                ["sfxActive"] = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.SfxActive),
                 ["sfxCompletions"] = audio.SoundEffect.Completions,
-                ["musicActive"] = audio.Music.Active ? 1 : 0,
+                ["musicActive"] = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.MusicActive),
                 ["inputMask"] = inputMask,
                 ["playerX"] = ReadWord(addresses.PlayerXLow),
                 ["playerY"] = ReadWord(addresses.PlayerYLow),
@@ -716,6 +960,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             };
             var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
+            signals["shadowRomBank"] = effectiveShadowBank;
             var observation = new FunctionalFrameObservation(
                 frame,
                 cpu.SourceWaitCompletions,
