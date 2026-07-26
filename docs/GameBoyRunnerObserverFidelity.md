@@ -1,8 +1,10 @@
 # Game Boy runner observer fidelity
 
 RPH-6.2 compares the joint-load detector's **ROM-visible** observations before
-considering its host instrumentation. It is an observer experiment, not a
-runtime, lowering, sample, or fluidity-threshold change.
+considering its host instrumentation. RPH-6.2a then selects SameBoy's
+`GB_run_frame` boundary as the one physical-frame authority consumed by
+downstream runner cadence investigations. These are observer changes, not
+runtime, lowering, sample, or fluidity-threshold changes.
 
 ## Boundary and provenance
 
@@ -21,7 +23,8 @@ retained VRAM viewport, and OAM. The C# timeline owns every sampled WRAM
 address, including lifecycle, visible-camera, and audio-activity addresses; the
 Python runner does not hard-code them. `SourceWaitCompletions`,
 `AudioUpdateCalls`, CPU cycles, APU/write traces and reset detection remain
-host-only diagnostics and are never cross-backend equality gates.
+host-only diagnostics and are never cross-backend equality gates or
+physical-frame inputs.
 
 ## Reproducible command
 
@@ -71,14 +74,53 @@ comparison begins with transitions wholly inside the 360-frame observation
 window.
 
 Once this route identifies a baseline frame-boundary discrepancy (resolution
-route 2), it stops there: it does not try to certify injected canaries through
-SameBoy. Cross-backend canaries would conflate the already-unresolved baseline
-with the injection. They remain stable in-process red proofs only.
+route 2), the comparison stops there. It does not align or reinterpret the
+in-process host counters.
+
+## Authoritative physical-frame command
+
+The focused test can emit the fresh ROM and replay descriptor without emitting
+or consuming an in-process report:
+
+```bash
+mkdir -p /tmp/rph62a
+RETROSHARP_RPH62_REPLAY="/tmp/rph62a/runner.timeline.json" \
+  dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1 --no-restore \
+  --filter 'FullyQualifiedName~GameBoyRunnerJointLoadCadenceTests.Shared_runner_joint_load_cadence_gate'
+
+python3 tools/gameboy/observe_runner_joint_load_sameboy.py \
+  --library /home/jmn/Repos/GameboyMcp/native/out/linux-x64/libgameboy_debug_sameboy.so \
+  --rom /tmp/rph62a/runner.gb \
+  --timeline /tmp/rph62a/runner.timeline.json \
+  --out /tmp/rph62a/runner.sameboy.json
+```
+
+The observer applies each input and calls `GB_run_frame` exactly once before
+sampling ROM-visible state. It executes three fresh replays, records the ROM,
+timeline, and SameBoy-library SHA-256 values as provenance, and requires one
+normalized digest. Its result schema is
+`retrosharp-rph62a-sameboy-physical-timeline-v1`.
+
+Downstream tools consume only these fields as the physical verdict:
+
+```text
+verdict             = .verdict
+firstFailure        = .firstFailure
+physicalDigest      = .deterministicDigest
+physicalTimeline    = [.baseline] + .frames
+```
+
+They must additionally require `.deterministic`, `.canariesPassed`,
+`.replayCount == 3`, `.authority.physicalFrameBoundary == "GB_run_frame"`, and
+`.authority.gameBoyTestCpuPhysicalAuthority == false`. The observer CLI has no
+in-process-report argument. `GameBoyTestCpu` remains the fast behavioral
+simulation and authored background/OAM oracle; it is not a physical-frame
+clock.
 
 ## Observation-layer canaries
 
 The focused Game Boy test keeps the same ROM and inputs while injecting only
-the captured observation:
+the captured in-process observation:
 
 - gameplay-only freeze: `gameplay-cadence-gap`;
 - audio-only freeze: `audio-service-gap`;
@@ -91,3 +133,11 @@ The functional-runner boundary tests separately prove that resident and visible
 requests at their limits pass and absence through the next physical frame fails.
 These codes classify observer fidelity; they do not alter product acceptance
 budgets.
+
+The authoritative SameBoy artifact also carries four controlled transcript
+canaries. They freeze the captured ROM gameplay counter, freeze the captured
+packed-audio counter, delay the captured visible-camera sequence, or corrupt
+one captured OAM digest. Each must return the expected bounded code/frame and a
+stable transcript digest. These are classifier/serialization proofs over the
+real SameBoy transcript; they do not write emulator memory and are not claims
+that a modified ROM or modified hardware state was executed.

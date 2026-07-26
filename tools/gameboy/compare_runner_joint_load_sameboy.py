@@ -121,14 +121,72 @@ def _validate_state(row: dict[str, Any], description: str) -> None:
     ), f"{description} has an invalid camera state.")
 
 
-def validate_replay_contract(report: dict[str, Any], replay: dict[str, Any]) -> None:
-    """Reject malformed or ambiguous evidence before any cross-backend comparison."""
-    _require(report.get("schema") == REPORT_SCHEMA, f"Unsupported in-process report schema: {report.get('schema')!r}.")
+def validate_replay_descriptor(
+    replay: dict[str, Any],
+    *,
+    require_physical_camera_budgets: bool = False,
+) -> None:
+    """Reject a malformed or ambiguous ROM/input replay descriptor."""
     _require(replay.get("schema") == REPLAY_SCHEMA, f"Unsupported replay schema: {replay.get('schema')!r}.")
-    _require(isinstance(report.get("romSha256"), str) and report["romSha256"], "Report ROM SHA-256 is required.")
-    _require(report.get("romSha256") == replay.get("romSha256"), "Report and timeline ROM SHA-256 differ.")
+    _require(isinstance(replay.get("romSha256"), str) and replay["romSha256"], "Timeline ROM SHA-256 is required.")
     _require(isinstance(replay.get("warmUpFrames"), int) and replay["warmUpFrames"] >= 0, "Timeline warmUpFrames is invalid.")
     _require(isinstance(replay.get("observationFrames"), int) and replay["observationFrames"] > 0, "Timeline observationFrames is invalid.")
+    layout = replay.get("layout")
+    _require(isinstance(layout, dict), "Timeline layout is required.")
+    missing_layout = [field for field in LAYOUT_FIELDS if not isinstance(layout.get(field), int)]
+    _require(not missing_layout, f"Timeline layout is missing integer addresses: {', '.join(missing_layout)}.")
+    _require(isinstance(layout.get("forbiddenCounters"), list) and len(layout["forbiddenCounters"]) == 5
+             and all(isinstance(address, int) for address in layout["forbiddenCounters"]),
+             "Timeline requires exactly five forbidden counter addresses.")
+    cadence = replay.get("cadence")
+    _require(isinstance(cadence, dict), "Timeline cadence budgets are required.")
+    _require(isinstance(cadence.get("minimumGameplayTickRatio"), (int, float)), "Timeline minimumGameplayTickRatio is invalid.")
+    _require(
+        isinstance(cadence.get("maximumConsecutiveMissedGameplayTicks"), int)
+        and cadence["maximumConsecutiveMissedGameplayTicks"] >= 0,
+        "Timeline maximumConsecutiveMissedGameplayTicks is invalid.",
+    )
+    _require(
+        isinstance(cadence.get("maximumUnplannedAudioGapFrames"), int)
+        and cadence["maximumUnplannedAudioGapFrames"] >= 0,
+        "Timeline maximumUnplannedAudioGapFrames is invalid.",
+    )
+    if require_physical_camera_budgets:
+        _require(
+            isinstance(cadence.get("maximumRequestToVisibleFrames"), int)
+            and cadence["maximumRequestToVisibleFrames"] >= 0,
+            "Timeline maximumRequestToVisibleFrames is required by the physical observer.",
+        )
+        minimum_canary_frames = max(
+            cadence["maximumConsecutiveMissedGameplayTicks"] + 1,
+            cadence["maximumUnplannedAudioGapFrames"] + 1,
+            cadence["maximumRequestToVisibleFrames"] + 2,
+        )
+        _require(
+            replay["observationFrames"] >= minimum_canary_frames,
+            "Timeline observationFrames is too short for the physical observer canaries "
+            f"(minimum {minimum_canary_frames}).",
+        )
+    timeline = replay.get("frames")
+    _require(isinstance(timeline, list), "Timeline frames are required.")
+    expected_timeline_frames = list(range(1, replay["warmUpFrames"] + replay["observationFrames"] + 1))
+    _require([item.get("frame") if isinstance(item, dict) else None for item in timeline] == expected_timeline_frames,
+             "Timeline frames must be unique and contiguous from frame 1.")
+    _require(all(
+        isinstance(item.get("inputMask"), int)
+        and 0 <= item["inputMask"] <= 0b111
+        and isinstance(item.get("audioServiceExpected"), bool)
+        for item in timeline
+    ),
+             "Each timeline frame requires inputMask and audioServiceExpected.")
+
+
+def validate_replay_contract(report: dict[str, Any], replay: dict[str, Any]) -> None:
+    """Reject malformed or ambiguous evidence before any cross-backend comparison."""
+    validate_replay_descriptor(replay)
+    _require(report.get("schema") == REPORT_SCHEMA, f"Unsupported in-process report schema: {report.get('schema')!r}.")
+    _require(isinstance(report.get("romSha256"), str) and report["romSha256"], "Report ROM SHA-256 is required.")
+    _require(report.get("romSha256") == replay.get("romSha256"), "Report and timeline ROM SHA-256 differ.")
     _validate_state(report.get("baseline"), "Baseline")
     baseline = report["baseline"]
     _require(baseline["frame"] == replay["warmUpFrames"], "Baseline frame must equal timeline warmUpFrames.")
@@ -140,39 +198,34 @@ def validate_replay_contract(report: dict[str, Any], replay: dict[str, Any]) -> 
                  "Report frame requires integer host counters.")
     expected_report_frames = list(range(baseline["frame"] + 1, baseline["frame"] + 1 + len(rows)))
     _require([row["frame"] for row in rows] == expected_report_frames, "Report frames must be unique and contiguous after baseline.")
-    layout = replay.get("layout")
-    _require(isinstance(layout, dict), "Timeline layout is required.")
-    missing_layout = [field for field in LAYOUT_FIELDS if not isinstance(layout.get(field), int)]
-    _require(not missing_layout, f"Timeline layout is missing integer addresses: {', '.join(missing_layout)}.")
-    _require(isinstance(layout.get("forbiddenCounters"), list) and len(layout["forbiddenCounters"]) == 5
-             and all(isinstance(address, int) for address in layout["forbiddenCounters"]),
-             "Timeline requires exactly five forbidden counter addresses.")
-    cadence = replay.get("cadence")
-    _require(isinstance(cadence, dict), "Timeline cadence budgets are required.")
-    _require(isinstance(cadence.get("minimumGameplayTickRatio"), (int, float)), "Timeline minimumGameplayTickRatio is invalid.")
-    _require(isinstance(cadence.get("maximumConsecutiveMissedGameplayTicks"), int), "Timeline maximumConsecutiveMissedGameplayTicks is invalid.")
-    _require(isinstance(cadence.get("maximumUnplannedAudioGapFrames"), int), "Timeline maximumUnplannedAudioGapFrames is invalid.")
-    timeline = replay.get("frames")
-    _require(isinstance(timeline, list), "Timeline frames are required.")
-    expected_timeline_frames = list(range(1, replay["warmUpFrames"] + replay["observationFrames"] + 1))
-    _require([item.get("frame") if isinstance(item, dict) else None for item in timeline] == expected_timeline_frames,
-             "Timeline frames must be unique and contiguous from frame 1.")
-    _require(all(isinstance(item.get("inputMask"), int) and isinstance(item.get("audioServiceExpected"), bool) for item in timeline),
-             "Each timeline frame requires inputMask and audioServiceExpected.")
 
 
-def normalized_replay_digest(rows: dict[int, dict[str, Any]], baseline_frame: int) -> str:
-    """Ignores only SameBoy's unspecified absolute camera power-on value."""
+def normalize_replay_rows(
+    rows: dict[int, dict[str, Any]],
+    baseline_frame: int,
+    *,
+    camera_modulus: int | None = None,
+) -> dict[int, dict[str, Any]]:
+    """Normalize only SameBoy's unspecified absolute camera power-on value."""
     baseline_camera = rows[baseline_frame]["state"]["camera"]
     normalized = {}
     for frame, row in rows.items():
         state = dict(row["state"])
         state["camera"] = {
-            name: (value - baseline_camera[name]) & 0xFF
+            name: (
+                (value - baseline_camera[name]) % camera_modulus
+                if camera_modulus is not None
+                else value - baseline_camera[name]
+            )
             for name, value in state["camera"].items()
         }
         normalized[frame] = {"frame": row["frame"], "state": state}
-    return digest(normalized)
+    return normalized
+
+
+def normalized_replay_digest(rows: dict[int, dict[str, Any]], baseline_frame: int) -> str:
+    """Ignores only SameBoy's unspecified absolute camera power-on value."""
+    return digest(normalize_replay_rows(rows, baseline_frame, camera_modulus=256))
 
 
 def in_process_rows(report: dict[str, Any]) -> dict[int, dict[str, Any]]:

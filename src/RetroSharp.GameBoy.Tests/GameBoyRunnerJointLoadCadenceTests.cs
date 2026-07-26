@@ -267,6 +267,15 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Equal("STRUCTURAL_RED", ClassifyVerdict(reportPassed: true, cadenceFailure: false, forbiddenVideoWork: true));
     }
 
+    [Fact]
+    public void Replay_descriptor_path_cannot_overwrite_the_rom()
+    {
+        Assert.Equal(
+            Path.Combine("tmp", "runner.gb"),
+            ReplayRomPath(Path.Combine("tmp", "runner.timeline.json")));
+        Assert.Throws<InvalidOperationException>(() => ReplayRomPath(Path.Combine("tmp", "runner.gb")));
+    }
+
     private static GameBoyFunctionalRomAdapter Adapter(IFunctionalRomMachineFactory factory) => new(
         factory,
         new FunctionalAdapterCapabilities(
@@ -411,31 +420,39 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         RunnerVariableAddresses addresses)
     {
         var reportPath = Environment.GetEnvironmentVariable("RETROSHARP_RPH62_REPORT");
-        if (string.IsNullOrWhiteSpace(reportPath))
+        var replayPath = Environment.GetEnvironmentVariable("RETROSHARP_RPH62_REPLAY");
+        if (string.IsNullOrWhiteSpace(reportPath) && string.IsNullOrWhiteSpace(replayPath))
         {
             return;
         }
 
-        var absoluteReportPath = Path.GetFullPath(reportPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(absoluteReportPath)!);
-        // The ordinary report includes every captured write and is useful for local
-        // diagnosis, but it is far too large to be a replay contract.  Keep only the
-        // normalized baseline and frame rows consumed by the independent SameBoy tool.
-        var compactReport = new
+        string? absoluteReportPath = null;
+        if (!string.IsNullOrWhiteSpace(reportPath))
         {
-            schema = "retrosharp-rph62-in-process-v2",
-            romSha256 = report.RomSha256,
-            baseline = ReplayRow(warmUpObservation),
-            frames = report.FrameEvidence.Select(evidence => ReplayRow(evidence.Observed)),
-        };
-        File.WriteAllText(
-            absoluteReportPath,
-            System.Text.Json.JsonSerializer.Serialize(compactReport, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            absoluteReportPath = Path.GetFullPath(reportPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(absoluteReportPath)!);
+            // The ordinary report includes every captured write and is useful for local
+            // diagnosis, but it is far too large to be a replay contract. Keep only the
+            // normalized baseline and frame rows consumed by the comparison tool.
+            var compactReport = new
+            {
+                schema = "retrosharp-rph62-in-process-v2",
+                romSha256 = report.RomSha256,
+                baseline = ReplayRow(warmUpObservation),
+                frames = report.FrameEvidence.Select(evidence => ReplayRow(evidence.Observed)),
+            };
+            File.WriteAllText(
+                absoluteReportPath,
+                System.Text.Json.JsonSerializer.Serialize(compactReport, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
 
-        var romPath = Path.ChangeExtension(absoluteReportPath, ".gb");
+        var absoluteReplayPath = !string.IsNullOrWhiteSpace(replayPath)
+            ? Path.GetFullPath(replayPath)
+            : Path.ChangeExtension(absoluteReportPath!, ".timeline.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(absoluteReplayPath)!);
+        var romPath = ReplayRomPath(absoluteReplayPath);
         File.WriteAllBytes(romPath, artifact.Bytes);
 
-        var timelinePath = Path.ChangeExtension(absoluteReportPath, ".timeline.json");
         var frames = Enumerable.Range(1, scenario.WarmUpFrames + scenario.ObservationFrames)
             .Select(frame => new
             {
@@ -482,12 +499,25 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 minimumGameplayTickRatio = scenario.Budgets.MinimumGameplayTickRatio,
                 maximumConsecutiveMissedGameplayTicks = scenario.Budgets.MaximumConsecutiveMissedGameplayTicks,
                 maximumUnplannedAudioGapFrames = scenario.Budgets.MaximumUnplannedAudioGapFrames,
+                maximumRequestToVisibleFrames = scenario.Budgets.MaximumRequestToVisibleFrames,
             },
             frames,
         };
         File.WriteAllText(
-            timelinePath,
+            absoluteReplayPath,
             System.Text.Json.JsonSerializer.Serialize(replay, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string ReplayRomPath(string replayPath)
+    {
+        const string TimelineSuffix = ".timeline.json";
+        if (!replayPath.EndsWith(TimelineSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "RETROSHARP_RPH62_REPLAY must end with '.timeline.json' so the descriptor cannot overwrite the ROM.");
+        }
+
+        return replayPath[..^TimelineSuffix.Length] + ".gb";
     }
 
     private static object ReplayRow(FunctionalFrameObservation observation)
