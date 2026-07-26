@@ -808,6 +808,78 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Fail_fast_camera_visibility_boundary_allows_the_limit_and_fails_on_the_next_physical_frame()
+    {
+        var scenario = LifecycleScenario() with
+        {
+            ObservationFrames = 4,
+            Inputs = [],
+            Checkpoints = [],
+            Budgets = new(
+                MinimumGameplayTickRatio: 0,
+                MaximumConsecutiveMissedGameplayTicks: 4,
+                MaximumInputToStateFrames: 1,
+                MaximumRequestToResidentFrames: 2,
+                MaximumRequestToVisibleFrames: 2),
+        };
+        var atLimit = new[]
+        {
+            Frame(0, camera: Camera()),
+            Frame(1, camera: Camera(requested: 10)),
+            Frame(2, camera: Camera(requested: 10, resident: 10, committed: 10)),
+            Frame(3, camera: Camera(requested: 10, resident: 10, committed: 10, visible: 10)),
+            Frame(4, camera: Camera(requested: 10, resident: 10, committed: 10, visible: 10)),
+        };
+        var afterLimit = atLimit.Select(frame => frame with { }).ToArray();
+        afterLimit[3] = afterLimit[3] with { Camera = Camera(requested: 10, resident: 10, committed: 10) };
+        afterLimit[4] = afterLimit[4] with { Camera = Camera(requested: 10, resident: 10, committed: 10) };
+        var options = new FunctionalScenarioRunOptions(FunctionalScenarioRunMode.FailFast, EvidenceFramesBeforeFailure: 2);
+
+        var accepted = FunctionalScenarioRunner.Run(scenario with { ObservationFrames = 3 }, Rom(), GameBoyAdapter(atLimit), null, options);
+        var rejected = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(afterLimit), null, options);
+
+        Assert.True(accepted.Passed, accepted.ToHumanReadable());
+        var failure = Assert.Single(rejected.IntegrityFailures);
+        Assert.Equal(("camera-visible-gap", 4), (failure.Code, failure.Frame));
+    }
+
+    [Fact]
+    public void Fail_fast_camera_resident_boundary_allows_the_limit_and_fails_on_the_next_physical_frame()
+    {
+        var scenario = LifecycleScenario() with
+        {
+            ObservationFrames = 4,
+            Inputs = [],
+            Checkpoints = [],
+            Budgets = new(
+                MinimumGameplayTickRatio: 0,
+                MaximumConsecutiveMissedGameplayTicks: 4,
+                MaximumInputToStateFrames: 1,
+                MaximumRequestToResidentFrames: 2,
+                MaximumRequestToVisibleFrames: 4),
+        };
+        var atLimit = new[]
+        {
+            Frame(0, camera: Camera()),
+            Frame(1, camera: Camera(requested: 10)),
+            Frame(2, camera: Camera(requested: 10)),
+            Frame(3, camera: Camera(requested: 10, resident: 10, committed: 10)),
+            Frame(4, camera: Camera(requested: 10, resident: 10, committed: 10, visible: 10)),
+        };
+        var afterLimit = atLimit.Select(frame => frame with { }).ToArray();
+        afterLimit[3] = afterLimit[3] with { Camera = Camera(requested: 10) };
+        afterLimit[4] = afterLimit[4] with { Camera = Camera(requested: 10) };
+        var options = new FunctionalScenarioRunOptions(FunctionalScenarioRunMode.FailFast, EvidenceFramesBeforeFailure: 2);
+
+        var accepted = FunctionalScenarioRunner.Run(scenario with { ObservationFrames = 3 }, Rom(), GameBoyAdapter(atLimit), null, options);
+        var rejected = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(afterLimit), null, options);
+
+        Assert.True(accepted.Passed, accepted.ToHumanReadable());
+        var failure = Assert.Single(rejected.IntegrityFailures);
+        Assert.Equal(("camera-resident-gap", 4), (failure.Code, failure.Frame));
+    }
+
+    [Fact]
     public void An_empty_camera_lifecycle_cannot_satisfy_camera_acceptance()
     {
         var scenario = LifecycleScenario();
