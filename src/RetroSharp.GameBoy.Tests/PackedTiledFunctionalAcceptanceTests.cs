@@ -239,33 +239,6 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         }
     }
 
-    private sealed class FrozenServiceMachineFactory(IFunctionalRomMachineFactory inner, int frozenFrame)
-        : IFunctionalRomMachineFactory
-    {
-        public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom) =>
-            new FrozenServiceMachine(inner.Create(exactRom), frozenFrame);
-    }
-
-    private sealed class FrozenServiceMachine(IFunctionalRomMachine inner, int frozenFrame)
-        : IFunctionalRomMachine
-    {
-        public FunctionalFrameObservation ObserveInitial() => inner.ObserveInitial();
-
-        public FunctionalFrameObservation AdvanceFrame(int frame, IReadOnlySet<string> heldInputs)
-        {
-            var observation = inner.AdvanceFrame(frame, heldInputs);
-            return frame < frozenFrame
-                ? observation
-                : observation with
-                {
-                    GameplayTicks = observation.GameplayTicks - 1,
-                    AudioServiceTicks = observation.AudioServiceTicks - 1,
-                };
-        }
-
-        public void Dispose() => inner.Dispose();
-    }
-
     private sealed class PackedGameBoyMachine(
         byte[] exactRom,
         IDictionary<int, (int X, int Y)> visibleCameraByFrame,

@@ -1,0 +1,40 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "runner-joint-load-gb-functional",
+  "sampleId": "runner",
+  "target": "gb",
+  "warmUpFrames": 320,
+  "observationFrames": 360,
+  "inputs": [
+    { "id": "run-through-streaming", "startFrame": 321, "durationFrames": 360, "buttons": ["right", "b"] },
+    { "id": "jump-sfx", "startFrame": 340, "durationFrames": 6, "buttons": ["a"] }
+  ],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": true,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": true,
+    "safeVideoWrites": true,
+    "audioProgress": false
+  },
+  "audio": {
+    "serviceExpectedByDefault": true,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Gameplay and audio are serviced once per physical frame in the source loop. A two-frame gap is outside the one-frame reviewed upper bound and is audible or input-visible under combined load.",
+    "productionTraceRationale": "The complete runner manifest starts BGM while idle, then holds RIGHT+B through packed streaming and collision while an A press starts a jump SFX. The scenario retains source waits, audio service, packed audio ticks, camera publication, visible background, OAM, banks and write timing for each physical frame."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.93,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2,
+    "maximumUnplannedAudioGapFrames": 1,
+    "maximumAudioDriftTicks": 4
+  }
+}

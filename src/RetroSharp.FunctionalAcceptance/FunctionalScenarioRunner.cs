@@ -76,6 +76,7 @@ public static class FunctionalScenarioRunner
                 {
                     var failures = new List<FunctionalIntegrityFailure>();
                     AddFramePrerequisiteFailures(scenario, frames[frame], frames[0].ResetCount, failures);
+                    AddFailFastCadenceFailures(scenario, frames, failures);
                     AddFramePublicationFailures(scenario, frames[frame], failures);
                     AddCheckpointFailures(scenario, frames[frame], failures);
                     if (failures.Count > 0)
@@ -422,6 +423,37 @@ public static class FunctionalScenarioRunner
             }
         }
 
+    }
+
+    private static void AddFailFastCadenceFailures(
+        FunctionalScenario scenario,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        var current = frames[^1];
+        if (scenario.ExpectedFeatures.GameplayTicks)
+        {
+            var missed = CurrentMissedStreak(frames, frame => frame.GameplayTicks);
+            if (missed > scenario.Budgets.MaximumConsecutiveMissedGameplayTicks)
+            {
+                failures.Add(new(
+                    "gameplay-cadence-gap",
+                    current.Frame,
+                    $"Gameplay did not advance for {missed} physical frames; the reviewed upper bound is {scenario.Budgets.MaximumConsecutiveMissedGameplayTicks}."));
+            }
+        }
+
+        if (scenario.ExpectedFeatures.AudioService && AudioServiceExpected(scenario, current.Frame))
+        {
+            var missed = CurrentMissedStreak(frames, frame => frame.AudioServiceTicks);
+            if (missed > scenario.Budgets.MaximumUnplannedAudioGapFrames!.Value)
+            {
+                failures.Add(new(
+                    "audio-service-gap",
+                    current.Frame,
+                    $"Audio service did not advance for {missed} physical frames; the reviewed upper bound is {scenario.Budgets.MaximumUnplannedAudioGapFrames}."));
+            }
+        }
     }
 
     private static void AddFramePublicationFailures(
@@ -875,6 +907,24 @@ public static class FunctionalScenarioRunner
         }
 
         return maximum;
+    }
+
+    private static int CurrentMissedStreak(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        Func<FunctionalFrameObservation, long> counter)
+    {
+        var missed = 0;
+        for (var frame = frames.Count - 1; frame > 0; frame--)
+        {
+            if (counter(frames[frame]) > counter(frames[frame - 1]))
+            {
+                break;
+            }
+
+            missed++;
+        }
+
+        return missed;
     }
 
     private static int InputLatency(
