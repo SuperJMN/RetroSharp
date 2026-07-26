@@ -662,6 +662,54 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Fail_fast_gameplay_cadence_streak_starts_at_the_warm_up_boundary()
+    {
+        var scenario = TimingScenario();
+        var observations = Frames(
+            gameplayTicks: [0, 0, 0, 0, 0, 1, 2],
+            audioTicks: [0, 1, 2, 3, 4, 5, 6]);
+        var factory = new ScriptedMachineFactory(observations);
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            Rom(),
+            new GameBoyFunctionalRomAdapter(factory, AllCapabilities()),
+            oracle: null,
+            options: new FunctionalScenarioRunOptions(
+                FunctionalScenarioRunMode.FailFast,
+                EvidenceFramesBeforeFailure: 8));
+
+        Assert.False(report.Passed);
+        Assert.Equal(4, report.FrameWindow.TotalPhysicalFrames);
+        var failure = Assert.Single(report.IntegrityFailures);
+        Assert.Equal(("gameplay-cadence-gap", 4), (failure.Code, failure.Frame));
+    }
+
+    [Fact]
+    public void Fail_fast_audio_cadence_streak_starts_at_the_warm_up_boundary()
+    {
+        var scenario = TimingScenario();
+        var observations = Frames(
+            gameplayTicks: [0, 1, 2, 3, 4, 5, 6],
+            audioTicks: [0, 0, 0, 0, 0, 1, 2]);
+        var factory = new ScriptedMachineFactory(observations);
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            Rom(),
+            new GameBoyFunctionalRomAdapter(factory, AllCapabilities()),
+            oracle: null,
+            options: new FunctionalScenarioRunOptions(
+                FunctionalScenarioRunMode.FailFast,
+                EvidenceFramesBeforeFailure: 8));
+
+        Assert.False(report.Passed);
+        Assert.Equal(4, report.FrameWindow.TotalPhysicalFrames);
+        var failure = Assert.Single(report.IntegrityFailures);
+        Assert.Equal(("audio-service-gap", 4), (failure.Code, failure.Frame));
+    }
+
+    [Fact]
     public void Default_run_mode_retains_full_evidence_after_an_irreversible_failure()
     {
         var scenario = IntegrityScenario(observationFrames: 4);
