@@ -1,29 +1,43 @@
-# NES Runner Four-Screen Visual Parity Acceptance
+# Historical NES Runner Four-Screen Differential Evidence
 
-Status: accepted evidence for issue #327.
+Status: historical evidence for closed issue #327; not an active acceptance
+contract.
 Captured: 2026-07-13.
 
-Policy update (2026-07-20): this multi-emulator differential harness is now an
-optional diagnostic smoke check, not a mandated acceptance gate. The product
-gate is in-process gameplay simulation. See the Acceptance Policy in `AGENTS.md`.
-Run a single emulator for a visual sanity pass when useful, and do not block work
-on FCEUmm, Nestopia, or RetroArch byte or raster parity.
+Policy update (2026-07-26): the former multi-emulator acceptance is retired.
+The product gate is in-process gameplay simulation on a freshly compiled ROM.
+An AprNes-only physical smoke check may be run when useful, but no external
+emulator is required. Do not block work on FCEUmm, Nestopia, RetroArch, byte
+parity, or raster parity. See the Acceptance Policy in `AGENTS.md`.
 
-This checkpoint exercises the exact tracked `samples/runner/bin/runner.nes`
+The historical checkpoint exercised the exact tracked
+`samples/runner/bin/runner.nes`
 through the complete `stage1.tmj` WorldPack. It is a differential runtime
-acceptance, not a screenshot heuristic: it compares CPU lifecycle state, all
+record, not a current gate: it compared CPU lifecycle state, all
 four physical nametables, exact visible tile IDs and attribute palette
 selectors, authored collision cells, PPU state, and framebuffers.
 
-## One harness, three independent paths
+## Current optional smoke check
 
 Run from the repository root:
 
 ```bash
-python3 tools/nes/verify_runner_visual_parity.py
+python3 tools/nes/verify_runner_visual_parity.py --mode physical
 ```
 
-The single harness uses:
+This is the default mode and uses only AprNes through NesMcp. It is optional
+diagnostic evidence and does not certify sample acceptance.
+
+## Historical differential replay
+
+The retired three-emulator capture can be reproduced deliberately:
+
+```bash
+python3 tools/nes/verify_runner_visual_parity.py \
+  --mode historical-differential
+```
+
+Do not place this command in required validation. The historical replay uses:
 
 - published Nes.Mcp `0.0.7.0` with its AprNes backend and the atomic
   `observe_execution`/`trace_ppu_register_writes` surface;

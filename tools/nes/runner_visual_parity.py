@@ -1,4 +1,4 @@
-"""Differential NES runner visual-parity acceptance helpers."""
+"""Helpers for the optional NES physical smoke and historical differential."""
 
 from __future__ import annotations
 
