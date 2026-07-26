@@ -1,7 +1,7 @@
 name: Agent roadmap task
 description: Create one AEX-1 machine-checkable issue contract.
 title: "AR-x.y: "
-labels: [roadmap, agent-task, needs-integration, agent:ready]
+labels: [roadmap, agent-task, needs-integration, agent:blocked]
 body:
   - type: markdown
     attributes:
@@ -11,10 +11,6 @@ body:
   - type: dropdown
     id: schema
     attributes: {label: Schema, options: [aex-1]}
-    validations: {required: true}
-  - type: input
-    id: active_policy
-    attributes: {label: Active engineering policy, value: "90-minute checkpoint / 120-minute hard stop"}
     validations: {required: true}
   - type: dropdown
     id: kind

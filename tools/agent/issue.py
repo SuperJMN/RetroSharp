@@ -5,7 +5,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
+import hmac
 import json
+import re
+import secrets
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -69,8 +73,13 @@ def repository_root() -> Path:
 
 def tracker(args: argparse.Namespace, root: Path) -> FixtureTracker | GitHubTracker:
     if args.tracker_fixture:
-        return FixtureTracker(args.tracker_fixture, args.tracker_log)
-    return GitHubTracker(root)
+        result: FixtureTracker | GitHubTracker = FixtureTracker(
+            args.tracker_fixture, args.tracker_log
+        )
+    else:
+        result = GitHubTracker(root)
+    result.verify_origin()
+    return result
 
 
 def write_json(value: dict[str, Any]) -> None:
@@ -98,6 +107,25 @@ def agent_states(issue: dict[str, Any]) -> list[str]:
 def agent_state(issue: dict[str, Any]) -> str | None:
     states = agent_states(issue)
     return states[0] if len(states) == 1 else None
+
+
+def safe_run_id(value: str) -> str:
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?", value):
+        raise argparse.ArgumentTypeError(
+            "run-id must be a lowercase 1-32 character slug"
+        )
+    return value
+
+
+def token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def authenticate(record: dict[str, Any], token: str) -> bool:
+    return hmac.compare_digest(
+        str(record.get("claim_fingerprint", "")),
+        token_fingerprint(token),
+    )
 
 
 def native_errors(
@@ -147,6 +175,11 @@ def lint_one(
     open_dependencies: list[int] = []
     if not errors:
         relation_errors, open_dependencies = native_errors(issue, contract, issue_tracker)
+    states = agent_states(issue)
+    if len(states) != 1:
+        relation_errors.append(
+            f"tracker-state:expected-one:actual={states}"
+        )
     return {
         "issue": int(issue["number"]),
         "contract_sha256": contract.digest,
@@ -184,7 +217,9 @@ def command_migrate(args: argparse.Namespace, root: Path) -> int:
         contract = parse(str(issue.get("body", "")))
         contract_errors = lint(contract)
         if not contract_errors:
-            relation_errors, _ = native_errors(issue, contract, issue_tracker)
+            relation_errors, open_dependencies = native_errors(
+                issue, contract, issue_tracker
+            )
             if relation_errors:
                 actions.append(
                     {
@@ -194,6 +229,19 @@ def command_migrate(args: argparse.Namespace, root: Path) -> int:
                     }
                 )
                 migration_errors = True
+            elif len(agent_states(issue)) != 1:
+                actions.append(
+                    {
+                        "issue": int(issue["number"]),
+                        "action": "state-only",
+                        "tracker_state": (
+                            "blocked"
+                            if contract.exemption or open_dependencies
+                            else "ready"
+                        ),
+                        "open_dependencies": open_dependencies,
+                    }
+                )
             continue
         labels = label_names(issue)
         is_task = bool(
@@ -252,7 +300,8 @@ def command_migrate(args: argparse.Namespace, root: Path) -> int:
         actions.append(action)
     if args.apply and not migration_errors:
         for action in actions:
-            issue_tracker.update_body(int(action["issue"]), str(action["body"]))
+            if "body" in action:
+                issue_tracker.update_body(int(action["issue"]), str(action["body"]))
             issue_tracker.transition(
                 int(action["issue"]),
                 str(action["tracker_state"]),
@@ -292,8 +341,19 @@ def validated_contract(
 def command_claim(args: argparse.Namespace, root: Path) -> int:
     issue_tracker = tracker(args, root)
     issue, contract = validated_contract(args.number, issue_tracker)
+    claim_store = GitClaimStore(root)
+    existing = claim_store.read(args.number)
     states = agent_states(issue)
-    if states != ["ready"]:
+    orphaned_tracker_claim = states == ["claimed"] and existing is None
+    expired_takeover = bool(
+        states == ["claimed"]
+        and existing
+        and dt.datetime.fromisoformat(
+            str(existing[1]["expires_at"]).replace("Z", "+00:00")
+        )
+        <= utcnow()
+    )
+    if states != ["ready"] and not expired_takeover and not orphaned_tracker_claim:
         raise CliError(
             NOT_READY,
             {
@@ -310,9 +370,11 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
             PUSH_DENIED,
             {"issue": args.number, "error": "contract-forbids-checkpoint-push"},
         )
-    claim_store = GitClaimStore(root, args.origin)
     base = claim_store.refresh_base()
     now = utcnow()
+    lease_token = secrets.token_hex(24)
+    fingerprint = token_fingerprint(lease_token)
+    branch = f"agent/work/issue-{args.number}-{fingerprint[:12]}"
     record = {
         "schema": "aex-1",
         "issue": args.number,
@@ -324,7 +386,8 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
         "publication_authority": authority.as_dict(),
         "dispatch_metadata": metadata.as_dict(),
         "checkpoint_push_allowed_at_dispatch": args.allow_checkpoint_push,
-        "branch": None,
+        "claim_fingerprint": fingerprint,
+        "branch": branch,
         "worktree": None,
         "checkpoint": None,
     }
@@ -345,30 +408,34 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
             args.number,
             canonical_comment(
                 "claim",
-                {**record, "claim_sha": claim_sha},
+                {
+                    "issue": args.number,
+                    "run_id": args.run_id,
+                    "claim_sha": claim_sha,
+                    "base": base,
+                    "expires_at": record["expires_at"],
+                    "branch": branch,
+                },
                 f"Run `{args.run_id}` claimed issue #{args.number} at `{base}`.",
             ),
         )
     except Exception:
-        try:
-            existing_states = [
-                str(label.get("name", "")).removeprefix("agent:")
-                for label in issue.get("labels", [])
-                if str(label.get("name", "")).startswith("agent:")
-            ]
-            issue_tracker.transition(
-                args.number,
-                existing_states[0] if existing_states else "ready",
-            )
-        finally:
-            claim_store.delete(args.number, claim_sha)
+        claim_store.delete(args.number, claim_sha)
+        issue_tracker.transition(
+            args.number,
+            states[0] if len(states) == 1 else "ready",
+        )
         raise
     write_json(
         {
             "issue": args.number,
             "claim": "acquired",
             "claim_sha": claim_sha,
-            **record,
+            "lease_token": lease_token,
+            "run_id": args.run_id,
+            "base": base,
+            "expires_at": record["expires_at"],
+            "branch": branch,
         }
     )
     return OK
@@ -379,9 +446,9 @@ def live_claim(
     root: Path,
     issue_tracker: FixtureTracker | GitHubTracker,
 ) -> tuple[GitClaimStore, str, dict[str, Any], Any]:
-    claim_store = GitClaimStore(root, args.origin)
+    claim_store = GitClaimStore(root)
     current = claim_store.read(args.number)
-    if not current or current[1].get("run_id") != args.run_id:
+    if not current or not authenticate(current[1], args.lease_token):
         raise CliError(
             NOT_CLAIMANT,
             {"issue": args.number, "error": "not-live-claimant"},
@@ -391,8 +458,7 @@ def live_claim(
     if expiry <= utcnow():
         raise CliError(CLAIM_EXPIRED, {"issue": args.number, "error": "expired-claim"})
     issue, contract = validated_contract(args.number, issue_tracker)
-    base = claim_store.refresh_base()
-    if contract.digest != record["contract_sha256"] or base != record["base"]:
+    if contract.digest != record["contract_sha256"]:
         raise CliError(
             CONTRACT_CHANGED,
             {
@@ -400,8 +466,6 @@ def live_claim(
                 "error": "claim-binding-changed",
                 "claim_contract": record["contract_sha256"],
                 "current_contract": contract.digest,
-                "claim_base": record["base"],
-                "current_base": base,
             },
         )
     states = agent_states(issue)
@@ -421,42 +485,108 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
     issue_tracker = tracker(args, root)
     claim_store, claim_sha, record, _ = live_claim(args, root, issue_tracker)
     destination = args.path.resolve()
-    if destination.exists():
+    branch = str(record["branch"])
+    recorded = record.get("worktree")
+    if recorded:
+        if destination != Path(str(recorded)).resolve() or not worktree_matches(
+            destination, branch, str(record["base"])
+        ):
+            raise CliError(
+                WORKTREE_DENIED,
+                {"issue": args.number, "error": "worktree-does-not-match-lease"},
+            )
+        write_json(
+            {
+                "issue": args.number,
+                "worktree": str(destination),
+                "branch": branch,
+                "claim_sha": claim_sha,
+                "idempotent": True,
+            }
+        )
+        return OK
+
+    created = False
+    branch_created = False
+    if destination.exists() and not worktree_matches(
+        destination, branch, str(record["base"])
+    ):
         raise CliError(
             WORKTREE_DENIED,
             {"issue": args.number, "error": "worktree-path-exists"},
         )
-    branch = args.branch or f"agent/work/issue-{args.number}-{args.run_id}"
-    result = run(
-        [
-            "git",
-            "worktree",
-            "add",
-            "-b",
-            branch,
-            str(destination),
-            str(record["base"]),
-        ],
-        cwd=root,
-        check=False,
-    )
-    if result.returncode:
-        raise CliError(
-            WORKTREE_DENIED,
-            {
-                "issue": args.number,
-                "error": "worktree-create-failed",
-                "detail": result.stderr.strip(),
-            },
+    if not destination.exists():
+        branch_exists = (
+            run(
+                ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                cwd=root,
+                check=False,
+            ).returncode
+            == 0
         )
+        command = ["git", "worktree", "add"]
+        if branch_exists:
+            command.extend([str(destination), branch])
+        else:
+            command.extend(
+                ["-b", branch, str(destination), str(record["base"])]
+            )
+            branch_created = True
+        result = run(command, cwd=root, check=False)
+        if result.returncode:
+            raise CliError(
+                WORKTREE_DENIED,
+                {
+                    "issue": args.number,
+                    "error": "worktree-create-failed",
+                    "detail": result.stderr.strip(),
+                },
+            )
+        created = True
+        if not worktree_matches(destination, branch, str(record["base"])):
+            run(
+                ["git", "worktree", "remove", str(destination)],
+                cwd=root,
+                check=False,
+            )
+            if branch_created:
+                run(["git", "branch", "-D", branch], cwd=root, check=False)
+            raise CliError(
+                WORKTREE_DENIED,
+                {"issue": args.number, "error": "worktree-branch-or-base-mismatch"},
+            )
     record.update(
         {
-            "branch": branch,
             "worktree": str(destination),
             "gateway_repo": str(root.resolve()),
         }
     )
-    claim_sha = claim_store.update(args.number, claim_sha, record)
+    try:
+        claim_sha = claim_store.update(args.number, claim_sha, record)
+    except GatewayError:
+        current = claim_store.read(args.number)
+        if (
+            current
+            and authenticate(current[1], args.lease_token)
+            and Path(str(current[1].get("worktree", ""))).resolve()
+            == destination
+            and worktree_matches(destination, branch, str(record["base"]))
+        ):
+            claim_sha = current[0]
+        else:
+            if created:
+                run(
+                    ["git", "worktree", "remove", str(destination)],
+                    cwd=root,
+                    check=False,
+                )
+                if branch_created:
+                    run(
+                        ["git", "branch", "-D", branch],
+                        cwd=root,
+                        check=False,
+                    )
+            raise
     write_json(
         {
             "issue": args.number,
@@ -468,6 +598,26 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
     return OK
 
 
+def worktree_matches(path: Path, branch: str, base: str) -> bool:
+    if not path.is_dir():
+        return False
+    actual_branch = run(
+        ["git", "branch", "--show-current"],
+        cwd=path,
+        check=False,
+    )
+    if actual_branch.returncode or actual_branch.stdout.strip() != branch:
+        return False
+    return (
+        run(
+            ["git", "merge-base", "--is-ancestor", base, "HEAD"],
+            cwd=path,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 def push_checkpoint(
     args: argparse.Namespace,
     claim_store: GitClaimStore,
@@ -475,6 +625,11 @@ def push_checkpoint(
     worktree: Path,
 ) -> None:
     authority = record["publication_authority"]
+    if not args.validation:
+        raise CliError(
+            PUSH_DENIED,
+            {"issue": args.number, "error": "checkpoint-push-requires-validation"},
+        )
     if not record.get("checkpoint_push_allowed_at_dispatch"):
         raise CliError(
             PUSH_DENIED,
@@ -571,15 +726,37 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
             {"issue": args.number, "error": "recorded-worktree-missing"},
         )
     snapshot = worktree_snapshot(worktree)
-    if snapshot["branch"] != record["branch"]:
+    expected_branch = (
+        f"agent/work/issue-{args.number}-"
+        f"{str(record['claim_fingerprint'])[:12]}"
+    )
+    if record["branch"] != expected_branch or snapshot["branch"] != expected_branch:
         raise CliError(
             WORKTREE_DENIED,
             {
                 "issue": args.number,
                 "error": "recorded-worktree-branch-mismatch",
-                "expected": record["branch"],
+                "expected": expected_branch,
                 "actual": snapshot["branch"],
             },
+        )
+    if (
+        run(
+            [
+                "git",
+                "merge-base",
+                "--is-ancestor",
+                str(record["base"]),
+                snapshot["head"],
+            ],
+            cwd=worktree,
+            check=False,
+        ).returncode
+        != 0
+    ):
+        raise CliError(
+            WORKTREE_DENIED,
+            {"issue": args.number, "error": "checkpoint-head-not-based-on-claim"},
         )
     pushed = False
     if args.allow_checkpoint_push:
@@ -587,7 +764,7 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
         pushed = True
     checkpoint = {
         "issue": args.number,
-        "run_id": args.run_id,
+        "run_id": record["run_id"],
         "base": record["base"],
         "head": snapshot["head"],
         "branch": record["branch"],
@@ -617,7 +794,7 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
             "checkpoint",
             checkpoint,
             (
-                f"Run `{args.run_id}` checkpointed `{record['branch']}` at "
+                f"Run `{record['run_id']}` checkpointed `{record['branch']}` at "
                 f"`{snapshot['head']}`. Next: {args.next_check}"
             ),
         ),
@@ -632,35 +809,78 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
 
 def command_release(args: argparse.Namespace, root: Path) -> int:
     issue_tracker = tracker(args, root)
-    claim_store, claim_sha, record, _ = live_claim(args, root, issue_tracker)
-    if args.state == "verified" and not record.get("checkpoint"):
+    claim_store = GitClaimStore(root)
+    tracker_state = "ready" if args.state == "released" else args.state
+    fingerprint = token_fingerprint(args.lease_token)
+    current = claim_store.read(args.number)
+    if not current:
+        if not issue_tracker.release_receipt(
+            args.number, fingerprint, tracker_state
+        ):
+            raise CliError(
+                NOT_CLAIMANT,
+                {"issue": args.number, "error": "not-live-claimant"},
+            )
+        issue_tracker.transition(args.number, tracker_state)
+        write_json(
+            {
+                "issue": args.number,
+                "released": tracker_state,
+                "idempotent": True,
+            }
+        )
+        return OK
+    claim_sha, record = current
+    if not authenticate(record, args.lease_token):
         raise CliError(
             NOT_CLAIMANT,
-            {"issue": args.number, "error": "verified-requires-checkpoint"},
+            {"issue": args.number, "error": "not-live-claimant"},
         )
-    tracker_state = "ready" if args.state == "released" else args.state
+    if args.state == "verified":
+        verified_retry = (
+            issue_tracker.release_receipt(args.number, fingerprint, tracker_state)
+            and agent_states(issue_tracker.issue(args.number)) == ["verified"]
+        )
+        if not verified_retry:
+            _, claim_sha, record, _ = live_claim(args, root, issue_tracker)
+        if not record.get("checkpoint"):
+            raise CliError(
+                NOT_CLAIMANT,
+                {"issue": args.number, "error": "verified-requires-checkpoint"},
+            )
     payload = {
         "issue": args.number,
-        "run_id": args.run_id,
+        "run_id": record["run_id"],
         "state": tracker_state,
         "claim_sha": claim_sha,
         "branch": record.get("branch"),
         "worktree": record.get("worktree"),
         "checkpoint": record.get("checkpoint"),
     }
-    issue_tracker.comment(
-        args.number,
-        canonical_comment(
+    release_body = (
+        f"<!-- retrosharp-agent-release:{fingerprint}:{tracker_state} -->\n"
+        + canonical_comment(
             "release",
             payload,
             (
-                f"Run `{args.run_id}` released the claim as `{tracker_state}`. "
-                f"Checkpoint evidence and work branch are preserved."
+                f"Run `{record['run_id']}` released the claim as "
+                f"`{tracker_state}`. Checkpoint evidence and work branch "
+                "are preserved."
             ),
-        ),
+        )
+    )
+    issue_tracker.upsert_release(
+        args.number,
+        fingerprint,
+        tracker_state,
+        release_body,
     )
     issue_tracker.transition(args.number, tracker_state)
-    claim_store.delete(args.number, claim_sha)
+    try:
+        claim_store.delete(args.number, claim_sha)
+    except GatewayError:
+        if claim_store.read(args.number):
+            raise
     write_json({"issue": args.number, "released": tracker_state})
     return OK
 
@@ -670,10 +890,8 @@ def common_tracker_arguments(item: argparse.ArgumentParser) -> None:
     item.add_argument("--tracker-log", type=Path)
 
 
-def common_claim_arguments(item: argparse.ArgumentParser) -> None:
+def common_number_arguments(item: argparse.ArgumentParser) -> None:
     item.add_argument("number", type=int)
-    item.add_argument("--run-id", required=True)
-    item.add_argument("--origin", default="origin")
     common_tracker_arguments(item)
 
 
@@ -694,16 +912,18 @@ def parser() -> argparse.ArgumentParser:
     common_tracker_arguments(migrate)
 
     claim = sub.add_parser("claim")
-    common_claim_arguments(claim)
+    common_number_arguments(claim)
+    claim.add_argument("--run-id", type=safe_run_id, required=True)
     claim.add_argument("--ttl-minutes", type=int, choices=range(1, 121), default=120)
     claim.add_argument("--allow-checkpoint-push", action="store_true")
 
     for name in ("worktree", "checkpoint", "release"):
-        common_claim_arguments(sub.add_parser(name))
+        item = sub.add_parser(name)
+        common_number_arguments(item)
+        item.add_argument("--lease-token", required=True)
 
     worktree = sub.choices["worktree"]
     worktree.add_argument("path", type=Path)
-    worktree.add_argument("--branch")
 
     checkpoint = sub.choices["checkpoint"]
     checkpoint.add_argument("--red", required=True)

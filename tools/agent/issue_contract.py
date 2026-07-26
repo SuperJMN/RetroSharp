@@ -90,8 +90,6 @@ def lint(contract: Contract) -> list[str]:
     if contract.exemption:
         if contract.sections.get("Schema") != SCHEMA_VERSION:
             return ["schema:expected-aex-1"]
-        if POLICY not in contract.body:
-            return ["policy:90-120-required"]
         return []
 
     errors = [f"missing:{name}" for name in REQUIRED if not contract.sections.get(name)]
@@ -128,8 +126,6 @@ def lint(contract: Contract) -> list[str]:
         errors.append("publication:pr-and-merge-must-remain-forbidden")
     if metadata and metadata.model == "sol-max" and not metadata.escalation_justification:
         errors.append("dispatch:sol-max-requires-justification")
-    if POLICY not in contract.body:
-        errors.append("policy:90-120-required")
     return sorted(set(errors))
 
 
@@ -251,7 +247,7 @@ def translate_legacy_task(
     errors: list[str] = []
     for field, value_text in (
         ("kind", kind),
-        ("layer", layer),
+        ("layer", layer or ""),
         ("owner-seam", owner),
         ("single-observable", observable),
         ("no-goals", no_goals),
@@ -260,6 +256,11 @@ def translate_legacy_task(
     ):
         if not value_text.strip():
             errors.append(f"migration:missing-{field}")
+    if layer is None:
+        errors = [
+            error for error in errors if error != "migration:missing-layer"
+        ]
+        errors.append("migration:ambiguous-layer-labels")
     if kind == "implementation" and native_parent is None:
         errors.append("migration:implementation-missing-native-parent")
     if errors:
@@ -369,15 +370,31 @@ def _migration_layer(
     labels: set[str],
     kind_text: str,
     body: str,
-) -> str:
+) -> str | None:
     lowered = f"{kind_text}\n{body}".lower()
-    if kind in {"investigation", "certification-gate"} or "no production code may change" in lowered:
+    declared = {
+        candidate.removeprefix("layer:")
+        for candidate in labels
+        if candidate.startswith("layer:")
+    }
+    if len(declared) > 1:
+        return None
+    if kind in {"investigation", "certification-gate"} or any(
+        phrase in lowered
+        for phrase in (
+            "no production code may change",
+            "does not authorize production",
+            "test locality",
+            "validation automation",
+            "process/validation",
+            "release automation",
+        )
+    ):
         return "validation"
-    if "layer:target-intrinsic" in labels:
+    if "target-private" in lowered or "target intrinsic" in lowered:
         return "target-intrinsic"
-    for candidate in ("validation", "sdk-2d", "language", "documentation"):
-        if f"layer:{candidate}" in labels:
-            return candidate
+    if declared:
+        return next(iter(declared))
     return ""
 
 

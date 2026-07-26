@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -14,8 +15,17 @@ AGENT = ROOT / "tools" / "agent"
 CLI = AGENT / "issue.py"
 sys.path.insert(0, str(AGENT))
 
-from issue_contract import lint, parse  # noqa: E402
-from issue_gateway import GitClaimStore  # noqa: E402
+from issue_contract import lint, parse, render_exemption  # noqa: E402
+from issue_gateway import (  # noqa: E402
+    FixtureTracker,
+    GatewayError,
+    GitClaimStore,
+    GitHubTracker,
+)
+
+
+def token_fingerprint_for_test(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def contract(
@@ -162,6 +172,8 @@ class IssueCliTests(unittest.TestCase):
             git(clone, "config", "user.email", "aex@example.invalid")
         self.fixture = self.root / "issues.json"
         self.log = self.root / "tracker.jsonl"
+        self.tokens: dict[str, str] = {}
+        self.branches: dict[str, str] = {}
         self.write_fixture(contract())
 
     def tearDown(self) -> None:
@@ -240,7 +252,7 @@ class IssueCliTests(unittest.TestCase):
         *extra: str,
         expect: int = 0,
     ) -> subprocess.CompletedProcess[str]:
-        return self.invoke(
+        result = self.invoke(
             clone,
             "claim",
             "408",
@@ -249,6 +261,11 @@ class IssueCliTests(unittest.TestCase):
             *extra,
             expect=expect,
         )
+        if expect == 0:
+            payload = json.loads(result.stdout)
+            self.tokens[run_id] = payload["lease_token"]
+            self.branches[run_id] = payload["branch"]
+        return result
 
     def worktree(self, run_id: str = "run-a") -> Path:
         destination = self.root / f"work-{run_id}"
@@ -256,8 +273,8 @@ class IssueCliTests(unittest.TestCase):
             self.clone_a,
             "worktree",
             "408",
-            "--run-id",
-            run_id,
+            "--lease-token",
+            self.tokens[run_id],
             str(destination),
         )
         return destination
@@ -266,8 +283,8 @@ class IssueCliTests(unittest.TestCase):
         return [
             "checkpoint",
             "408",
-            "--run-id",
-            run_id,
+            "--lease-token",
+            self.tokens[run_id],
             "--red",
             "focused-red",
             "--red-exit-code",
@@ -296,7 +313,7 @@ class IssueCliTests(unittest.TestCase):
         commands = []
         for clone, run_id, log in zip(
             (self.clone_a, self.clone_b),
-            ("run-a", "run-b"),
+            ("same-run", "same-run"),
             logs,
             strict=True,
         ):
@@ -324,6 +341,18 @@ class IssueCliTests(unittest.TestCase):
         outputs = [process.communicate() for process in processes]
         codes = sorted(process.returncode for process in processes)
         self.assertEqual([0, 22], codes, outputs)
+        parsed = [
+            json.loads(stdout)
+            for stdout, _ in outputs
+            if stdout.strip()
+        ]
+        self.assertEqual(
+            1,
+            sum("lease_token" in item for item in parsed),
+        )
+        winning_token = next(
+            item["lease_token"] for item in parsed if "lease_token" in item
+        )
         remote_claim = git(
             self.clone_a,
             "ls-remote",
@@ -337,12 +366,82 @@ class IssueCliTests(unittest.TestCase):
                 events.extend(json.loads(line) for line in log.read_text().splitlines())
         self.assertEqual(1, sum(event["kind"] == "transition" for event in events))
         self.assertEqual(1, sum(event["kind"] == "comment" for event in events))
+        self.assertTrue(
+            all(winning_token not in str(event.get("body", "")) for event in events)
+        )
+
+    def test_stale_token_cannot_use_active_claim(self) -> None:
+        self.claim(self.clone_a)
+        destination = self.root / "never-created"
+        self.invoke(
+            self.clone_b,
+            "worktree",
+            "408",
+            "--lease-token",
+            "different-token",
+            str(destination),
+            expect=25,
+        )
+        self.assertFalse(destination.exists())
+
+    def test_expired_claim_is_taken_over_while_tracker_still_claimed(self) -> None:
+        self.claim(self.clone_a)
+        old_token = self.tokens["run-a"]
+        store = GitClaimStore(self.clone_a)
+        claim_sha, record = store.read(408)
+        record["expires_at"] = "2000-01-01T00:00:00Z"
+        store.update(408, claim_sha, record)
+        self.claim(self.clone_b, run_id="run-b")
+        self.assertNotEqual(old_token, self.tokens["run-b"])
+        self.invoke(
+            self.clone_a,
+            "worktree",
+            "408",
+            "--lease-token",
+            old_token,
+            str(self.root / "stale"),
+            expect=25,
+        )
+
+    def test_claim_reconciles_claimed_tracker_state_without_remote_ref(self) -> None:
+        data = json.loads(self.fixture.read_text())
+        data["issues"]["408"]["labels"] = [{"name": "agent:claimed"}]
+        self.fixture.write_text(json.dumps(data))
+
+        self.claim(self.clone_a)
+
+        claim_ref = git(
+            self.clone_a,
+            "ls-remote",
+            "origin",
+            "refs/heads/agent/claims/issue-408",
+        ).stdout
+        self.assertTrue(claim_ref.strip())
+        issue = json.loads(self.fixture.read_text())["issues"]["408"]
+        self.assertEqual([{"name": "agent:claimed"}], issue["labels"])
 
     def test_native_parent_and_dependency_mismatch_fails(self) -> None:
         self.write_fixture(contract(dependencies="- #2"), parent=9, blocked_by=[])
         result = self.invoke(self.clone_a, "lint", "408", expect=28)
         report = json.loads(result.stdout)["reports"][0]
         self.assertEqual(2, len(report["native_errors"]))
+
+    def test_lint_rejects_zero_or_multiple_agent_state_labels(self) -> None:
+        for labels in (
+            [{"name": "agent-task"}],
+            [{"name": "agent:ready"}, {"name": "agent:blocked"}],
+        ):
+            data = json.loads(self.fixture.read_text())
+            data["issues"]["408"]["labels"] = labels
+            self.fixture.write_text(json.dumps(data))
+            result = self.invoke(self.clone_a, "lint", "408", expect=28)
+            report = json.loads(result.stdout)["reports"][0]
+            self.assertTrue(
+                any(
+                    error.startswith("tracker-state:")
+                    for error in report["native_errors"]
+                )
+            )
 
     def test_parent_must_list_issue_as_native_subissue(self) -> None:
         data = json.loads(self.fixture.read_text())
@@ -379,6 +478,21 @@ class IssueCliTests(unittest.TestCase):
         git(empty_clone, "remote", "add", "origin", str(empty_remote))
         self.claim(empty_clone, expect=27)
 
+    def test_live_tracker_rejects_noncanonical_origin_identity(self) -> None:
+        live_tracker = GitHubTracker.__new__(GitHubTracker)
+        live_tracker.repo_root = self.clone_a
+        live_tracker.repo = "SuperJMN/RetroSharp"
+        with self.assertRaises(GatewayError):
+            live_tracker.verify_origin()
+        git(
+            self.clone_a,
+            "remote",
+            "set-url",
+            "origin",
+            "git@github.com:SuperJMN/RetroSharp.git",
+        )
+        live_tracker.verify_origin()
+
     def test_ttl_is_bounded_to_one_through_120(self) -> None:
         for ttl in ("0", "121"):
             result = subprocess.run(
@@ -398,12 +512,38 @@ class IssueCliTests(unittest.TestCase):
             )
             self.assertEqual(2, result.returncode)
 
+    def test_run_id_is_a_safe_short_slug(self) -> None:
+        for run_id in ("UPPER", "ends-", "x" * 33, "has/slash"):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "claim",
+                    "408",
+                    "--run-id",
+                    run_id,
+                ],
+                cwd=self.clone_a,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(2, result.returncode)
+
     def test_sol_max_requires_explicit_escalation_justification(self) -> None:
         self.write_fixture(contract(model="sol-max"))
         self.invoke(self.clone_a, "lint", "408", expect=20)
         self.write_fixture(
             contract(model="sol-max", justification="Detector exhausted terra-xhigh.")
         )
+        self.invoke(self.clone_a, "lint", "408")
+
+    def test_policy_text_is_not_required_in_user_contract_body(self) -> None:
+        body = contract().replace(
+            "## Active engineering policy\n\n"
+            "90-minute checkpoint / 120-minute hard stop\n",
+            "",
+        )
+        self.write_fixture(body)
         self.invoke(self.clone_a, "lint", "408")
 
     def test_contract_change_prevents_worktree_creation(self) -> None:
@@ -414,12 +554,26 @@ class IssueCliTests(unittest.TestCase):
             self.clone_a,
             "worktree",
             "408",
-            "--run-id",
-            "run-a",
+            "--lease-token",
+            self.tokens["run-a"],
             str(destination),
             expect=24,
         )
         self.assertFalse(destination.exists())
+
+    def test_contract_change_prevents_checkpoint(self) -> None:
+        self.claim(self.clone_a)
+        self.worktree()
+        data = json.loads(self.fixture.read_text())
+        data["issues"]["408"]["body"] = contract().replace(
+            "Exactly one", "Changed observable"
+        )
+        self.fixture.write_text(json.dumps(data))
+        self.invoke(
+            self.clone_b,
+            *self.checkpoint_args(),
+            expect=24,
+        )
 
     def test_worktree_without_claim_is_denied_before_mutation(self) -> None:
         destination = self.root / "never-created"
@@ -427,30 +581,43 @@ class IssueCliTests(unittest.TestCase):
             self.clone_a,
             "worktree",
             "408",
-            "--run-id",
-            "missing",
+            "--lease-token",
+            "stale-token",
             str(destination),
             expect=25,
         )
         self.assertFalse(destination.exists())
 
-    def test_origin_master_advance_invalidates_claim(self) -> None:
+    def test_origin_master_advance_does_not_invalidate_claim(self) -> None:
         self.claim(self.clone_a)
         (self.clone_b / "advance.txt").write_text("advance\n")
         git(self.clone_b, "add", "advance.txt")
         git(self.clone_b, "commit", "-m", "advance")
         git(self.clone_b, "push", "origin", "master")
+        self.worktree()
+
+    def test_release_survives_master_contract_and_dependency_changes(self) -> None:
+        self.claim(self.clone_a)
+        (self.clone_b / "advance.txt").write_text("advance\n")
+        git(self.clone_b, "add", "advance.txt")
+        git(self.clone_b, "commit", "-m", "advance")
+        git(self.clone_b, "push", "origin", "master")
+        self.write_fixture(
+            contract().replace("Exactly one", "Changed contract"),
+            blocked_by=[2],
+            dependency_state="OPEN",
+        )
         self.invoke(
-            self.clone_a,
-            "worktree",
+            self.clone_b,
+            "release",
             "408",
-            "--run-id",
-            "run-a",
-            str(self.root / "never-created"),
-            expect=24,
+            "--lease-token",
+            self.tokens["run-a"],
+            "--state",
+            "blocked",
         )
 
-    def test_expired_claim_has_stable_failure(self) -> None:
+    def test_expired_claim_can_be_released_blocked(self) -> None:
         self.claim(self.clone_a)
         store = GitClaimStore(self.clone_a)
         claim_sha, record = store.read(408)
@@ -460,12 +627,79 @@ class IssueCliTests(unittest.TestCase):
             self.clone_b,
             "release",
             "408",
-            "--run-id",
-            "run-a",
+            "--lease-token",
+            self.tokens["run-a"],
             "--state",
             "blocked",
-            expect=23,
         )
+
+    def test_release_retry_handles_target_label_and_ref_already_present_or_absent(self) -> None:
+        self.claim(self.clone_a)
+        token = self.tokens["run-a"]
+        fingerprint = token_fingerprint_for_test(token)
+        fixture_tracker = FixtureTracker(self.fixture, self.log)
+        fixture_tracker.upsert_release(
+            408,
+            fingerprint,
+            "blocked",
+            "pre-existing canonical release receipt",
+        )
+        fixture_tracker.transition(408, "blocked")
+        self.invoke(
+            self.clone_b,
+            "release",
+            "408",
+            "--lease-token",
+            token,
+            "--state",
+            "blocked",
+        )
+        FixtureTracker(self.fixture, self.log).transition(408, "ready")
+        self.invoke(
+            self.clone_a,
+            "release",
+            "408",
+            "--lease-token",
+            token,
+            "--state",
+            "blocked",
+        )
+        data = json.loads(self.fixture.read_text())
+        receipts = data["release_receipts"]["408"]
+        self.assertEqual([f"{fingerprint}:blocked"], receipts)
+
+    def test_verified_release_retries_after_receipt_and_label_before_ref_delete(self) -> None:
+        self.claim(self.clone_a)
+        self.worktree()
+        self.invoke(self.clone_b, *self.checkpoint_args())
+        token = self.tokens["run-a"]
+        fingerprint = token_fingerprint_for_test(token)
+        fixture_tracker = FixtureTracker(self.fixture, self.log)
+        fixture_tracker.upsert_release(
+            408,
+            fingerprint,
+            "verified",
+            "pre-existing verified release receipt",
+        )
+        fixture_tracker.transition(408, "verified")
+
+        self.invoke(
+            self.clone_b,
+            "release",
+            "408",
+            "--lease-token",
+            token,
+            "--state",
+            "verified",
+        )
+
+        claim_ref = git(
+            self.clone_a,
+            "ls-remote",
+            "origin",
+            "refs/heads/agent/claims/issue-408",
+        ).stdout
+        self.assertFalse(claim_ref.strip())
 
     def test_checkpoint_uses_recorded_worktree_from_wrong_cwd_and_hashes_untracked(self) -> None:
         self.claim(self.clone_a)
@@ -487,6 +721,19 @@ class IssueCliTests(unittest.TestCase):
         second_report = json.loads(second.stdout.splitlines()[0])
         self.assertNotEqual(first_report["diff_sha256"], second_report["diff_sha256"])
 
+    def test_worktree_retry_is_idempotent_for_recorded_path(self) -> None:
+        self.claim(self.clone_a)
+        destination = self.worktree()
+        result = self.invoke(
+            self.clone_b,
+            "worktree",
+            "408",
+            "--lease-token",
+            self.tokens["run-a"],
+            str(destination),
+        )
+        self.assertTrue(json.loads(result.stdout)["idempotent"])
+
     def test_checkpoint_push_requires_contract_and_dispatch_authority(self) -> None:
         self.claim(self.clone_a)
         self.worktree()
@@ -500,8 +747,8 @@ class IssueCliTests(unittest.TestCase):
             self.clone_a,
             "release",
             "408",
-            "--run-id",
-            "run-a",
+            "--lease-token",
+            self.tokens["run-a"],
             "--state",
             "released",
         )
@@ -514,6 +761,96 @@ class IssueCliTests(unittest.TestCase):
             "--allow-checkpoint-push",
             expect=29,
         )
+
+    def test_checkpoint_push_requires_recorded_validation(self) -> None:
+        self.write_fixture(contract(checkpoint_push="allowed"))
+        self.claim(self.clone_a, "run-a", "--allow-checkpoint-push")
+        self.worktree()
+        args = self.checkpoint_args()
+        validation_index = args.index("--validation")
+        del args[validation_index : validation_index + 2]
+        self.invoke(
+            self.clone_b,
+            *args,
+            "--allow-checkpoint-push",
+            expect=29,
+        )
+
+    def test_checkpoint_push_requires_claim_base_ancestry(self) -> None:
+        self.write_fixture(contract(checkpoint_push="allowed"))
+        self.claim(self.clone_a, "run-a", "--allow-checkpoint-push")
+        worktree = self.worktree()
+        empty_tree = subprocess.run(
+            ["git", "mktree"],
+            cwd=worktree,
+            text=True,
+            input="",
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        unrelated = subprocess.run(
+            ["git", "commit-tree", empty_tree],
+            cwd=worktree,
+            text=True,
+            input="unrelated\n",
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        git(worktree, "reset", "--hard", unrelated)
+        self.invoke(
+            self.clone_b,
+            *self.checkpoint_args(),
+            "--allow-checkpoint-push",
+            expect=26,
+        )
+
+    def test_checkpoint_without_push_requires_claim_base_ancestry(self) -> None:
+        self.claim(self.clone_a)
+        worktree = self.worktree()
+        empty_tree = subprocess.run(
+            ["git", "mktree"],
+            cwd=worktree,
+            text=True,
+            input="",
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        unrelated = subprocess.run(
+            ["git", "commit-tree", empty_tree],
+            cwd=worktree,
+            text=True,
+            input="unrelated\n",
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        git(worktree, "reset", "--hard", unrelated)
+
+        self.invoke(
+            self.clone_b,
+            *self.checkpoint_args(),
+            expect=26,
+        )
+
+    def test_worktree_rejects_origin_and_branch_overrides(self) -> None:
+        self.claim(self.clone_a)
+        for option, value in (("--origin", "elsewhere"), ("--branch", "custom")):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "worktree",
+                    "408",
+                    "--lease-token",
+                    self.tokens["run-a"],
+                    str(self.root / "work-override"),
+                    option,
+                    value,
+                ],
+                cwd=self.clone_a,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(2, result.returncode)
 
     def test_remote_state_evidence_and_work_branch_survive_release(self) -> None:
         self.write_fixture(contract(checkpoint_push="allowed"))
@@ -528,8 +865,8 @@ class IssueCliTests(unittest.TestCase):
             self.clone_b,
             "release",
             "408",
-            "--run-id",
-            "run-a",
+            "--lease-token",
+            self.tokens["run-a"],
             "--state",
             "verified",
         )
@@ -538,10 +875,10 @@ class IssueCliTests(unittest.TestCase):
             "ls-remote",
             "origin",
             "refs/heads/agent/claims/issue-408",
-            "refs/heads/agent/work/issue-408-run-a",
+            f"refs/heads/{self.branches['run-a']}",
         ).stdout
         self.assertNotIn("agent/claims/issue-408", refs)
-        self.assertIn("agent/work/issue-408-run-a", refs)
+        self.assertIn(self.branches["run-a"], refs)
         events = self.events()
         transitions = [
             event["state"] for event in events if event["kind"] == "transition"
@@ -554,10 +891,14 @@ class IssueCliTests(unittest.TestCase):
         comments = [
             event["body"]
             for event in events
-            if event["kind"] in {"comment", "checkpoint-comment"}
+            if event["kind"]
+            in {"comment", "checkpoint-comment", "release-comment"}
         ]
         self.assertEqual(3, len(comments))
         self.assertTrue(all("retrosharp-agent-state" in body for body in comments))
+        self.assertTrue(
+            all(self.tokens["run-a"] not in body for body in comments)
+        )
 
     def test_migration_dry_run_produces_explicit_lint_clean_exemption(self) -> None:
         self.write_fixture("legacy body")
@@ -565,6 +906,46 @@ class IssueCliTests(unittest.TestCase):
         action = json.loads(result.stdout)["actions"][0]
         self.assertEqual([], lint(parse(action["body"])))
         self.assertEqual([], self.events())
+
+    def test_migration_repairs_missing_state_for_valid_exemption(self) -> None:
+        self.write_fixture(
+            render_exemption(source="fixture", reason="Not dispatchable.")
+        )
+        data = json.loads(self.fixture.read_text())
+        data["issues"]["408"]["labels"] = []
+        self.fixture.write_text(json.dumps(data))
+
+        preview = self.invoke(
+            self.clone_a, "migrate", "--all-open", "--dry-run"
+        )
+        action = json.loads(preview.stdout)["actions"][0]
+        self.assertEqual("state-only", action["action"])
+        self.assertEqual("blocked", action["tracker_state"])
+        self.assertNotIn("body", action)
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+        self.invoke(self.clone_a, "lint", "--all-open")
+
+    def test_migration_repairs_multiple_states_from_open_dependencies(self) -> None:
+        self.write_fixture(
+            contract(dependencies="- #2"),
+            blocked_by=[2],
+            dependency_state="OPEN",
+        )
+        data = json.loads(self.fixture.read_text())
+        data["issues"]["408"]["labels"].append({"name": "agent:verified"})
+        self.fixture.write_text(json.dumps(data))
+
+        preview = self.invoke(
+            self.clone_a, "migrate", "--all-open", "--dry-run"
+        )
+        action = json.loads(preview.stdout)["actions"][0]
+        self.assertEqual("state-only", action["action"])
+        self.assertEqual("blocked", action["tracker_state"])
+        self.assertEqual([2], action["open_dependencies"])
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+        self.invoke(self.clone_a, "lint", "--all-open")
 
     def test_agent_task_migration_translates_to_dispatchable_contract(self) -> None:
         self.write_fixture(legacy_task_body())
@@ -598,6 +979,42 @@ class IssueCliTests(unittest.TestCase):
         action = json.loads(result.stdout)["actions"][0]
         self.assertEqual("error", action["action"])
         self.assertFalse(self.log.exists())
+
+    def test_task_migration_fails_closed_on_ambiguous_layer_labels(self) -> None:
+        self.write_fixture(
+            legacy_task_body()
+            + "\nThe implementation is target-private and must stay target-private.\n"
+        )
+        data = json.loads(self.fixture.read_text())
+        data["issues"]["408"]["labels"].extend(
+            [
+                {"name": "agent-task"},
+                {"name": "layer:documentation"},
+                {"name": "layer:sdk-2d"},
+            ]
+        )
+        self.fixture.write_text(json.dumps(data))
+        result = self.invoke(
+            self.clone_a,
+            "migrate",
+            "--all-open",
+            "--dry-run",
+            expect=31,
+        )
+        action = json.loads(result.stdout)["actions"][0]
+        self.assertIn("migration:ambiguous-layer-labels", action["errors"])
+
+    def test_template_and_seeder_default_to_blocked_without_editable_policy(self) -> None:
+        template = (
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "agent-roadmap-task.yml"
+        ).read_text()
+        seeder = (ROOT / "tools" / "roadmap" / "seed_github_issues.py").read_text()
+        self.assertIn("agent:blocked", template)
+        self.assertNotIn("id: active_policy", template)
+        self.assertIn(
+            '["roadmap", "agent-task", "needs-integration", "agent:blocked"]',
+            seeder,
+        )
 
     def test_investigation_migration_uses_declared_question_and_resolution(self) -> None:
         body = legacy_task_body()

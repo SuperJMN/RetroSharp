@@ -130,15 +130,36 @@ Textual `#123` references do not substitute for those tracker relations.
 ```bash
 python3 tools/agent/issue.py lint --all-open
 python3 tools/agent/issue.py claim <issue> --run-id <unique-run-id>
-python3 tools/agent/issue.py worktree <issue> --run-id <unique-run-id> ../RetroSharp-<task>
+python3 tools/agent/issue.py worktree <issue> --lease-token <winner-token> ../RetroSharp-<task>
 ```
 
 Claims use one unique commit at
 `refs/heads/agent/claims/issue-<number>`. Remote creation and every later
 mutation use compare-and-swap semantics, so separate clones cannot both win.
-The work branch uses `agent/work/issue-<number>-<run-id>` and is deliberately
+The gateway always uses the `origin` remote and verifies that it names the same
+live GitHub repository selected by `gh`; there is no caller-selected remote.
+Only the CAS winner receives the immutable lease token required by worktree,
+checkpoint, and release commands; tracker comments never contain it. The work
+branch is derived as
+`agent/work/issue-<number>-<token-fingerprint-prefix>` and is deliberately
 separate: releasing a claim deletes only the lock ref. Canonical tracker
 comments and the work branch preserve checkpoint/handoff evidence.
+
+The lease remains bound to the `origin/master` SHA recorded at claim time.
+Later `master` advancement does not invalidate parallel work. Contract or
+native-relation changes block new work and checkpoints. An expired remote lease
+can be replaced even while the tracker still says `agent:claimed`. The
+same compare-and-swap path safely reconciles `agent:claimed` when an interrupted
+rollback already removed the remote claim ref. Rollback removes the ref before
+restoring the tracker label, so that crash window is retryable.
+`release --state blocked|released` recovery path remains available after
+contract/relation changes or expiry, and is idempotently retryable after a
+partial comment, label, or claim-ref operation.
+
+Every checkpoint, whether local or pushed, requires the recorded claim base to
+remain an ancestor of its head. A verified release that already wrote its
+canonical receipt and exclusive `agent:verified` label can also resume the final
+claim-ref deletion safely.
 
 Checkpoint pushes are disabled unless all of these are true:
 
@@ -146,19 +167,27 @@ Checkpoint pushes are disabled unless all of these are true:
   `Checkpoint push: allowed`;
 - dispatch used `claim --allow-checkpoint-push`;
 - execution uses `checkpoint --allow-checkpoint-push`;
-- the recorded worktree is clean and passes submodule, `git diff --check`, and
-  exact remote-alignment checks.
+- at least one validation result is recorded;
+- the recorded worktree is clean, its claim base remains an ancestor, and it
+  passes submodule and `git diff --check` checks;
+- the derived branch is pushed normally without force and exact remote
+  alignment is verified afterward.
 
 The gateway never creates a pull request or merges. Before a migration, preview
-how incompatible open issues will be made explicitly non-dispatchable:
+how legacy agent tasks will be translated into complete AEX-1 contracts and how
+maps, integrators, and non-agent issues will be explicitly exempted:
 
 ```bash
 python3 tools/agent/issue.py migrate --all-open --dry-run
 ```
 
 Only an integrator with issue-edit authority may replace `--dry-run` with
-`--apply`. After migration, run `lint --all-open` again; do not claim acceptance
-from the preview alone.
+`--apply`. Migration is reentrant: when a body update succeeded but its label
+transition did not, a later run emits a state-only repair for a valid contract
+with missing or conflicting agent-state labels. Exemptions repair to blocked;
+dispatchable tasks derive blocked/ready from native dependencies. After
+migration, run `lint --all-open` again; do not claim acceptance from the preview
+alone.
 
 ## Worktree Ownership
 

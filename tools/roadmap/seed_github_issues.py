@@ -218,7 +218,7 @@ def layer_labels(task: RoadmapTask) -> list[str]:
 
 
 def labels_for(task: RoadmapTask) -> list[str]:
-    labels = ["roadmap", "agent-task", "needs-integration"]
+    labels = ["roadmap", "agent-task", "needs-integration", "agent:blocked"]
     labels.extend(layer_labels(task))
     labels.extend(EXTRA_LABELS.get(task.task_id, []))
     if task.task_id in PARALLEL_SAFE:

@@ -6,6 +6,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -45,9 +46,9 @@ def run(
 class GitClaimStore:
     """A compare-and-swap claim store backed by unique remote Git refs."""
 
-    def __init__(self, repo: Path, origin: str = "origin"):
+    def __init__(self, repo: Path):
         self.repo = repo.resolve()
-        self.origin = origin
+        self.origin = "origin"
 
     @staticmethod
     def ref(issue: int) -> str:
@@ -179,6 +180,22 @@ class GitHubTracker:
         result = run(["gh", "repo", "view", "--json", "nameWithOwner"], cwd=repo_root)
         self.repo = json.loads(result.stdout)["nameWithOwner"]
 
+    def verify_origin(self) -> None:
+        remote = run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=self.repo_root,
+        ).stdout.strip()
+        match = re.search(
+            r"(?:github\.com[/:])([^/:\s]+/[^/\s]+?)(?:\.git)?$",
+            remote,
+        )
+        actual = match.group(1).removesuffix(".git") if match else None
+        if actual is None or actual.lower() != self.repo.lower():
+            raise GatewayError(
+                "origin-repository-mismatch",
+                f"origin={remote} github={self.repo}",
+            )
+
     def issue(self, number: int) -> dict[str, Any]:
         result = run(
             ["gh", "issue", "view", str(number), "--repo", self.repo, "--json", "number,body,state,title,labels"],
@@ -249,22 +266,10 @@ class GitHubTracker:
         )
 
     def upsert_checkpoint(self, number: int, body: str) -> None:
-        result = run(
-            [
-                "gh",
-                "api",
-                "--paginate",
-                "--slurp",
-                f"repos/{self.repo}/issues/{number}/comments",
-            ],
-            cwd=self.repo_root,
-        )
-        pages = json.loads(result.stdout)
-        comments = [item for page in pages for item in page]
         existing = next(
             (
                 item
-                for item in reversed(comments)
+                for item in reversed(self._comments(number))
                 if "<!-- retrosharp-agent-checkpoint -->" in str(item.get("body", ""))
             ),
             None,
@@ -285,6 +290,54 @@ class GitHubTracker:
             return
         self.comment(number, body)
 
+    def release_receipt(self, number: int, fingerprint: str, state: str) -> bool:
+        marker = f"<!-- retrosharp-agent-release:{fingerprint}:{state} -->"
+        return any(
+            marker in str(item.get("body", ""))
+            for item in self._comments(number)
+        )
+
+    def upsert_release(
+        self, number: int, fingerprint: str, state: str, body: str
+    ) -> None:
+        marker = f"<!-- retrosharp-agent-release:{fingerprint}:{state} -->"
+        existing = next(
+            (
+                item
+                for item in reversed(self._comments(number))
+                if marker in str(item.get("body", ""))
+            ),
+            None,
+        )
+        if existing:
+            run(
+                [
+                    "gh",
+                    "api",
+                    "--method",
+                    "PATCH",
+                    f"repos/{self.repo}/issues/comments/{existing['id']}",
+                    "-f",
+                    f"body={body}",
+                ],
+                cwd=self.repo_root,
+            )
+            return
+        self.comment(number, body)
+
+    def _comments(self, number: int) -> list[dict[str, Any]]:
+        result = run(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{self.repo}/issues/{number}/comments",
+            ],
+            cwd=self.repo_root,
+        )
+        return [item for page in json.loads(result.stdout) for item in page]
+
     def update_body(self, number: int, body: str) -> None:
         run(
             ["gh", "issue", "edit", str(number), "--repo", self.repo, "--body", body],
@@ -302,6 +355,9 @@ class FixtureTracker:
 
     def issue(self, number: int) -> dict[str, Any]:
         return dict(self.data["issues"][str(number)])
+
+    def verify_origin(self) -> None:
+        """A fixture explicitly authorizes its local test remote."""
 
     def list_open(self) -> list[dict[str, Any]]:
         return [
@@ -348,6 +404,30 @@ class FixtureTracker:
     def upsert_checkpoint(self, number: int, body: str) -> None:
         self._event(
             {"kind": "checkpoint-comment", "issue": number, "body": body}
+        )
+
+    def release_receipt(self, number: int, fingerprint: str, state: str) -> bool:
+        return f"{fingerprint}:{state}" in self.data.get("release_receipts", {}).get(
+            str(number), []
+        )
+
+    def upsert_release(
+        self, number: int, fingerprint: str, state: str, body: str
+    ) -> None:
+        receipts = self.data.setdefault("release_receipts", {}).setdefault(
+            str(number), []
+        )
+        receipt = f"{fingerprint}:{state}"
+        if receipt not in receipts:
+            receipts.append(receipt)
+        self.fixture.write_text(json.dumps(self.data, sort_keys=True))
+        self._event(
+            {
+                "kind": "release-comment",
+                "issue": number,
+                "fingerprint": fingerprint,
+                "body": body,
+            }
         )
 
     def update_body(self, number: int, body: str) -> None:
