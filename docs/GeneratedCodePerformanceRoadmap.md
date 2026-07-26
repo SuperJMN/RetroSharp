@@ -1,12 +1,11 @@
 # Generated Code Performance Roadmap (Game Boy and NES)
 
-Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
-and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); final
-GCP-3.2 closeout evidence reproduced on 2026-07-17 and the tracked Game Boy
-runner B-speed D4 gate restored by RPH-5 / #406 on 2026-07-18.** GCP-0.1 through GCP-3.2
-cover the reproducible baseline, CPU-work contract, generated-shape
-optimizations, initial executable CPU-work report, and joint exact-ROM cadence
-acceptance.
+Status: **complete historical execution record; [GitHub epic
+#387](https://github.com/SuperJMN/RetroSharp/issues/387) is closed.** GCP-0.1
+through GCP-3.2 cover the reproducible baseline, CPU-work contract,
+generated-shape optimizations, initial executable CPU-work report, and joint
+cadence acceptance. Do not dispatch work from old checklists without a live
+issue.
 
 Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates, and CPU-cost figures are upper-bound budgets. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.
 

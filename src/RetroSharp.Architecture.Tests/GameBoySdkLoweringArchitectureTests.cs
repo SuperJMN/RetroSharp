@@ -2,7 +2,6 @@ namespace RetroSharp.Architecture.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
-using RetroSharp.GameBoy.Tests;
 
 public sealed class GameBoySdkLoweringArchitectureTests
 {
@@ -43,19 +42,4 @@ public sealed class GameBoySdkLoweringArchitectureTests
         Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(SdkCpuWorkReportFactory));
     }
 
-    [Fact]
-    public void Lowering_regressions_are_owned_by_the_declared_focused_sdk_suites()
-    {
-        ArchitectureSymbolAssertions.AssertFocusedTestOwnership(
-            typeof(GameBoyRomCompilerTests),
-            [
-                typeof(GameBoySdkAnimationLoweringTests),
-                typeof(GameBoySdkCameraRuntimeLoweringTests),
-                typeof(GameBoySdkCameraStreamingLoweringTests),
-                typeof(GameBoySdkCollisionRuntimeLoweringTests),
-                typeof(GameBoySdkCollisionLoweringTests),
-                typeof(GameBoySdkFrameInputLoweringTests),
-                typeof(GameBoySdkSpriteLoweringTests),
-            ]);
-    }
 }

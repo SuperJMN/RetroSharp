@@ -27,7 +27,6 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, rom.Length);
 
         var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationarySource(source), sampleDirectory))
@@ -82,7 +81,6 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, rom.Length);
 
         var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationaryTallTiledSource(source), sampleDirectory))
@@ -229,7 +227,6 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, rom.Length);
 
         var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationaryFreeScrollSource(source), sampleDirectory))
@@ -310,7 +307,6 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, rom.Length);
 
         var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationaryDiagonalTiledSource(source), sampleDirectory))

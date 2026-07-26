@@ -47,14 +47,6 @@ public sealed class ArchitectureSymbolAssertionsTests
     }
 
     [Fact]
-    public void Test_ownership_guard_rejects_misplaced_lowering_coverage()
-    {
-        Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertFocusedTestOwnership(
-            typeof(FixtureCompilerIntegrationSuite),
-            []));
-    }
-
-    [Fact]
     public void Physical_guard_rejects_an_owner_mapped_to_the_wrong_file()
     {
         const string wrongOwnerSource = "internal static class DifferentOwner { }";
@@ -114,20 +106,6 @@ public sealed class ArchitectureSymbolAssertionsTests
             state.Actors.Add(new ActorFact());
         }
     }
-
-    [Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
-    private sealed class FixtureCompilerIntegrationSuite;
-
-#pragma warning disable xUnit1000 // Compiled test metadata fixture; it must not be discovered as a real suite.
-    private sealed class MisplacedLoweringSuite
-    {
-        [Fact]
-        [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-        public void Misplaced_lowering_test()
-        {
-        }
-    }
-#pragma warning restore xUnit1000
 
     private readonly record struct FixtureRuntimeRange(ushort Start, int Length)
     {

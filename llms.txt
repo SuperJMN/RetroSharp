@@ -3,8 +3,8 @@
 
 ## Agent Entry Points
 - [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
-- [docs/AgentContext.md](docs/AgentContext.md): memory-derived project context, known traps, recent changes, and reliable commands.
-- [docs/AiNavigableArchitecture.md](docs/AiNavigableArchitecture.md): deep-module owners, production/test seams, common change paths, CodeGraph probes, and final AIN measurements.
+- [docs/AgentContext.md](docs/AgentContext.md): concise current authority map, task router, code anchors, and known traps.
+- [docs/AiNavigableArchitecture.md](docs/AiNavigableArchitecture.md): deep-module owners, production/test seams, common change routes, and focused CodeGraph navigation.
 - [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
 - [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
@@ -14,9 +14,9 @@
 - [README.md](README.md): project overview and examples.
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
-- [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): executable full-stage1 plan for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
-- [docs/GeneratedCodePerformanceRoadmap.md](docs/GeneratedCodePerformanceRoadmap.md): measured Actor Framework code-generation cliffs, target CPU-work contract, issue graph, and joint GB/NES cadence acceptance plan.
-- [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared exact-ROM scenario schema, timing budgets, strict transient integrity, GB/NES adapters, and CI tiers.
+- [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): completed execution history for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
+- [docs/GeneratedCodePerformanceRoadmap.md](docs/GeneratedCodePerformanceRoadmap.md): completed execution history for Actor Framework code-generation cliffs, target CPU-work reporting, and joint GB/NES cadence.
+- [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared fresh-ROM scenario schema, timing budgets, transient integrity, GB/NES adapters, and CI tiers.
 - [docs/ActorProjectileFunctionalAcceptance.md](docs/ActorProjectileFunctionalAcceptance.md): eight exact actor/projectile GB/NES timelines, retained OAM publication, pool lifecycle checks, and MCP parity evidence.
 - [docs/NesLargeWorldsCartridgeProfile.md](docs/NesLargeWorldsCartridgeProfile.md): accepted LW-0.3 mapper-4/TVROM NES profile, measured stage1 bank layout, restoration invariant, mapper-0 policy, and emulator evidence.
 - [docs/WorldCoordinateCollisionContract.md](docs/WorldCoordinateCollisionContract.md): accepted LW-0.4 little-endian i16 coordinate, hit/no-hit, compatibility, and GB/NES lowering contract.

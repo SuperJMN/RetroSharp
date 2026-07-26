@@ -42,7 +42,8 @@ No public language or portable SDK API is added by this decision.
 ## Consequences
 
 - A target schedule change must update emitted behavior, static accounting,
-  diagnostics, and focused exact-ROM evidence in the same slice.
+  diagnostics, and focused behavioral evidence from a freshly compiled ROM in
+  the same slice.
 - Work may cross frame boundaries only when the target plan declares a finite
   staging state and deadline.
 - Whole-frame CPU reports remain compatible while gaining per-window evidence.

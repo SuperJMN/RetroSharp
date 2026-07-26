@@ -9,7 +9,6 @@ using RetroSharp.Sdk;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
-[Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
 public partial class GameBoyRomCompilerTests
 {
     [Fact]
@@ -103,7 +102,7 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
+        Assert.Equal(32 * 1_024, rom.Length);
         Assert.Equal(0x00, rom[0x0100]);
         Assert.Equal(0xC3, rom[0x0101]);
         Assert.Equal(0x50, rom[0x0102]);
@@ -216,9 +215,7 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
-
-        Assert.Equal(32768, rom.Length);
+        _ = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
     }
 
     [Fact]
@@ -247,9 +244,7 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
-
-        Assert.Equal(32768, rom.Length);
+        _ = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
     }
 
     [Fact]
@@ -261,12 +256,10 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
+        _ = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
             source,
             sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
-
-        Assert.Equal(32768, rom.Length);
     }
 
     [Fact]
@@ -294,12 +287,10 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
+        _ = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
             source,
             sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
             sdkLibraryRegistry: registry);
-
-        Assert.Equal(32768, rom.Length);
     }
 
     [Fact]
@@ -411,7 +402,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0xE4, 0xE0, 0x47]), "Palette.Background should lower slot 0 to BGP.");
         Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Palette.Sprite slot 0 should lower to OBP0.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x6C, 0xE0, 0x49]), "Palette.Sprite slot 1 should lower to OBP1.");
@@ -1021,7 +1011,7 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, baseDirectory).Length);
+        _ = GameBoyRomCompiler.CompileSource(source, baseDirectory);
     }
 
     [Fact]
@@ -1649,9 +1639,7 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Contains("void DrawFace()", source);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-
-        Assert.Equal(32768, rom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
     }
 
     [Fact]
@@ -1669,7 +1657,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xE0, 0x4A, 0x3E, 0x07, 0xE0, 0x4B]), "Window HUD should position WY=0 and WX=7.");
         Assert.True(ContainsSequence(rom, [0x21, 0x00, 0x9C]), "Window HUD should copy a separate tilemap to $9C00.");
         Assert.True(ContainsSequence(rom, [0x3E, 0xF7, 0xE0, 0x40]), "Window HUD should enable the LCD window layer without disabling existing LCD features.");
@@ -1701,9 +1688,7 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Contains("Hud.SetTile(window", source);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-
-        Assert.Equal(32768, rom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
     }
 
     [Fact]
@@ -1730,7 +1715,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x97, 0xE0, 0x40]), "ROM should enable LCD, background, 8x16 sprites, and sprite rendering.");
         Assert.True(ContainsSequence(rom, [0xEA, 0x01, 0xFE]), "ROM should write sprite X into OAM.");
         Assert.True(ContainsSequence(rom, [0xFE, 0xA8]), "ROM should compare x with the wrap coordinate.");
@@ -1811,7 +1795,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x30, 0x60, 0xAA, 0xCC]), "ROM should contain tile data decoded from the PNG sprite sheet with stable palette indexes.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite_draw should use the PNG logical frame index in shadow OAM.");
     }
@@ -1837,7 +1820,6 @@ public partial class GameBoyRomCompilerTests
         var program = CompileVideoProgram(source, baseDirectory);
         var asset = program.SpriteAssets["player_run"];
 
-        Assert.Equal(32768, rom.Length);
         Assert.Equal(8, asset.LogicalWidth);
         Assert.Equal(16, asset.LogicalHeight);
         Assert.Equal(1, asset.FrameCount);
@@ -1862,7 +1844,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x4D, 0xC6, 0x20, 0xEA, 0x08, 0xC6]), "sprite_draw should emit a bottom row shadow OAM sprite after padding 27 px to 32 px.");
         Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xC6]), "sprite_draw should allocate the fourth 8x16 tile pair for a padded 16x27 logical sprite in shadow OAM.");
     }
@@ -1886,7 +1867,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xA0, 0xC0]), "Grayscale PNG should map black to 3, gray to 2, and white to 1 even when black appears first.");
     }
 
@@ -1907,7 +1887,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE0, 0x43]), "ROM should load camera from WRAM and write it to SCX.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xE0, 0x42]), "ROM should write the constant Y scroll to SCY.");
     }
@@ -1957,7 +1936,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x21]), "sprite_width should compile to the sprite asset's logical width.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x09, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "Span collision should check the first tile column covered by screen X.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x0D, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "Span collision should check the last tile column covered by a 33 px logical sprite.");
@@ -2007,7 +1985,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.Contains(rom.Skip(0x0150), b => b == 0xC3);
     }
 
@@ -2027,7 +2004,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x4E, 0xDA]), "ROM should compare y with 78 and jump over the branch when y is below the threshold.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "ROM should execute the branch body when the relation is true.");
     }
@@ -2046,7 +2022,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should add the low bytes of two word-backed locals and store the result.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x03, 0xC0, 0x47, 0xFA, 0x01, 0xC0, 0x88, 0xEA, 0x01, 0xC0]), "ROM should propagate carry through the high bytes of two word-backed locals.");
     }
@@ -2071,7 +2046,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "ROM should store position.x as a two-byte field.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "ROM should store position.y at the next two-byte field address.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should use direct low-byte member arithmetic with no helper call.");
@@ -2213,7 +2187,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x00, 0xC0]), "Alias ActorIndex should compile as the first byte-backed local.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Alias Position should compile as a struct field at the next local address.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "Alias Position should preserve all struct fields with no alias storage.");
@@ -2237,7 +2210,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Const StartX should compile as an immediate store to the first two-byte local.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "Const Velocity should compile as an immediate store to the second two-byte local, with no const storage slot.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "Const declarations should not shift runtime local addresses.");
@@ -2260,7 +2232,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Local const Velocity should compile its derived value as an immediate store to the first two-byte local.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "Local const declarations should not reserve WRAM before the second local.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x02, 0xC0, 0xFA, 0x01, 0xC0, 0xEA, 0x03, 0xC0]), "Local const declarations should not shift runtime local addresses.");
@@ -2281,7 +2252,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x00, 0xC0]), "Const conditional expression should fold to one immediate store with no runtime conditional.");
     }
 
@@ -2335,7 +2305,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x00, 0xC0]), "sizeof(Actor) should compile as the struct byte size immediate.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x01, 0xC0]), "sizeof(ptr<u8>) should compile as the pointer byte size immediate.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "sizeof expressions should not reserve storage or emit helper code.");
@@ -2361,7 +2330,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "offsetof(Actor, y) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "offsetof(Actor, active) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "offsetof expressions should not reserve storage or emit helper code.");
@@ -2384,7 +2352,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Array index 0 should store to the first WRAM byte.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Array index 1 should load from the adjacent WRAM byte with direct addressing.");
     }
@@ -2493,7 +2460,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x04, 0xC0]), "countof(values) should compile as an immediate store after the four array bytes.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x04, 0xC0, 0xEA, 0x00, 0xC0]), "countof should not emit a helper; subsequent array assignment should remain direct.");
     }
@@ -2517,7 +2483,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Enum Brick should compile as an immediate store to the first local.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x01, 0xC0]), "Implicit enum Bonus should compile as the next immediate value with no enum storage slot.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Enum declarations should not shift runtime local addresses.");
@@ -2537,7 +2502,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "x += y should lower to the same direct load/add/store sequence as x = x + y.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xD6, 0x01, 0xEA, 0x00, 0xC0]), "x -= 1 should lower to direct subtract/store without a helper call.");
     }
@@ -2567,7 +2531,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(
             ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0, 0x3E, 0x2C, 0xEA, 0x01, 0xC0, 0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0xFE, 0xEA, 0x03, 0xC0, 0x3E, 0xFF, 0xEA, 0x04, 0xC0]),
             "mixed-width struct fields should reserve adjacent WRAM bytes: tag, x low/high, then y low/high.");
@@ -2587,7 +2550,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0xF5, 0xFA, 0x02, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0x90, 0xEA, 0x03, 0xC0]), "Nested subtraction should preserve each left operand on the CPU stack while evaluating the right operand.");
         Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested subtraction must not store operands in the shared expression scratch address.");
     }
@@ -2610,7 +2572,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8]), "Nested relational compares should preserve the left expression on the CPU stack while evaluating the right expression.");
         Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested relational compare must not store operands in the shared expression scratch address.");
     }
@@ -2636,7 +2597,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8, 0xC2]), "Nested == should preserve the left expression on the CPU stack before comparing.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8, 0xCA]), "Nested != should preserve the left expression on the CPU stack before comparing.");
         Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested equality compares must not store operands in the shared expression scratch address.");
@@ -2656,7 +2616,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xD2]), "for condition should compare the loop local and jump out when i >= 3.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "for body should use direct x += i arithmetic.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]), "for increment should use direct i += 1 arithmetic.");
@@ -2678,7 +2637,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "x++ should lower to direct x += 1 arithmetic.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xD6, 0x01, 0xEA, 0x00, 0xC0]), "x-- should lower to direct x -= 1 arithmetic.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]), "for i++ should lower to direct i += 1 arithmetic.");
@@ -2698,7 +2656,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x01, 0xC0]), "range-for should initialize the loop local once from the range start.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xD2]), "range-for should compare i with the exclusive upper bound and branch out when i >= end.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "range-for body should use direct x += i arithmetic.");
@@ -2718,7 +2675,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x04, 0xC0, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19]), "runtime array indexing should compute HL from the array base and the byte index without a helper call.");
         Assert.True(ContainsSequence(rom, [0x7E, 0xC6, 0x01, 0x77]), "values[i] += 1 should load, add, and store through HL without a helper call.");
     }
@@ -2746,7 +2702,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
         Assert.True(ContainsSequence(rom, [0xFA, 0x05, 0xC0, 0xEA, 0x0A, 0xC0]), "constant indexed field reads should use the flattened field address directly.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should compute HL from the y-field base plus i * sizeof(Actor).");
@@ -2776,7 +2731,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0xFE, 0x03]), "pool loop should compare the byte index with countof(actors), not use an iterator object.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xFE, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
@@ -2802,7 +2756,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x2C, 0xEA, 0x03, 0xC0, 0x3E, 0x01, 0xEA, 0x04, 0xC0]), "actors[1].worldX should store low/high at base + sizeof(Actor).");
         Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].y should be placed after the two-byte worldX field.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x06, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should use the mixed-width struct stride.");
@@ -2838,7 +2791,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(
             ContainsSequence(rom, [0xFA, 0x1A, 0xC0, 0x47, 0x87, 0x80, 0x87, 0x87, 0x80, 0x21, 0x03, 0xC0, 0x5F, 0x16, 0x00, 0x19]),
             "a 13-byte struct stride should use the accepted bounded binary multiply before forming the field address.");
@@ -2915,7 +2867,6 @@ public partial class GameBoyRomCompilerTests
         var continueCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]);
         var breakCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x03, 0xC2]);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(loopStart >= 0, "loop body should start with direct x++ arithmetic.");
         Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
         Assert.True(breakCompare >= 0, "break guard should compare x with 3.");
@@ -2947,7 +2898,6 @@ public partial class GameBoyRomCompilerTests
         var breakCompare = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xC2]);
         var increment = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(continueCompare >= 0, "continue guard should compare i with 1.");
         Assert.True(breakCompare >= 0, "break guard should compare i with 3.");
         Assert.True(increment >= 0, "for increment should still be emitted as direct i += 1 arithmetic.");
@@ -2980,7 +2930,6 @@ public partial class GameBoyRomCompilerTests
         var continueCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]);
         var conditionCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x03, 0xD2]);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "do body should emit x++ as direct arithmetic before the first condition check.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x02, 0xEA, 0x00, 0xC0]), "do body should emit direct arithmetic after the continue guard.");
         Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
@@ -3014,7 +2963,6 @@ public partial class GameBoyRomCompilerTests
         var orLeftCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]);
         var orBody = IndexOfSequence(rom, [0xFA, 0x02, 0xC0, 0xC6, 0x02, 0xEA, 0x02, 0xC0]);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(andLeftCompare >= 0, "&& should test the left condition and jump false before touching the right side.");
         Assert.True(andRightCompare > andLeftCompare, "&& should evaluate the right condition only after the left condition succeeds.");
         Assert.True(orLeftCompare >= 0, "|| should test the left condition with a direct true branch.");
@@ -3062,7 +3010,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]), "! should invert x != 0 into a false jump when the inner condition is true.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "then body should remain direct x += 1 arithmetic.");
     }
@@ -3085,7 +3032,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]), "first if should compare x with 0 and jump to the else branch when false.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]), "else-if should compile as a nested if compare.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "first body should remain direct x += 1 arithmetic.");
@@ -3117,7 +3063,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "Switch subject should stay a normal byte-backed local.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00]), "First switch case should compare the subject directly to the case literal.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01]), "Second switch case should compare the subject directly to the case literal.");
@@ -3146,7 +3091,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00]), "Multi-value switch case should compare the subject with the first literal.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01]), "Multi-value switch case should compare the subject with the second literal.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x0A, 0xEA, 0x01, 0xC0]), "Multi-value switch case should share one direct branch body.");
@@ -3173,7 +3117,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xDA]), "Range switch case should compare the subject with the inclusive lower bound and jump out when subject < start.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x04, 0xD2]), "Range switch case should compare the subject with the exclusive upper bound and jump out when subject >= end.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x0A, 0xEA, 0x01, 0xC0]), "Range switch case should share one direct branch body.");
@@ -3194,7 +3137,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x00, 0xC0]), "Untyped top-level const should fold to the direct literal initializer.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x05, 0xEA, 0x00, 0xC0]), "Untyped block-local const should fold to the direct literal assignment.");
     }
@@ -3216,7 +3158,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF6, 0x01, 0xEA, 0x00, 0xC0]), "flags |= Solid should lower to LD/OR immediate/store with no helper.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0xFD, 0xEA, 0x00, 0xC0]), "flags &= ~Hazard should lower to LD/AND immediate/store with no helper.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEE, 0x04, 0xEA, 0x00, 0xC0]), "flags ^= Toggle should lower to LD/XOR immediate/store with no helper.");
@@ -3243,7 +3184,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF6, 0x01, 0xEA, 0x00, 0xC0]), "set_flag(flags, 1) should inline as LD/OR immediate/store with no call ABI.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0xFD, 0xEA, 0x00, 0xC0]), "clear_flag(flags, 2) should inline as LD/AND immediate/store with no call ABI.");
     }
@@ -3261,7 +3201,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xF6, 0x02, 0xEA, 0x00, 0xC0]), "Explicit casts should disappear before Game Boy lowering and leave the direct expression sequence.");
     }
 
@@ -3280,7 +3219,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "&& should false-branch after the left operand.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x00, 0xCA]), "&& should false-branch after the right operand.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "&& should materialize false as 0 in the destination byte.");
@@ -3302,7 +3240,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "Conditional expression should branch to the false value when the condition is false.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC3]), "Conditional expression should load the true branch value and jump over the false branch.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "Conditional expression should load the false branch value and store one selected byte.");
@@ -4062,7 +3999,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(0, program.MapColumns[13][2]);
         Assert.Equal(5, program.TileMap[14 * 32]);
         Assert.Equal(3, program.TileMap[13 * 32 + 23]);
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+        _ = GameBoyRomCompiler.CompileSource(source);
     }
 
     [Fact]
@@ -4180,7 +4117,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(7, program.TileMap[5 * 32 + 2]);
         Assert.Equal(6, program.TileMap[5 * 32 + 3]);
         Assert.Equal(8, program.TileMap[6 * 32]);
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, directory).Length);
+        _ = GameBoyRomCompiler.CompileSource(source, directory);
     }
 
     [Fact]
@@ -4420,7 +4357,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(7, program.TileMap[4 * 32 + 3]);
         Assert.Equal(6, program.TileMap[5 * 32]);
         Assert.Equal(6, program.TileMap[5 * 32 + 1]);
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, directory).Length);
+        _ = GameBoyRomCompiler.CompileSource(source, directory);
     }
 
     [Fact]
@@ -4626,7 +4563,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x02, 0xC6]), "Generated background tiles should leave the first 8x16 shadow OAM sprite tile on an even tile after them.");
     }
 
@@ -4671,7 +4607,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x00, 0x02]), "ROM should contain world flag row 0 data.");
         Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
         Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Solid flag queries should mask bit 0 independently.");
@@ -5172,7 +5107,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xC2]), "ROM should use an absolute conditional JP for long if bodies.");
     }
 

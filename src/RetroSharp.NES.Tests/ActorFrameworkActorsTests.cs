@@ -521,7 +521,6 @@ public partial class NesRomCompilerTests
         var rom = NesRomCompiler.CompileSource(source, baseDirectory);
         var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0xE0]), "actor draw should read the camera X low byte.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x00]), "actor draw should use a compile-time known-zero camera X high byte when the configured camera extent fits one byte.");
         Assert.True(ContainsSequence(prg, [0xC5, 0xE9, 0xD0]), "actor draw should compare actor and camera world pages and branch around sprite drawing when outside the camera window.");

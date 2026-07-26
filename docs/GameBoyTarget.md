@@ -286,7 +286,6 @@ Static setup calls:
 - `Sprite.Asset(name, path[, frameWidth, frameHeight])`
 - `World.Column(index, tile0, tile1, ...)`
 - `World.Flags(index, flags0, flags1, ...)`
-- `World.Column(index, tile0, tile1, ...)`
 - `World.Map(width, streamY, height)`
 - `World.Load(path)`
 - `Hud.SetTile(window, x, y, tile)`

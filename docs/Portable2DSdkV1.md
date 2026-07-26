@@ -1,6 +1,6 @@
 # Portable 2D SDK v1 Reference
 
-Status: draft v1 reference for the current portable 2D surface.
+Status: current v1 reference for the portable 2D surface.
 
 This document is the first public API reference for the portable 2D SDK layer. It describes calls that are intended to represent game concepts before target lowering. Game Boy and NES may still support target-specific or transitional calls, but those calls are not part of SDK v1 unless listed here.
 
@@ -487,7 +487,9 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Camera-relative collision | Supported through `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` for literal or byte-backed screen X plus world Y values, and `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` for byte-backed screen X/Y values. | Supported through the same camera AABB and screen-AABB forms on horizontal and four-screen camera paths. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
-Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
+Use `samples/manifest.json` to identify which samples are portable. The current
+`portable-sdk` entries are `cross-target-camera` and
+`source-library-package`; both build for Game Boy and NES.
 
 ## Failure Modes
 
@@ -531,7 +533,12 @@ SDK v1 is usable for the current cross-target camera sample, and the runner-shap
 - On Game Boy, `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations used by backend lowering.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `Camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `Palette.Background(...)` and `Palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors, may use the next physical sprite palette slot for automatic optional overlays when a PNG has more than three opaque colors, and may move incompatible PNG-derived palettes to a free physical sprite palette range.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.retrosharp.json` remains a shared Game Boy/NES `target-acceptance` project with game-owned helper/state files, complete `stage1.tmj`, and per-target VGM/VGZ music. The smaller tall, vertical, diagonal, and free-scroll samples remain focused target-acceptance isolation fixtures.
+- `samples/cross-target-camera/camera.rs` and the
+  `source-library-package` manifest are the `portable-sdk` samples.
+  `samples/runner/runner.retrosharp.json` remains a shared Game Boy/NES
+  `target-acceptance` project with game-owned helper/state files, complete
+  `stage1.tmj`, and per-target VGM/VGZ music. The smaller tall, vertical,
+  diagonal, and free-scroll samples remain focused target-acceptance fixtures.
 
 ## Minimal Game Boy/NES Example
 

@@ -1,6 +1,8 @@
 # NES Frame Scheduling Roadmap
 
-Status: accepted execution roadmap for issue #410.
+Status: historical execution record for issue #410, which is closed as not
+planned. Its physical observations remain useful design evidence, but its
+byte/cycle-exact certification graph is not an active dispatch contract.
 Last updated: 2026-07-20.
 
 Acceptance policy (supersedes the byte-exact and cycle-exact wording below):

@@ -5,11 +5,9 @@ using RetroSharp.Sdk;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkCollisionLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_materializes_y_304_and_minus_one_through_a_x_on_nes()
     {
         var source = CollisionHitContractSource(
@@ -30,7 +28,6 @@ public sealed class NesSdkCollisionLoweringTests
         Assert.True(ContainsSequence(prg, [0xA9, 0xFF, 0xAA, 0x85, 0x04, 0x86, 0x05]), "no hit should store FF FF through A:X.");
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_nes()
     {
         var source = CollisionHitContractSource(
@@ -47,7 +44,6 @@ public sealed class NesSdkCollisionLoweringTests
         Assert.True(ContainsSequence(prg, [0x85, 0x00]), "the legacy byte destination should consume the low result byte.");
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_nes_world()
     {
         var source = CollisionHitContractSource(
@@ -62,7 +58,6 @@ public sealed class NesSdkCollisionLoweringTests
             exception.Message);
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_nes_world()
     {
         var source = CollisionHitContractSource(
@@ -73,7 +68,6 @@ public sealed class NesSdkCollisionLoweringTests
         Assert.NotEmpty(NesRomCompiler.CompileSource(source));
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_nes()
     {
         const string direct = """
@@ -106,7 +100,6 @@ public sealed class NesSdkCollisionLoweringTests
         Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Screen_collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_nes()
     {
         const string direct = """
@@ -141,7 +134,6 @@ public sealed class NesSdkCollisionLoweringTests
         Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_relative_collision_uses_absolute_camera_tile_after_scroll_wrap()
     {
         const string source = """
@@ -162,7 +154,6 @@ public sealed class NesSdkCollisionLoweringTests
         var rom = NesRomCompiler.CompileSource(source);
         var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(40976, rom.Length);
         Assert.True(
             ContainsSequence(prg, [0xA5, 0xE0, 0x29, 0x07, 0x18, 0x69, 0x48, 0x4A, 0x4A, 0x4A, 0x18, 0x65, 0xE1]),
             "Camera.AabbTiles should combine camera fine X with the absolute source tile, not the wrapped scroll byte.");

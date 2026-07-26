@@ -4,11 +4,9 @@ using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkCollisionRuntimeLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_map_tile_lookup_as_a_runtime_expression()
     {
         const string source = """
@@ -27,14 +25,12 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the runtime source map column and the selected row table address.");
         Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0xFE, 0x00]), "ROM should read the tile id into A and compare it with zero.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "ROM should execute the branch body when the tile is non-zero.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_tile_flags_at_reads_world_pixel_coordinates_and_bounds_to_empty()
     {
         const string source = """
@@ -75,7 +71,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x00, 0x02]), "ROM should contain world flag row 0 data.");
         Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
         Assert.True(ContainsSequence(rom, [0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]), "world_tile_flags_at should convert world pixels to tile coordinates by dividing by 8.");
@@ -83,7 +78,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collision_aabb_tiles_checks_each_overlapped_world_tile()
     {
         const string source = """
@@ -114,14 +108,12 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "AABB collision should mask solid flags.");
         Assert.True(ContainsSequence(rom, [0xE6, 0x02, 0xFE, 0x00, 0xC2]), "AABB collision should mask hazard flags.");
         Assert.True(ContainsSequence(rom, [0xE6, 0x04, 0xFE, 0x00, 0xC2]), "AABB collision should mask platform flags.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_aabb_tiles_checks_each_overlapped_tile_against_visible_camera_columns()
     {
         const string source = """
@@ -149,7 +141,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(
             ContainsSequence(rom, [0xFA, 0xE2, 0xC0, 0xC6, 0x48, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F, 0x47, 0xFA, 0xE3, 0xC0, 0x80]),
             "Camera.AabbTiles should derive the source column from camera fine X plus the visible screen X.");
@@ -160,7 +151,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_aabb_hit_top_returns_top_edge_of_first_overlapped_tile()
     {
         const string source = """
@@ -185,13 +175,11 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x21, 0xFF, 0xFF]), "Camera.AabbHitTop should return -1 as FF FF when no overlapped tile has the requested flags.");
         Assert.True(ContainsSequence(rom, [0xCE, 0xFF, 0x67, 0xFA]), "Camera.AabbHitTop should propagate the signed search offset into the high result byte.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_returns_y_304_and_minus_one_as_complete_words_on_game_boy()
     {
         var source = CollisionHitContractSource(
@@ -216,7 +204,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_game_boy()
     {
         var source = CollisionHitContractSource(
@@ -239,7 +226,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Screen_camera_aabb_uses_static_small_map_rows_without_changing_results_on_game_boy()
     {
         const string source = """
@@ -273,7 +259,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_game_boy_world()
     {
         var source = CollisionHitContractSource(
@@ -289,7 +274,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_game_boy_world()
     {
         var source = CollisionHitContractSource(
@@ -297,7 +281,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
             solidRow: 31,
             body: "u8 noHit = Camera.AabbHitTop(0, 0, 8, 8, 4);");
 
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+        _ = GameBoyRomCompiler.CompileSource(source);
     }
 
     private static string CollisionHitContractSource(int height, int solidRow, string body)

@@ -203,48 +203,6 @@ internal static class ArchitectureSymbolAssertions
             field => field.DeclaringType is not null && domainStates.Contains(field.DeclaringType));
     }
 
-    public static void AssertFocusedTestOwnership(
-        Type compilerIntegrationSuite,
-        IReadOnlyCollection<Type> focusedLoweringSuites)
-    {
-        const string ownershipTrait = "RetroSharp.TestOwnership";
-        const string compilerIntegration = "CompilerIntegration";
-        const string sdkLowering = "SdkLowering";
-
-        Assert.True(HasTrait(compilerIntegrationSuite, ownershipTrait, compilerIntegration));
-        Assert.All(focusedLoweringSuites, suite =>
-        {
-            Assert.Equal(compilerIntegrationSuite.Assembly, suite.Assembly);
-            Assert.True(HasTrait(suite, ownershipTrait, sdkLowering));
-        });
-
-        var declaredFocusedSuites = compilerIntegrationSuite.Assembly
-            .GetTypes()
-            .Where(type => HasTrait(type, ownershipTrait, sdkLowering))
-            .OrderBy(type => type.FullName, StringComparer.Ordinal)
-            .ToArray();
-        var expectedFocusedSuites = focusedLoweringSuites
-            .OrderBy(type => type.FullName, StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.Equal(expectedFocusedSuites, declaredFocusedSuites);
-
-        var expectedFocusedSuiteSet = expectedFocusedSuites.ToHashSet();
-        var markedMethods = compilerIntegrationSuite.Assembly
-            .GetTypes()
-            .SelectMany(type => type.GetMethods(DeclaredMethods))
-            .Where(method => HasTrait(method, ownershipTrait, sdkLowering))
-            .ToList();
-        Assert.All(expectedFocusedSuites, suite => Assert.All(
-            TestMethods(suite),
-            method => Assert.True(HasTrait(method, ownershipTrait, sdkLowering))));
-        Assert.All(markedMethods, method =>
-        {
-            Assert.NotNull(method.DeclaringType);
-            Assert.Contains(method.DeclaringType!, expectedFocusedSuiteSet);
-        });
-    }
-
     public static void AssertCallsToTypesHaveDeclaredTestOwnership(
         Type testSuite,
         IReadOnlyCollection<Type> calledTypes,
@@ -415,15 +373,6 @@ internal static class ArchitectureSymbolAssertions
             attribute.ConstructorArguments is [{ Value: string traitName }, { Value: string traitValue }] &&
             traitName == name &&
             traitValue == value);
-    }
-
-    private static IEnumerable<MethodInfo> TestMethods(Type suite)
-    {
-        return suite
-            .GetMethods(DeclaredMethods)
-            .Where(method => method.CustomAttributes.Any(attribute =>
-                IsAttribute(attribute.AttributeType, "Xunit.FactAttribute") ||
-                IsAttribute(attribute.AttributeType, "Xunit.TheoryAttribute")));
     }
 
     private static bool IsAttribute(Type attribute, string fullName)

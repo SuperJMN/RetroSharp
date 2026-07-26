@@ -7,14 +7,19 @@ progress and the shared mixed-load rung, CSL-6 / #341 adds the sustained
 actor/projectile sprite-integrity rung, and CSL-7 / #342 adds the shared
 platformer landing/reset rung.
 
-This document defines the functional acceptance boundary for canonical RetroSharp sample ROMs. Compilation and final-state checks remain useful, but they cannot prove sustained gameplay cadence, transient visual integrity, legal video writes, or correct camera publication. Functional acceptance runs the exact emitted ROM and evaluates every retained observation through one target-neutral contract.
+This document defines the functional acceptance seam for canonical RetroSharp
+sample ROMs. Compilation and final-state checks remain useful, but they cannot
+prove sustained gameplay cadence, transient visual integrity, legal video
+writes, or correct camera publication. Product acceptance compiles a scenario
+once, runs that exact fresh artifact, and evaluates every retained observation
+through one target-neutral contract.
 
 ## Ownership
 
 `RetroSharp.FunctionalAcceptance` is validation infrastructure. It does not belong to the language, portable SDK, or either target runtime, and it does not add gameplay APIs. Target-specific test CPUs and MCP sessions remain responsible for executing hardware behavior; the shared runner owns scenario timing, integrity rules, and reports.
 
 ```text
-checked-in scenario + exact ROM bytes
+checked-in scenario + freshly compiled ROM
                   |
          FunctionalScenarioRunner
                   |
@@ -29,7 +34,12 @@ checked-in scenario + exact ROM bytes
        JSON report + text report
 ```
 
-The runner accepts a `FunctionalRomArtifact`, passes its bytes unchanged to `IFunctionalRomMachineFactory`, and records the artifact path and SHA-256 in both reports. Scenario code cannot compile a rewritten source, substitute camera state, or silently select a different ROM.
+The runner accepts a `FunctionalRomArtifact`, passes its bytes unchanged to
+`IFunctionalRomMachineFactory`, and records the artifact path and SHA-256 in
+both reports. Here, exact means that the artifact under observation is not
+rewritten or substituted after compilation; it does not require equality with
+a committed golden. Scenario code cannot compile a different source, substitute
+camera state, or silently select another ROM.
 
 ## Checked-in scenario contract
 
@@ -94,8 +104,8 @@ Concrete sample adapters and scenarios are added by the ladder rung that owns th
 
 The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vscroll.gb.json`, passes the exact tracked `samples/tiled-vscroll/vscroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.
 
-CSL-3 binds eight canonical sample/target scenarios to exact production source
-and emitted ROM bytes: static drawing on GB/NES, the shared input-driven camera
+CSL-3 binds eight canonical sample/target scenarios to production source and
+the freshly emitted ROM: static drawing on GB/NES, the shared input-driven camera
 on GB/NES, source-authored vertical scrolling on GB, source-authored free
 scroll on GB/NES, and the Game Boy Window HUD. These bindings enable authored
 background and palette checks on every retained frame, exact gameplay-tick
@@ -139,7 +149,7 @@ frame. The accepted hashes and external emulator checkpoints are recorded in
 
 CSL-7 binds `platformer-landing` on Game Boy and NES to one shared source,
 one authored 32x20 Tiled map, the same wall/return/jump/fall input timeline,
-and the exact tracked cartridge bytes. Typed build-report variables prove
+and one fresh cartridge per target. Typed build-report variables prove
 word-wide Y=304 support, wall contact, camera X=255/256 traversal, a complete
 apex and landing, return without reset, and exactly one source-owned gameplay
 reset. Every retained frame also checks the authored packed background, the

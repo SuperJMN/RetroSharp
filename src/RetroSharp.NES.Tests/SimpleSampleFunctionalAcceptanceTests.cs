@@ -49,25 +49,22 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
         Assert.InRange(cpu.Cycles, 17_868_250, 17_868_400);
     }
 
-    public static TheoryData<string, string, string, string?> ProductionSamples => new()
+    public static TheoryData<string, string, string> ProductionSamples => new()
     {
         {
             "static-drawing",
             "samples/static-drawing/drawing.rs",
-            "validation/scenarios/static-drawing.nes.json",
-            "samples/static-drawing/drawing.nes"
+            "validation/scenarios/static-drawing.nes.json"
         },
         {
             "cross-target-camera",
             "samples/cross-target-camera/camera.rs",
-            "validation/scenarios/cross-target-camera.nes.json",
-            null
+            "validation/scenarios/cross-target-camera.nes.json"
         },
         {
             "source-free-scroll",
             "samples/source-free-scroll/freescroll.rs",
-            "validation/scenarios/source-free-scroll.nes.json",
-            "samples/source-free-scroll/freescroll.nes"
+            "validation/scenarios/source-free-scroll.nes.json"
         },
     };
 
@@ -76,20 +73,13 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
     public void Production_rom_passes_the_shared_functional_scenario(
         string sampleId,
         string sourceRelativePath,
-        string scenarioRelativePath,
-        string? trackedRomRelativePath)
+        string scenarioRelativePath)
     {
         var sourcePath = RepositoryFile(sourceRelativePath);
         var sourceDirectory = Path.GetDirectoryName(sourcePath)
             ?? throw new InvalidOperationException($"Could not locate the directory for '{sourceRelativePath}'.");
         var source = File.ReadAllText(sourcePath);
-        var firstRom = NesRomCompiler.CompileSource(source, sourceDirectory);
-        var regeneratedRom = NesRomCompiler.CompileSource(source, sourceDirectory);
-        Assert.Equal(firstRom, regeneratedRom);
-        if (trackedRomRelativePath is not null)
-        {
-            Assert.Equal(File.ReadAllBytes(RepositoryFile(trackedRomRelativePath)), firstRom);
-        }
+        var rom = NesRomCompiler.CompileSource(source, sourceDirectory);
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         var factory = new SimpleNesMachineFactory(sampleId);
@@ -103,7 +93,7 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(sourceRelativePath.Replace(".rs", ".nes", StringComparison.Ordinal), firstRom),
+            new FunctionalRomArtifact(sourceRelativePath.Replace(".rs", ".nes", StringComparison.Ordinal), rom),
             adapter,
             new AuthoredNesBackgroundOracle(sampleId, factory));
         var failureFrames = report.IntegrityFailures
@@ -123,7 +113,7 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
             + string.Join(Environment.NewLine, report.IntegrityFailures.Take(20))
             + Environment.NewLine
             + string.Join(Environment.NewLine, failureState));
-        Assert.Equal(firstRom, factory.LoadedRom);
+        Assert.Equal(rom, factory.LoadedRom);
         Assert.Equal(1, factory.ResetCount);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);

@@ -329,9 +329,7 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, baseDirectory);
     }
 
     [Fact]

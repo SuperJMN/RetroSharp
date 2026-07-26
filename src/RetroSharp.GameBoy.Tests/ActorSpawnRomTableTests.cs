@@ -14,7 +14,6 @@ public partial class GameBoyRomCompilerTests
     [InlineData(64)]
     [InlineData(128)]
     [InlineData(240)]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Actor_spawn_rom_lookup_has_constant_game_boy_shape_and_exact_columns(int recordCount)
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.ObjectsJson(recordCount));
@@ -68,7 +67,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Rom_tables_record_the_game_boy_wide_spawn_payload_delta()
     {
         const int recordCount = 16;
@@ -94,7 +92,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Production_spawn_rom_tables_round_trip_through_runtime_activation()
     {
         var baseDirectory = WriteActorSpawnMap(
@@ -196,7 +193,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Banked_spawn_rom_table_lookup_restores_the_actual_visible_bank()
     {
         var table = new CompilerGeneratedRomTable("lookup", [0x10, 0x20, 0x30, 0x40]);
@@ -245,7 +241,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Wide_spawn_window_uses_bounded_game_boy_spatial_candidate_rom_index()
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.SpacedObjectsJson(recordCount: 240, spacing: 16));
@@ -272,7 +267,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Spatial_spawn_window_marks_used_only_after_successful_game_boy_slot_claim()
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.SpacedObjectsJson(recordCount: 33, spacing: 16));

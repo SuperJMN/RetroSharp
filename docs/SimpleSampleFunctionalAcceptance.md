@@ -2,10 +2,10 @@
 
 Status: CSL-3 / #338 implemented on top of the CSL-2 / #337 shared runner.
 
-This rung executes exact ROM bytes compiled from the production sample sources.
-It does not copy, simplify, or reimplement a sample for validation. Every test
-compiles the source twice and requires byte-for-byte determinism; samples with a
-tracked ROM also require the fresh output to equal that artifact.
+This rung compiles each production sample once and executes those exact fresh
+ROM bytes. It does not copy, simplify, or reimplement a sample for validation.
+Tracked artifacts and hashes remain useful regeneration diagnostics, but they
+are not behavioral gates.
 
 ## Scenario matrix
 

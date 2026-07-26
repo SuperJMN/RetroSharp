@@ -9,18 +9,18 @@ jump, wall response, fall reset, and the post-reset input latch remain source
 policy; no language feature, SDK API, target intrinsic, allocator, or runtime
 dispatch was added.
 
-## Exact production artifacts
+## Regeneratable production artifacts
 
 | Target | Tracked ROM | Profile | Bytes | SHA-256 |
 | --- | --- | --- | ---: | --- |
 | Game Boy | `samples/platformer-landing/bin/platformer-landing.gb` | `gb-rom-only-current` | 32,768 | `8955273d1ee3596389f6c5219995d360097a5d9e9b40b7612e91050e4f373e54` |
 | NES | `samples/platformer-landing/bin/platformer-landing.nes` | `nes-mapper-0-current` | 40,976 | `1fadb1ad32e18244f18c52e4bc727387a24c0064c39f0906a06b7b3f6a4adc6d` |
 
-The CLI acceptance test compiles
-`samples/platformer-landing/platformer-landing.retrosharp.json` for both targets
-and requires byte-for-byte equality with the tracked ROMs. Target tests also
-compile `src/main.rs` from the sample project directory so they can read typed
-variable addresses from the build report. The 32x20 source map
+The tracked files and hashes identify the artifacts used for the recorded
+external checkpoints; they can be regenerated and are not the product gate.
+Target acceptance compiles `src/main.rs` once from the sample project directory,
+uses that same fresh ROM for execution, and reads typed variable addresses from
+its build report. The 32x20 source map
 expands to 64x40 hardware cells and serializes as 4x3 eight-cell chunks (12
 chunks). The floor top is word-wide world Y=304. Its left opening is the one
 authored fall; the solid wall begins at world X=384 and stops the 18-pixel-wide

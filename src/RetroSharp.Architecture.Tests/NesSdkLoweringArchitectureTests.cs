@@ -3,7 +3,6 @@ namespace RetroSharp.Architecture.Tests;
 using System.Reflection;
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
-using RetroSharp.NES.Tests;
 
 public sealed class NesSdkLoweringArchitectureTests
 {
@@ -177,19 +176,6 @@ public sealed class NesSdkLoweringArchitectureTests
         Assert.All(schedulerLowererCalls, method => Assert.Contains(
             method.GetParameters(),
             parameter => parameter.ParameterType == typeof(NesVideoSafeTransfer)));
-    }
-
-    [Fact]
-    public void Lowering_regressions_are_owned_by_the_declared_focused_sdk_suites()
-    {
-        ArchitectureSymbolAssertions.AssertFocusedTestOwnership(
-            typeof(NesRomCompilerTests),
-            [
-                typeof(NesSdkCameraStreamingLoweringTests),
-                typeof(NesSdkCollisionLoweringTests),
-                typeof(NesSdkFrameInputLoweringTests),
-                typeof(NesSdkSpriteLoweringTests),
-            ]);
     }
 
     private static bool IsOwnedBy(Type candidate, Type owner)

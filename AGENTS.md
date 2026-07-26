@@ -6,23 +6,29 @@ RetroSharp is a .NET 10 multi-project solution for a small C#-like language that
 
 ## Read First
 
-Use this order when you need project context:
+Always read:
 
-1. `AGENTS.md`: repo rules, validation, and agent workflow.
-2. `docs/AgentContext.md`: memory-derived context, known traps, and recent changes.
-3. `README.md`: project summary and basic examples.
-4. `docs/AiNavigableArchitecture.md`: deep-module owners, production/test seams, and CodeGraph probes.
-5. `docs/ArchitectureRoadmap.md`: language vs portable 2D SDK vs target-intrinsics boundary.
-6. `docs/SdkArchitecture.md`: frontend preparation, Actor Framework internals, and target SDK lowering navigation.
-7. `docs/LargeWorldsRoadmap.md`: large-map, banking, mapper, chunking, and full-`stage1` execution plan when that epic is in scope.
-8. `docs/GeneratedCodePerformanceRoadmap.md`: measured GB/NES code-generation bottlenecks, CPU-work contract, and execution graph when performance work is in scope.
-9. `docs/NesFrameSchedulingRoadmap.md`: timing, OAM publication, physical tracing, lifecycle, bounded scheduling, and certification graph when #410 is in scope.
-10. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
-11. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
-12. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
-13. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
-14. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
-15. `docs/LegacyZ80Compiler.md`: archived Z80 path, fork provenance, and exact recovery instructions when that history is in scope.
+1. `AGENTS.md`: repository rules, acceptance policy, and validation.
+2. `docs/AgentContext.md`: current authority map, code anchors, and known traps.
+3. The live issue or specification that defines the requested slice.
+
+Then open only the route that owns the task. Do not preload every roadmap.
+Completed roadmaps preserve design history; they are not active dispatch
+contracts unless the task explicitly names them.
+
+| Task | Additional context |
+| --- | --- |
+| Project or language orientation | `README.md`, then `docs/RetroSharp.Language.md` if syntax is in scope |
+| Layer placement or portable SDK surface | `docs/ArchitectureRoadmap.md`, `docs/Portable2DSdkV1.md` |
+| Frontend, Actor Framework, or target lowering ownership | `docs/AiNavigableArchitecture.md`, `docs/SdkArchitecture.md` |
+| Game Boy or NES behavior | `docs/GameBoyTarget.md` or `docs/NesTarget.md` |
+| Runner reproduction | `docs/GameBoyRunnerDebugging.md` |
+| Sample portability | `samples/README.md`, `samples/manifest.json` |
+| Large maps, banking, or mappers | `docs/LargeWorldsRoadmap.md` |
+| Generated-code performance | `docs/GeneratedCodePerformanceRoadmap.md` |
+| Historical NES physical-frame scheduling / closed #410 | `docs/NesFrameSchedulingRoadmap.md` |
+| GitHub roadmap execution | `docs/AgentExecution.md` |
+| Archived Z80 compiler history | `docs/LegacyZ80Compiler.md` |
 
 `WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
 
