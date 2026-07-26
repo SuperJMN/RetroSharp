@@ -120,6 +120,46 @@ agent waits, queued CI, and infrastructure waits are recorded separately and do
 not consume the active budget. A long build or test does not authorize unrelated
 exploration while it runs.
 
+## Machine-checkable issue gateway
+
+`tools/agent/issue.py` owns the versioned `aex-1` issue contract and remote
+claim protocol. An executable issue must pass both body-schema validation and
+the native GitHub parent / `blocked_by` relationship checks before dispatch.
+Textual `#123` references do not substitute for those tracker relations.
+
+```bash
+python3 tools/agent/issue.py lint --all-open
+python3 tools/agent/issue.py claim <issue> --run-id <unique-run-id>
+python3 tools/agent/issue.py worktree <issue> --run-id <unique-run-id> ../RetroSharp-<task>
+```
+
+Claims use one unique commit at
+`refs/heads/agent/claims/issue-<number>`. Remote creation and every later
+mutation use compare-and-swap semantics, so separate clones cannot both win.
+The work branch uses `agent/work/issue-<number>-<run-id>` and is deliberately
+separate: releasing a claim deletes only the lock ref. Canonical tracker
+comments and the work branch preserve checkpoint/handoff evidence.
+
+Checkpoint pushes are disabled unless all of these are true:
+
+- the issue's structured `Publication authority` says
+  `Checkpoint push: allowed`;
+- dispatch used `claim --allow-checkpoint-push`;
+- execution uses `checkpoint --allow-checkpoint-push`;
+- the recorded worktree is clean and passes submodule, `git diff --check`, and
+  exact remote-alignment checks.
+
+The gateway never creates a pull request or merges. Before a migration, preview
+how incompatible open issues will be made explicitly non-dispatchable:
+
+```bash
+python3 tools/agent/issue.py migrate --all-open --dry-run
+```
+
+Only an integrator with issue-edit authority may replace `--dry-run` with
+`--apply`. After migration, run `lint --all-open` again; do not claim acceptance
+from the preview alone.
+
 ## Worktree Ownership
 
 Use one named worktree per implementation child. Creating another worktree
