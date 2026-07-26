@@ -6,8 +6,8 @@
   "warmUpFrames": 320,
   "observationFrames": 360,
   "inputs": [
-    { "id": "run-through-streaming", "startFrame": 321, "durationFrames": 360, "buttons": ["right", "b"] },
-    { "id": "jump-sfx", "startFrame": 340, "durationFrames": 6, "buttons": ["a"] }
+    { "id": "run-through-streaming", "startFrame": 321, "durationFrames": 360, "buttons": ["right", "b"], "responseSignal": "playerX" },
+    { "id": "jump-sfx", "startFrame": 340, "durationFrames": 6, "buttons": ["a"], "responseSignal": "playerY" }
   ],
   "checkpoints": [],
   "expectedFeatures": {
@@ -26,12 +26,13 @@
   },
   "budgetEvidence": {
     "baselineCommit": "aa7a342c0943a255af05fb5e0e992d4afec35a87",
-    "hardwareTimingRationale": "Gameplay and audio are serviced once per source loop. maximumConsecutiveMissedGameplayTicks=1 and maximumUnplannedAudioGapFrames=1 make a two-frame stale streak the reviewed RED threshold. minimumGameplayTickRatio=0 and maximumAudioDriftTicks=360 deliberately leave aggregate totals non-binding because this slice owns consecutive freshness. maximumRequestToResidentFrames=2 and maximumRequestToVisibleFrames=2 allow the packed prepare/commit pipeline's requesting frame plus one retained inter-frame handoff while rejecting a third-frame camera stall.",
-    "productionTraceRationale": "At baseline aa7a342c0943a255af05fb5e0e992d4afec35a87, the complete runner manifest starts BGM while idle, then holds RIGHT+B through packed streaming and collision while A starts the jump SFX. The scenario retains source waits, audio service, packed audio ticks, camera publication, visible background, source-authored OAM publication, bank restoration and write timing for every physical frame in the observation window."
+    "hardwareTimingRationale": "Gameplay and audio are serviced once per source loop. maximumConsecutiveMissedGameplayTicks=1 and maximumUnplannedAudioGapFrames=1 make a two-frame stale streak the reviewed RED threshold. minimumGameplayTickRatio=0 and maximumAudioDriftTicks=360 deliberately leave aggregate totals non-binding because this slice owns consecutive freshness. RIGHT+B changes playerX and A changes playerY within the measured maximumInputToStateFrames=1 bound. maximumRequestToResidentFrames=2 and maximumRequestToVisibleFrames=2 allow the packed prepare/commit pipeline's requesting frame plus one retained inter-frame handoff while rejecting a third-frame camera stall.",
+    "productionTraceRationale": "At baseline aa7a342c0943a255af05fb5e0e992d4afec35a87, the complete runner manifest starts BGM while idle, then holds RIGHT+B through packed streaming and collision while A starts the jump SFX. The scenario retains source waits, audio service, packed audio ticks, source-camera-derived background expectations, visible background, source-authored OAM publication, bank restoration and write timing for every physical frame in the observation window."
   },
   "budgets": {
     "minimumGameplayTickRatio": 0,
     "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
     "maximumRequestToResidentFrames": 2,
     "maximumRequestToVisibleFrames": 2,
     "maximumUnplannedAudioGapFrames": 1,

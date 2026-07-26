@@ -10,6 +10,13 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 {
     private const int FrozenObservationOffset = 10;
     private const int RetainedPoseRegressionOffset = 24;
+    private const int FreshnessSampleLimit = 8;
+    private const int MaximumSourceToVisibleCameraDelta = 2;
+    // Broad experience floors for a 360-frame RIGHT+B run and one authored jump.
+    // They reject token movement while retaining generous headroom from the measured baseline.
+    private const int MinimumPlayerHorizontalProgress = 256;
+    private const int MinimumCameraHorizontalProgress = 128;
+    private const int MinimumJumpVerticalExcursion = 8;
     private static readonly string[] ForbiddenVideoSignals =
     [
         "bankWorkInCommit",
@@ -99,7 +106,11 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             new RunnerJointLoadOracle(map, program, retainedPoseFactory),
             failFast);
         Assert.Equal(build.Rom, retainedPoseFactory.LoadedRom);
-        Assert.True(retainedPose.Passed, retainedPose.ToHumanReadable());
+        Assert.True(
+            retainedPose.Passed,
+            $"sourceVisibleMaxDelta={MaxSourceToVisibleDelta(retainedPose, "sourceCameraX", "visibleCameraX")}/"
+            + $"{MaxSourceToVisibleDelta(retainedPose, "sourceCameraY", "visibleCameraY")} failures="
+            + string.Join(" | ", retainedPose.IntegrityFailures.Take(8).Select(failure => $"{failure.Code}@{failure.Frame}:{failure.Detail}")));
         AssertVisualsIntact(Assert.Single(
             retainedPose.FrameEvidence,
             evidence => evidence.Observed.Frame == retainedPoseRegressionFrame));
@@ -121,7 +132,11 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             corrupted.IntegrityFailures,
             failure => failure.Code == "sprite-oam" && failure.Frame == retainedPoseRegressionFrame);
 
-        var firstFactory = new RunnerJointLoadMachineFactory(program, collisionLookup, addresses);
+        var firstFactory = new RunnerJointLoadMachineFactory(
+            program,
+            collisionLookup,
+            addresses,
+            warmUpFrame: scenario.WarmUpFrames);
         var first = FunctionalScenarioRunner.Run(
             scenario,
             artifact,
@@ -142,12 +157,24 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Equal(first.ToJson(), second.ToJson());
         WriteDiagnostic("injected-stall", stalledReport);
         WriteDiagnostic("corrupted-oam", corrupted);
-        var baselineDiagnostic = WriteDiagnostic("baseline", first);
+        Assert.NotNull(firstFactory.WarmUpObservation);
+        var baselineDiagnostic = WriteDiagnostic("baseline", first, firstFactory.WarmUpObservation);
         Assert.Contains(
             baselineDiagnostic,
             line => line.Contains(
                 "verdict=NOT_REPRODUCED reviewedGapBound=1 freshness=\"no gap >1\"",
                 StringComparison.Ordinal));
+        var freshnessSummary = Assert.Single(
+            baselineDiagnostic,
+            line => line.Contains("kind=freshness-summary", StringComparison.Ordinal));
+        Assert.Contains("total=", freshnessSummary, StringComparison.Ordinal);
+        Assert.Contains("histogram=", freshnessSummary, StringComparison.Ordinal);
+        Assert.Contains("first=", freshnessSummary, StringComparison.Ordinal);
+        Assert.Contains("last=", freshnessSummary, StringComparison.Ordinal);
+        Assert.InRange(
+            baselineDiagnostic.Count(line => line.Contains("kind=freshness-anomaly", StringComparison.Ordinal)),
+            0,
+            FreshnessSampleLimit);
         Assert.All(
             baselineDiagnostic.Where(line => line.Contains("kind=freshness-anomaly", StringComparison.Ordinal)),
             line => Assert.Contains("gameplayDelta=", line, StringComparison.Ordinal));
@@ -162,6 +189,12 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.False(IsFreshnessAnomaly(new(11, 21, 31, 0), previous));
         Assert.True(IsFreshnessAnomaly(new(11, 20, 31, 0), previous));
         Assert.True(IsFreshnessAnomaly(new(11, 21, 32, 0), previous));
+    }
+
+    [Fact]
+    public void Forbidden_video_work_is_always_structural_red()
+    {
+        Assert.Equal("STRUCTURAL_RED", ClassifyVerdict(reportPassed: true, cadenceFailure: false, forbiddenVideoWork: true));
     }
 
     private static GameBoyFunctionalRomAdapter Adapter(IFunctionalRomMachineFactory factory) => new(
@@ -191,7 +224,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                         "cpuCycle", "lcdPhase", "sourceWait", "packedAudioTick", "inputMask",
                         "playerX", "playerY", "playerGrounded", "cameraRequest", "cameraPrepare",
                         "cameraResident", "cameraCommit", "cameraRelease", "visibleCameraX",
-                        "visibleCameraY", "visibleRomBank", "forbiddenVideoWork",
+                        "visibleCameraY", "sourceCameraX", "sourceCameraY", "visibleRomBank", "forbiddenVideoWork",
                         "bankWorkInCommit", "decodeWorkInCommit", "directoryWorkInVBlank",
                         "directoryWorkInCommit", "decodeWorkInVBlank",
                     },
@@ -221,7 +254,59 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             evidence => Assert.All(
                 ForbiddenVideoSignals,
                 signal => Assert.Equal(0, evidence.Observed.StateSignals![signal])));
+
+        var first = report.FrameEvidence[0];
+        var last = report.FrameEvidence[^1];
+        var playerTravel = MaxSignal(report, "playerX") - MinSignal(report, "playerX");
+        var jumpExcursion = MaxSignal(report, "playerY") - MinSignal(report, "playerY");
+        var sourceCameraTravel = MaxSignal(report, "sourceCameraX") - MinSignal(report, "sourceCameraX");
+        var visibleCameraTravel = MaxSignal(report, "visibleCameraX") - MinSignal(report, "visibleCameraX");
+        Assert.True(
+            playerTravel >= MinimumPlayerHorizontalProgress,
+            $"playerX travel={playerTravel} minimum={MinimumPlayerHorizontalProgress}");
+        Assert.True(
+            jumpExcursion >= MinimumJumpVerticalExcursion,
+            $"playerY excursion={jumpExcursion} minimum={MinimumJumpVerticalExcursion}");
+        Assert.True(
+            sourceCameraTravel >= MinimumCameraHorizontalProgress,
+            $"sourceCameraX travel={sourceCameraTravel} minimum={MinimumCameraHorizontalProgress}");
+        Assert.True(
+            visibleCameraTravel >= MinimumCameraHorizontalProgress,
+            $"visibleCameraX travel={visibleCameraTravel} minimum={MinimumCameraHorizontalProgress}");
+        Assert.True(Signal(last, "collisionQueries") > Signal(first, "collisionQueries"));
+        Assert.True(
+            (last.Observed.Camera!.RequestedSequence ?? 0)
+            > (first.Observed.Camera!.RequestedSequence ?? 0));
+
+        var firstAirborne = report.FrameEvidence
+            .Select((evidence, index) => (evidence, index))
+            .First(item => Signal(item.evidence, "playerGrounded") == 0)
+            .index;
+        Assert.Contains(
+            report.FrameEvidence.Take(firstAirborne),
+            evidence => Signal(evidence, "playerGrounded") != 0);
+        Assert.Contains(
+            report.FrameEvidence.Skip(firstAirborne + 1),
+            evidence => Signal(evidence, "playerGrounded") != 0);
+
+        Assert.InRange(MaxSourceToVisibleDelta(report, "sourceCameraX", "visibleCameraX"), 0, MaximumSourceToVisibleCameraDelta);
+        Assert.InRange(MaxSourceToVisibleDelta(report, "sourceCameraY", "visibleCameraY"), 0, MaximumSourceToVisibleCameraDelta);
     }
+
+    private static long Signal(FunctionalFrameEvidence evidence, string name) =>
+        evidence.Observed.StateSignals![name];
+
+    private static long MinSignal(FunctionalAcceptanceReport report, string name) =>
+        report.FrameEvidence.Min(evidence => Signal(evidence, name));
+
+    private static long MaxSignal(FunctionalAcceptanceReport report, string name) =>
+        report.FrameEvidence.Max(evidence => Signal(evidence, name));
+
+    private static long MaxSourceToVisibleDelta(
+        FunctionalAcceptanceReport report,
+        string source,
+        string visible) =>
+        report.FrameEvidence.Max(evidence => Math.Abs(Signal(evidence, source) - Signal(evidence, visible)));
 
     private static void AssertVisualsIntact(FunctionalFrameEvidence evidence)
     {
@@ -236,9 +321,10 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
     private IReadOnlyList<string> WriteDiagnostic(
         string run,
-        FunctionalAcceptanceReport report)
+        FunctionalAcceptanceReport report,
+        FunctionalFrameObservation? observationPredecessor = null)
     {
-        var lines = DiagnosticLines(run, report);
+        var lines = DiagnosticLines(run, report, observationPredecessor);
         foreach (var line in lines)
         {
             output.WriteLine(line);
@@ -249,7 +335,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
     private static IReadOnlyList<string> DiagnosticLines(
         string run,
-        FunctionalAcceptanceReport report)
+        FunctionalAcceptanceReport report,
+        FunctionalFrameObservation? observationPredecessor)
     {
         var lines = new List<string>();
         var timingFailures = report.TimingChecks.Where(check => !check.Passed).ToArray();
@@ -259,21 +346,25 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 or "audio-service-gap"
                 or "audio-drift")
             || report.IntegrityFailures.Any(failure => failure.Code is "gameplay-cadence-gap" or "audio-service-gap");
-        var verdict = report.Passed
-            ? "NOT_REPRODUCED"
-            : cadenceFailure
-                ? "CADENCE_RED"
-                : "STRUCTURAL_RED";
+        var forbiddenVideoWork = report.FrameEvidence.Any(evidence =>
+            evidence.Observed.StateSignals is { } signals
+            && signals.TryGetValue("forbiddenVideoWork", out var count)
+            && count > 0);
+        var verdict = ClassifyVerdict(report.Passed, cadenceFailure, forbiddenVideoWork);
         var freshness = cadenceFailure ? "gap >1" : "no gap >1";
+        var inputToState = report.TimingChecks
+            .FirstOrDefault(check => check.Metric == "input-to-state")?.Observed;
         lines.Add(
-            $"runner-joint-load run={run} verdict={verdict} reviewedGapBound=1 freshness=\"{freshness}\" romSha256={report.RomSha256}");
+            $"runner-joint-load run={run} verdict={verdict} reviewedGapBound=1 freshness=\"{freshness}\" "
+            + $"inputToState={(inputToState is null ? "n/a" : inputToState.Value.ToString("0.###"))} romSha256={report.RomSha256}");
         lines.AddRange(timingFailures.Select(timing =>
             $"run={run} timing code={timing.Metric} observed={timing.Observed:0.###} limit={timing.Limit:0.###} comparison={timing.Comparison}"));
 
         if (report.IntegrityFailures.Count == 0)
         {
             lines.Add($"run={run} first-frame failures=[]");
-            AddFreshnessAnomalies(lines, run, report.FrameEvidence);
+            lines.Add(ProgressLine(run, report));
+            AddFreshnessAnomalies(lines, run, report.FrameEvidence, observationPredecessor);
             return lines;
         }
 
@@ -295,20 +386,87 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         return lines;
     }
 
+    private static string ClassifyVerdict(
+        bool reportPassed,
+        bool cadenceFailure,
+        bool forbiddenVideoWork) =>
+        forbiddenVideoWork
+            ? "STRUCTURAL_RED"
+            : reportPassed
+                ? "NOT_REPRODUCED"
+                : cadenceFailure
+                    ? "CADENCE_RED"
+                    : "STRUCTURAL_RED";
+
+    private static string ProgressLine(string run, FunctionalAcceptanceReport report)
+    {
+        var first = report.FrameEvidence[0];
+        var last = report.FrameEvidence[^1];
+        return $"run={run} kind=progress "
+            + $"playerXRange={MinSignal(report, "playerX")}..{MaxSignal(report, "playerX")} "
+            + $"playerYRange={MinSignal(report, "playerY")}..{MaxSignal(report, "playerY")} "
+            + $"sourceCameraXRange={MinSignal(report, "sourceCameraX")}..{MaxSignal(report, "sourceCameraX")} "
+            + $"visibleCameraXRange={MinSignal(report, "visibleCameraX")}..{MaxSignal(report, "visibleCameraX")} "
+            + $"minimumProgress={MinimumPlayerHorizontalProgress}/{MinimumCameraHorizontalProgress}/{MinimumJumpVerticalExcursion} "
+            + $"sourceVisibleMaxDelta={MaxSourceToVisibleDelta(report, "sourceCameraX", "visibleCameraX")}/"
+            + $"{MaxSourceToVisibleDelta(report, "sourceCameraY", "visibleCameraY")} "
+            + $"collisionDelta={Signal(last, "collisionQueries") - Signal(first, "collisionQueries")} "
+            + $"cameraRequestDelta={(last.Observed.Camera!.RequestedSequence ?? 0) - (first.Observed.Camera!.RequestedSequence ?? 0)}";
+    }
+
     private static void AddFreshnessAnomalies(
         ICollection<string> lines,
         string run,
-        IReadOnlyList<FunctionalFrameEvidence> evidence)
+        IReadOnlyList<FunctionalFrameEvidence> evidence,
+        FunctionalFrameObservation? observationPredecessor)
     {
-        var previous = evidence[0].Observed;
-        foreach (var current in evidence.Skip(1))
+        var firstIndex = observationPredecessor is null ? 1 : 0;
+        var anomalyIndexes = new List<int>();
+        for (var index = firstIndex; index < evidence.Count; index++)
         {
-            if (IsFreshnessAnomaly(current.Observed, previous))
+            var previous = index == 0 ? observationPredecessor! : evidence[index - 1].Observed;
+            if (IsFreshnessAnomaly(evidence[index].Observed, previous))
             {
-                lines.Add(ObservationLine(run, "freshness-anomaly", current, previous));
+                anomalyIndexes.Add(index);
             }
+        }
 
-            previous = current.Observed;
+        string Describe(int index)
+        {
+            var current = evidence[index].Observed;
+            var previous = index == 0 ? observationPredecessor! : evidence[index - 1].Observed;
+            return $"frame:{current.Frame}/gameplayDelta:{current.GameplayTicks - previous.GameplayTicks}"
+                + $"/audioDelta:{current.AudioServiceTicks - previous.AudioServiceTicks}";
+        }
+
+        var histogram = anomalyIndexes
+            .GroupBy(index =>
+            {
+                var current = evidence[index].Observed;
+                var previous = index == 0 ? observationPredecessor! : evidence[index - 1].Observed;
+                return (
+                    Gameplay: current.GameplayTicks - previous.GameplayTicks,
+                    Audio: current.AudioServiceTicks - previous.AudioServiceTicks);
+            })
+            .OrderBy(group => group.Key.Gameplay)
+            .ThenBy(group => group.Key.Audio)
+            .Select(group => $"{group.Key.Gameplay}/{group.Key.Audio}:{group.Count()}");
+        lines.Add(
+            $"run={run} kind=freshness-summary total={anomalyIndexes.Count} "
+            + $"transitions={evidence.Count - firstIndex} "
+            + $"predecessorFrame={(observationPredecessor is null ? "none" : observationPredecessor.Frame.ToString())} "
+            + $"histogram=[{string.Join(',', histogram)}] "
+            + $"first={(anomalyIndexes.Count == 0 ? "none" : Describe(anomalyIndexes[0]))} "
+            + $"last={(anomalyIndexes.Count == 0 ? "none" : Describe(anomalyIndexes[^1]))}");
+
+        var sampleIndexes = anomalyIndexes.Count <= FreshnessSampleLimit
+            ? anomalyIndexes
+            : anomalyIndexes.Take(FreshnessSampleLimit / 2)
+                .Concat(anomalyIndexes.TakeLast(FreshnessSampleLimit / 2));
+        foreach (var index in sampleIndexes)
+        {
+            var previous = index == 0 ? observationPredecessor! : evidence[index - 1].Observed;
+            lines.Add(ObservationLine(run, "freshness-anomaly", evidence[index], previous));
         }
     }
 
@@ -334,6 +492,10 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             ',',
             ForbiddenVideoSignals.Select(signal =>
                 $"{signal}:{signals[signal]}/{ByteDelta(signals, previousSignals, signal)}"));
+        var oamMatches = OamMatches(current);
+        var oamDetail = oamMatches
+            ? string.Empty
+            : $" playerOam={PlayerOam(observed.Sprites)}/{ExpectedPlayerOam(current.Expected?.Sprites)}";
         return $"run={run} kind={kind} frame={observed.Frame} frameDelta={observed.Frame - previous.Frame} "
             + $"cycle={signals["cpuCycle"]} cycleDelta={signals["cpuCycle"] - previousSignals["cpuCycle"]} "
             + $"lcd={signals["lcdPhase"]} lcdDelta={signals["lcdPhase"] - previousSignals["lcdPhase"]} "
@@ -352,13 +514,15 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             + $"cameraDelta={ByteDelta(signals, previousSignals, "cameraRequest")}/{ByteDelta(signals, previousSignals, "cameraPrepare")}/{ByteDelta(signals, previousSignals, "cameraResident")}/{ByteDelta(signals, previousSignals, "cameraCommit")}/{ByteDelta(signals, previousSignals, "cameraRelease")} "
             + $"visible={signals["visibleCameraX"]},{signals["visibleCameraY"]} "
             + $"visibleDelta={signals["visibleCameraX"] - previousSignals["visibleCameraX"]},{signals["visibleCameraY"] - previousSignals["visibleCameraY"]} "
+            + $"sourceCamera={signals["sourceCameraX"]},{signals["sourceCameraY"]} "
+            + $"sourceCameraDelta={signals["sourceCameraX"] - previousSignals["sourceCameraX"]},{signals["sourceCameraY"] - previousSignals["sourceCameraY"]} "
             + $"visibleRomBank={signals["visibleRomBank"]} visibleRomBankDelta={signals["visibleRomBank"] - previousSignals["visibleRomBank"]} "
             + $"bank={observed.Bank?.SelectedBank}/{observed.Bank?.ShadowBank} "
             + $"bankDelta={observed.Bank!.SelectedBank - previous.Bank!.SelectedBank}/{observed.Bank.ShadowBank - previous.Bank.ShadowBank} "
             + $"forbidden={signals["forbiddenVideoWork"]} forbiddenDelta={forbiddenDelta} forbiddenCounters={forbiddenCounters} "
             + $"unsafe={unsafeVideo}/{unsafeOam} "
-            + $"backgroundMatch={Flag(BackgroundMatches(current))} oamMatch={Flag(OamMatches(current))} "
-            + $"playerOam={PlayerOam(observed.Sprites)}/{ExpectedPlayerOam(current.Expected?.Sprites)}";
+            + $"backgroundMatch={Flag(BackgroundMatches(current))} oamMatch={Flag(oamMatches)}"
+            + oamDetail;
     }
 
     private static long ByteDelta(
@@ -423,13 +587,14 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         GameBoyVideoProgram program,
         ushort collisionLookup,
         RunnerVariableAddresses addresses,
+        int? warmUpFrame = null,
         int? corruptedOamFrame = null) : IFunctionalRomMachineFactory
     {
         public byte[]? LoadedRom { get; private set; }
 
         public Dictionary<int, RunnerDrawState> DrawStates { get; } = [];
 
-        public Dictionary<int, (int X, int Y)> VisibleCameraByFrame { get; } = [];
+        public FunctionalFrameObservation? WarmUpObservation { get; private set; }
 
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
@@ -440,7 +605,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 collisionLookup,
                 addresses,
                 DrawStates,
-                VisibleCameraByFrame,
+                warmUpFrame,
+                observation => WarmUpObservation = observation,
                 corruptedOamFrame);
         }
     }
@@ -451,7 +617,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         ushort collisionLookup,
         RunnerVariableAddresses addresses,
         IDictionary<int, RunnerDrawState> drawStates,
-        IDictionary<int, (int X, int Y)> visibleCameraByFrame,
+        int? warmUpFrame,
+        Action<FunctionalFrameObservation> retainWarmUpObservation,
         int? corruptedOamFrame) : IFunctionalRomMachine
     {
         private readonly GameBoyTestCpu cpu = CreateCpu(exactRom, collisionLookup, addresses);
@@ -503,7 +670,6 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 X: ReadWord(PackedCameraMemory.VisibleCameraXLow),
                 Y: ReadWord(PackedCameraMemory.VisibleCameraYLow));
             drawStates[frame] = drawState;
-            visibleCameraByFrame[frame] = visibleCamera;
             var audio = CaptureAudioProgress();
             var bankWorkInCommit = cpu.Wram(PackedCameraMemory.BankWorkInCommit);
             var decodeWorkInCommit = cpu.Wram(PackedCameraMemory.DecodeWorkInCommit);
@@ -533,6 +699,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 ["cameraRelease"] = cpu.Wram(PackedCameraMemory.ReleaseCount),
                 ["visibleCameraX"] = visibleCamera.X,
                 ["visibleCameraY"] = visibleCamera.Y,
+                ["sourceCameraX"] = drawState.SourceCameraX,
+                ["sourceCameraY"] = drawState.SourceCameraY,
                 ["visibleRomBank"] = cpu.CurrentRomBank,
                 ["collisionQueries"] = cpu.WorldPackCollisionQueries.Count,
                 ["bankWorkInCommit"] = bankWorkInCommit,
@@ -548,7 +716,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             };
             var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
-            return new FunctionalFrameObservation(
+            var observation = new FunctionalFrameObservation(
                 frame,
                 cpu.SourceWaitCompletions,
                 cpu.AudioUpdateCalls,
@@ -561,6 +729,12 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 CaptureVideoWrites(),
                 CaptureOamWrites(),
                 AudioProgress: audio);
+            if (frame == warmUpFrame)
+            {
+                retainWarmUpObservation(observation);
+            }
+
+            return observation;
         }
 
         private RunnerDrawState CapturePublishedDrawState()
@@ -583,13 +757,17 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 return EmptyDrawState;
             }
 
+            // OAM publishes the prior source-authored shadow, while Camera.Apply
+            // consumes the current runtime camera request immediately after DMA.
             return new(
                 ReadWordAt(addresses.PlayerXLow, drawCycle),
                 ReadWordAt(addresses.PlayerYLow, drawCycle),
                 ReadWordAt(addresses.PlayerDisplayFrameLow, drawCycle),
                 ReadByteAt(addresses.PlayerDisplayFlipX, drawCycle) != 0,
                 ReadWordAt(addresses.CameraXLow, drawCycle),
-                ReadWordAt(addresses.CameraYLow, drawCycle));
+                ReadWordAt(addresses.CameraYLow, drawCycle),
+                ReadWordAt(GameBoyRuntimeMemoryLayout.Camera.XLow, publication.StartCycle),
+                ReadWordAt(GameBoyRuntimeMemoryLayout.Camera.YLow, publication.StartCycle));
         }
 
         private FunctionalCameraLifecycleObservation CaptureCamera((int X, int Y) visibleCamera) => new(
@@ -760,6 +938,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 variables.PlayerDisplayFrameLow,
                 variables.CameraXLow,
                 variables.CameraYLow,
+                GameBoyRuntimeMemoryLayout.Camera.XLow,
+                GameBoyRuntimeMemoryLayout.Camera.YLow,
             ]);
             cpu.TracedWramBytes.UnionWith(
             [
@@ -772,7 +952,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         private static bool OamVisible(IReadOnlyList<int> oam) =>
             oam.Chunk(4).Any(piece => piece[0] is > 0 and < 160);
 
-        private static readonly RunnerDrawState EmptyDrawState = new(0, 0, 0, false, 0, 0);
+        private static readonly RunnerDrawState EmptyDrawState = new(0, 0, 0, false, 0, 0, 0, 0);
     }
 
     private sealed class RunnerJointLoadOracle(
@@ -784,14 +964,13 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
         public FunctionalFrameExpectation ExpectedFrame(int frame)
         {
-            var camera = factory.VisibleCameraByFrame[frame];
             var draw = factory.DrawStates[frame];
-            var width = camera.X % 8 == 0 ? 20 : 21;
-            var height = camera.Y % 8 == 0 ? 18 : 19;
+            var width = draw.SourceCameraX % 8 == 0 ? 20 : 21;
+            var height = draw.SourceCameraY % 8 == 0 ? 18 : 19;
             var background = Enumerable.Range(0, height)
                 .SelectMany(y => Enumerable.Range(0, width).Select(x => new FunctionalBackgroundExpectation(
                     $"screen:{x:D2},{y:D2}",
-                    AuthoredTile(camera.X / 8 + x, camera.Y / 8 + y),
+                    AuthoredTile(draw.SourceCameraX / 8 + x, draw.SourceCameraY / 8 + y),
                     0xE4)))
                 .ToArray();
             var player = playerAsset.Pieces.SelectMany(piece =>
@@ -801,8 +980,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                     : piece.XOffset;
                 return new[]
                 {
-                    (draw.PlayerY - draw.CameraY + 16 + piece.YOffset) & 0xFF,
-                    (draw.PlayerX - draw.CameraX + 8 + pieceX) & 0xFF,
+                    (draw.PlayerY - draw.PublishedCameraY + 16 + piece.YOffset) & 0xFF,
+                    (draw.PlayerX - draw.PublishedCameraX + 8 + pieceX) & 0xFF,
                     playerAsset.FirstTile + draw.AnimationFrame * playerAsset.TilesPerFrame + piece.TileOffset,
                     draw.FlipX ? 0x20 : 0,
                 };
@@ -836,8 +1015,10 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         int PlayerY,
         int AnimationFrame,
         bool FlipX,
-        int CameraX,
-        int CameraY);
+        int PublishedCameraX,
+        int PublishedCameraY,
+        int SourceCameraX,
+        int SourceCameraY);
 
     private sealed record RunnerVariableAddresses(
         ushort PlayerXLow,
