@@ -218,7 +218,7 @@ These constraints apply to every task in this epic:
 
 Decision status: **accepted by GCP-0.2 / #389; initial executable report
 projection implemented by GCP-3.1 / #402.** The canonical policy is
-[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
+[`GeneratedCodeCpuWorkContract.md`](../GeneratedCodeCpuWorkContract.md).
 
 The accepted representation uses checked inclusive ranges in target-native
 cycles: LR35902 T-cycles for Game Boy and 6502 CPU cycles for NES. The physical

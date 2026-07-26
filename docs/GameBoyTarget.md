@@ -160,13 +160,13 @@ Target intrinsics and transitional helpers such as `Sprite.Set(...)`, `Scroll.Se
 for word-wide landing, wall/chunk traversal, a complete jump, and one authored
 fall reset. Its exact ROM, steady-state cadence, two-frame camera deadline,
 background/OAM oracle, and SameBoy checkpoint are recorded in
-[`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
+[`PlatformerLandingFunctionalAcceptance.md`](history/PlatformerLandingFunctionalAcceptance.md).
 
 `samples/audio-mixed-load/` is the shared BGM+SFX `target-acceptance` canary.
 Its 360-frame window requires 360 gameplay ticks and 360 audio-service ticks,
 616 ordered DMG APU writes, two completed SFX with no restart, two intact
 metasprites, and zero visual, bank, reset, or unsafe-write failures. See
-[`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).
+[`AudioMixedLoadFunctionalAcceptance.md`](history/AudioMixedLoadFunctionalAcceptance.md).
 
 Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample and is intentionally free of raw calls. `samples/static-drawing/drawing.rs` has one neutral identity for both cartridge targets, but remains a `target-intrinsic` fixture: private compile-time target variants preserve each original raw palette/tilemap projection without claiming portable SDK coverage. The HUD, music, vertical, diagonal, free-scroll, and actor samples remain focused target-specific or target-acceptance fixtures. `samples/runner/runner.retrosharp.json` is the richest shared Game Boy/NES `target-acceptance` project: game-owned helper/state files load complete 156x20-cell `stage1.tmj` (312x40 hardware tiles), retain target VGM/VGZ audio, and exercise the packed 2-axis camera and collision path.
 
@@ -454,7 +454,7 @@ validation, and re-read afterward; `NoSlot` therefore never waits. Narrow-map
 columns and every row keep the prior validate-then-admit order, and the LY148
 safety threshold is unchanged. The exact Right+B runner gate and isolated
 with/without-plane measurements are recorded in
-[`GameBoyRunnerCadenceAcceptance.md`](GameBoyRunnerCadenceAcceptance.md).
+[`GameBoyRunnerCadenceAcceptance.md`](history/GameBoyRunnerCadenceAcceptance.md).
 
 LW-2.5 proves this path against the complete 156x20 authored `stage1` through
 a non-destructive test fixture. The fixture copies and normalizes the map,
@@ -531,7 +531,7 @@ restorable bank session.
 This keeps cold and chunk/bank-boundary edge preparation within one physical
 DMG frame while leaving request, residency, commit, release, and visible
 hardware publication as separate observable events. See
-[`GameBoyPackedCameraCadenceAcceptance.md`](GameBoyPackedCameraCadenceAcceptance.md)
+[`GameBoyPackedCameraCadenceAcceptance.md`](history/GameBoyPackedCameraCadenceAcceptance.md)
 for the #332 baseline/master/final measurements.
 
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `Sprite.Asset(...)`.
@@ -602,7 +602,7 @@ payload non-destructively; LW-3.5 then migrated the shared runner input and
 regenerated both tracked ROMs. RPH-3.5 / #339 established the exact eight-row
 packed Tiled functional matrix; the horizontal #335 slice extends it to twelve
 with collision-free short/full `stage1` canaries on Game Boy and NES in
-[`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md).
+[`PackedTiledFunctionalAcceptance.md`](history/PackedTiledFunctionalAcceptance.md).
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to

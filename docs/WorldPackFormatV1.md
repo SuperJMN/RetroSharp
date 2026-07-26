@@ -17,7 +17,7 @@ or runner migration.
 
 ## Context and measured choice
 
-The frozen [full `stage1` baseline](LargeWorldsStage1Baseline.md) is 156x20
+The frozen [full `stage1` baseline](history/LargeWorldsStage1Baseline.md) is 156x20
 authored 16x16 cells, or 312x40 portable 8x8 cells. The current targets emit
 one visual byte and one collision byte for every 8x8 cell:
 

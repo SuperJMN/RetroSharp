@@ -35,7 +35,7 @@ GitHub tracking:
 - transient parity investigation: [NFS-V1 / #419](https://github.com/SuperJMN/RetroSharp/issues/419).
 
 External timing calibration is retained under
-[`validation/nes-test-cpu`](../validation/nes-test-cpu/README.md).
+[`validation/nes-test-cpu`](../../validation/nes-test-cpu/README.md).
 
 ## Why the previous WIP was discarded
 

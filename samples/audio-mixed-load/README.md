@@ -24,4 +24,4 @@ Controls:
 
 The exact physical-frame budgets, ordered APU/DPCM evidence, artifact hashes,
 and emulator checkpoints are recorded in
-[`docs/AudioMixedLoadFunctionalAcceptance.md`](../../docs/AudioMixedLoadFunctionalAcceptance.md).
+[`docs/history/AudioMixedLoadFunctionalAcceptance.md`](../../docs/history/AudioMixedLoadFunctionalAcceptance.md).

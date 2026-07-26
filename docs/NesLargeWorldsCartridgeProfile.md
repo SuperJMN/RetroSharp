@@ -66,7 +66,7 @@ capacity arithmetic.
 ## Reproducible full `stage1` measurement
 
 The inputs come from the merged
-[`LargeWorldsStage1Baseline.md`](LargeWorldsStage1Baseline.md), the accepted
+[`LargeWorldsStage1Baseline.md`](history/LargeWorldsStage1Baseline.md), the accepted
 [`WorldPack` v1 contract](WorldPackFormatV1.md), and current `NesRomBuilder`
 emission order. The focused analysis test reproduces each subtraction rather
 than copying a nominal mapper capacity.

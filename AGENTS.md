@@ -6,29 +6,27 @@ RetroSharp is a .NET 10 multi-project solution for a small C#-like language that
 
 ## Read First
 
-Always read:
+Always read, in order:
 
 1. `AGENTS.md`: repository rules, acceptance policy, and validation.
-2. `docs/AgentContext.md`: current authority map, code anchors, and known traps.
+2. `docs/AgentContext.md`: current authority map, the single task router, code anchors, and known traps.
 3. The live issue or specification that defines the requested slice.
 
-Then open only the route that owns the task. Do not preload every roadmap.
-Completed roadmaps preserve design history; they are not active dispatch
-contracts unless the task explicitly names them.
+Then open only the one route that owns the task. The task router lives in
+`docs/AgentContext.md`; this file deliberately does not keep a second copy of
+it. Completed roadmaps and per-issue acceptance records live under
+`docs/history/` and are background only; they are not active dispatch contracts
+unless the task explicitly names them. Do not preload every roadmap.
 
-| Task | Additional context |
-| --- | --- |
-| Project or language orientation | `README.md`, then `docs/RetroSharp.Language.md` if syntax is in scope |
-| Layer placement or portable SDK surface | `docs/ArchitectureRoadmap.md`, `docs/Portable2DSdkV1.md` |
-| Frontend, Actor Framework, or target lowering ownership | `docs/AiNavigableArchitecture.md`, `docs/SdkArchitecture.md` |
-| Game Boy or NES behavior | `docs/GameBoyTarget.md` or `docs/NesTarget.md` |
-| Runner reproduction | `docs/GameBoyRunnerDebugging.md` |
-| Sample portability | `samples/README.md`, `samples/manifest.json` |
-| Large maps, banking, or mappers | `docs/LargeWorldsRoadmap.md` |
-| Generated-code performance | `docs/GeneratedCodePerformanceRoadmap.md` |
-| Historical NES physical-frame scheduling / closed #410 | `docs/NesFrameSchedulingRoadmap.md` |
-| GitHub roadmap execution | `docs/AgentExecution.md` |
-| Archived Z80 compiler history | `docs/LegacyZ80Compiler.md` |
+### Context budget
+
+Startup context is bounded on purpose. A task normally loads only this file,
+`docs/AgentContext.md`, the live issue, and one routed owner document. If a
+route seems to need several owner documents at once, or an owner document is too
+large to hold alongside the code under change, treat that as a signal to split
+the document or the task, not to load the whole `docs/` tree. Keep any single
+routed document small enough to read next to the code it governs, and move
+completed history to `docs/history/` instead of growing an active document.
 
 `llms.txt` is a compact index for agents and RAG systems.
 

@@ -24,7 +24,7 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
-Iteration 15, scalable large-world assets and banked streaming, is complete through joint acceptance. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and full-`stage1` acceptance. NES `LW-3.1` through `LW-3.4` prove the target-private MMC3/TVROM fixed-runtime foundation, mapper-0-first final-link selection, canonical ordered multi-R6 placement, the fixed-bank `WorldPack` reader, exact R6 restoration, and bounded four-screen streaming. `LW-3.5` migrated the shared runner and regenerated both tracked ROMs from the complete map. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
+Iteration 15, scalable large-world assets and banked streaming, is complete through joint acceptance. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and full-`stage1` acceptance. NES `LW-3.1` through `LW-3.4` prove the target-private MMC3/TVROM fixed-runtime foundation, mapper-0-first final-link selection, canonical ordered multi-R6 placement, the fixed-bank `WorldPack` reader, exact R6 restoration, and bounded four-screen streaming. `LW-3.5` migrated the shared runner and regenerated both tracked ROMs from the complete map. The complete task graph lives in `docs/history/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
 
 Iteration 16 addresses measured generated-code performance cliffs without
 changing the public actor API. The discovery baseline falls from 100/100 to
@@ -33,12 +33,12 @@ active one-piece actors on both targets, even though those scenes can satisfy
 the existing sprite, scanline, and background-write budgets. The executable
 measurement, constant-cost table, target address-lowering, CPU-work diagnostic,
 and joint acceptance graph lives in
-`docs/GeneratedCodePerformanceRoadmap.md` under [GitHub epic
+`docs/history/GeneratedCodePerformanceRoadmap.md` under [GitHub epic
 #387](https://github.com/SuperJMN/RetroSharp/issues/387). Existing AF-5.10 / #244
 is reused as the spatial spawn-index task rather than duplicated.
 
 The corrective NES frame-scheduling chain for runner issue #410 is owned by
-`docs/NesFrameSchedulingRoadmap.md`. It first repairs the validation clock,
+`docs/history/NesFrameSchedulingRoadmap.md`. It first repairs the validation clock,
 then centralizes OAM emission and cost, hardens the physical trace gate, fixes
 stale-to-fresh lifecycle publication, and only then selects a bounded scheduler.
 This is target-runtime and validation work; it does not expand the language or
@@ -1589,7 +1589,7 @@ Acceptance criteria:
 
 ### Iteration 14: Scalable Platformer Actor Framework Ergonomics
 
-Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (fixed struct arrays with mixed-width `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.8 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite; and `TouchPlayer` avoids byte overflow in the actor-right-edge comparison. AF-5.9 is closed with one-shot activation as the explicit v1 policy. AF-5.10 is closed under `docs/GeneratedCodePerformanceRoadmap.md`: wide spawn activation now uses compiler-owned ROM candidate indexes instead of scanning every authored spawn each call.
+Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (fixed struct arrays with mixed-width `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.8 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite; and `TouchPlayer` avoids byte overflow in the actor-right-edge comparison. AF-5.9 is closed with one-shot activation as the explicit v1 policy. AF-5.10 is closed under `docs/history/GeneratedCodePerformanceRoadmap.md`: wide spawn activation now uses compiler-owned ROM candidate indexes instead of scanning every authored spawn each call.
 
 Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
 
@@ -1718,7 +1718,7 @@ column 255.
 
 The detailed task graph, locked invariants, decision gates, dependency waves,
 stop conditions, and validation matrix live in
-`docs/LargeWorldsRoadmap.md`. Keep implementation work in its `LW-x.y` child
+`docs/history/LargeWorldsRoadmap.md`. Keep implementation work in its `LW-x.y` child
 issues; this architecture section records only the durable boundary:
 
 - the language remains target-neutral;
@@ -1783,7 +1783,7 @@ The durable boundary is:
 
 The detailed `GCP-0.1` through `GCP-3.2` task contracts, wave dependencies,
 discovery matrix, stop conditions, and final acceptance thresholds live only in
-`docs/GeneratedCodePerformanceRoadmap.md`.
+`docs/history/GeneratedCodePerformanceRoadmap.md`.
 
 Acceptance criteria:
 
@@ -1804,7 +1804,7 @@ manifest, and focused plus emulator-backed acceptance covers the original
 addressing, collision, storage, mapper, banking, streaming, visual, and audio
 ceilings. Wave 4 residency, #244 spawn indexing, IRQ HUD, and unrelated #247
 gaps remain separate work; the exact completed graph and retained boundaries
-are in `docs/LargeWorldsRoadmap.md`.
+are in `docs/history/LargeWorldsRoadmap.md`.
 
 ## Acceptance Sample Strategy
 

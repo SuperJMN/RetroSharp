@@ -39,7 +39,7 @@ object, or target runtime structure.
 
 ## Context and pre-implementation break
 
-The frozen [full `stage1` baseline](LargeWorldsStage1Baseline.md) has these
+The frozen [full `stage1` baseline](history/LargeWorldsStage1Baseline.md) has these
 logical extents:
 
 | Quantity | Decimal | Little-endian word |

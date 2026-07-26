@@ -41,9 +41,13 @@ targets does not make every call in it a portable API contract.
 
 ## Route By Task
 
+This is the single task router for the repository. `AGENTS.md` defers here
+instead of keeping a second copy. Load only the one route that owns the task.
+
 | Question | Open next |
 | --- | --- |
 | What layer owns a new concept? | `ArchitectureRoadmap.md` |
+| What is the current language syntax subset? | `RetroSharp.Language.md` |
 | What does portable 2D expose? | `Portable2DSdkV1.md` |
 | Where is a deep module or production/test seam? | `AiNavigableArchitecture.md` |
 | How do frontend preparation, Actor lowering, and SDK lowering fit together? | `SdkArchitecture.md` |
@@ -51,14 +55,15 @@ targets does not make every call in it a portable API contract.
 | How should runner behavior be reproduced? | `GameBoyRunnerDebugging.md` |
 | What owns Game Boy runner physical-frame cadence? | `GameBoyRunnerObserverFidelity.md` |
 | Is a sample portable evidence? | `samples/README.md` and `samples/manifest.json` |
-| What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md` and the scenario-specific acceptance document |
-| Is the task about large maps or banking? | `LargeWorldsRoadmap.md` |
-| Is the task about generated-code CPU work? | `GeneratedCodePerformanceRoadmap.md` |
-| Is the task reviewing historical NES frame scheduling / closed #410? | `NesFrameSchedulingRoadmap.md` |
+| What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md`; per-scenario acceptance records are under `history/` |
+| What is the generated-code CPU-work contract? | `GeneratedCodeCpuWorkContract.md` |
+| Is the task about large maps or banking? | `GameBoyBankingRoadmap.md`, `NesLargeWorldsCartridgeProfile.md`; completed epic history in `history/LargeWorldsRoadmap.md` |
 | Is the task about issue execution or publication? | `AgentExecution.md` |
+| Reviewing a completed roadmap or closed-issue history? | `history/` (background only, e.g. `history/GeneratedCodePerformanceRoadmap.md`, `history/NesFrameSchedulingRoadmap.md`, `history/LegacyZ80Compiler.md`) |
 
-Load only the selected route. Several roadmap documents contain valuable
-completed execution history, but reading all of them up front adds noise and
+Load only the selected route. Completed execution history and per-issue
+acceptance records live under `docs/history/`; read them as background only, and
+never infer active status from them. Reading many routes up front adds noise and
 can make an old constraint look current.
 
 ## Decisions To Preserve

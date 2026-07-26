@@ -504,7 +504,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Remote: [#244](https://github.com/SuperJMN/RetroSharp/issues/244). The broader
   baseline, canonical AF-5.10 task card, constant-cost record prerequisite,
   CPU-work decision gate, and joint cadence gate live only in
-  `docs/GeneratedCodePerformanceRoadmap.md`.
+  `docs/history/GeneratedCodePerformanceRoadmap.md`.
 
 ## Known limitations and follow-ups
 
@@ -517,7 +517,7 @@ slice, but they should stay visible:
   default implicitly.
 - AF-5.10: wide runtime activation now uses compiler-owned ROM candidate
   indexes; the complete performance graph is
-  `docs/GeneratedCodePerformanceRoadmap.md`.
+  `docs/history/GeneratedCodePerformanceRoadmap.md`.
 - AF-5.11: `Projectiles.*` and `Effects.*` still have compiler-owned public
   directive recognition in the Actor Framework projectile/effect feature modules; migrate them behind
   package-declared metadata in a separate slice if their lifecycle surface needs

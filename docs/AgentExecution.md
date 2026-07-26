@@ -13,7 +13,7 @@ known traps.
 
 - Architecture and broad iteration backlog: `docs/ArchitectureRoadmap.md`
 - Dedicated epic execution plans: linked `docs/*Roadmap.md` files such as
-  `docs/LargeWorldsRoadmap.md` and `docs/GeneratedCodePerformanceRoadmap.md`
+  `docs/history/LargeWorldsRoadmap.md` and `docs/history/GeneratedCodePerformanceRoadmap.md`
 - Agent entrypoint: `AGENTS.md`
 - Current agent routing/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`

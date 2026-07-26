@@ -43,7 +43,7 @@ fixed actor pools, declarative `Enemies.Def(...)` metadata, Tiled object-layer
 spawns, runtime camera-window activation, and Game Boy/NES lowering without heap
 allocation or runtime dispatch. The roadmap is `docs/ActorFrameworkRoadmap.md`.
 The measured generated-code scaling work and CPU-budget plan live in
-`docs/GeneratedCodePerformanceRoadmap.md`.
+`docs/history/GeneratedCodePerformanceRoadmap.md`.
 
 ## Language surface
 
@@ -167,7 +167,7 @@ cross-target SDK evidence.
 
 The retired Z80 compiler path, its exact recovery commit, and the two external
 forks it used are recorded in
-[`docs/LegacyZ80Compiler.md`](docs/LegacyZ80Compiler.md).
+[`docs/history/LegacyZ80Compiler.md`](docs/history/LegacyZ80Compiler.md).
 
 ## Installation
 

@@ -71,7 +71,7 @@ See [Portable2DSdkV1.md](Portable2DSdkV1.md) for the API reference and
 [ActorFrameworkRoadmap.md](ActorFrameworkRoadmap.md) for the actor-framework
 direction. The measured code-generation scaling cliffs, target CPU-work
 contract, and GB/NES cadence closeout plan live in
-[GeneratedCodePerformanceRoadmap.md](GeneratedCodePerformanceRoadmap.md).
+[GeneratedCodePerformanceRoadmap.md](history/GeneratedCodePerformanceRoadmap.md).
 
 ## Targets
 
@@ -85,7 +85,7 @@ RetroSharp has two active cartridge targets:
   scrolling, sprites, Tiled worlds, VGM/VGZ BGM, and many framework contracts.
 
 The retired Z80 compiler path and its external fork recovery points remain
-documented in [LegacyZ80Compiler.md](LegacyZ80Compiler.md), but they are not part
+documented in [LegacyZ80Compiler.md](history/LegacyZ80Compiler.md), but they are not part
 of the active solution or CLI.
 
 See [GameBoyTarget.md](GameBoyTarget.md) and [NesTarget.md](NesTarget.md) for
