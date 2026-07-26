@@ -6,31 +6,29 @@ RetroSharp is a .NET 10 multi-project solution for a small C#-like language that
 
 ## Read First
 
-Always read:
+Always read, in order:
 
 1. `AGENTS.md`: repository rules, acceptance policy, and validation.
-2. `docs/AgentContext.md`: current authority map, code anchors, and known traps.
+2. `docs/AgentContext.md`: current authority map, the single task router, code anchors, and known traps.
 3. The live issue or specification that defines the requested slice.
 
-Then open only the route that owns the task. Do not preload every roadmap.
-Completed roadmaps preserve design history; they are not active dispatch
-contracts unless the task explicitly names them.
+Then open only the one route that owns the task. The task router lives in
+`docs/AgentContext.md`; this file deliberately does not keep a second copy of
+it. Completed roadmaps and per-issue acceptance records live under
+`docs/history/` and are background only; they are not active dispatch contracts
+unless the task explicitly names them. Do not preload every roadmap.
 
-| Task | Additional context |
-| --- | --- |
-| Project or language orientation | `README.md`, then `docs/RetroSharp.Language.md` if syntax is in scope |
-| Layer placement or portable SDK surface | `docs/ArchitectureRoadmap.md`, `docs/Portable2DSdkV1.md` |
-| Frontend, Actor Framework, or target lowering ownership | `docs/AiNavigableArchitecture.md`, `docs/SdkArchitecture.md` |
-| Game Boy or NES behavior | `docs/GameBoyTarget.md` or `docs/NesTarget.md` |
-| Runner reproduction | `docs/GameBoyRunnerDebugging.md` |
-| Sample portability | `samples/README.md`, `samples/manifest.json` |
-| Large maps, banking, or mappers | `docs/LargeWorldsRoadmap.md` |
-| Generated-code performance | `docs/GeneratedCodePerformanceRoadmap.md` |
-| Historical NES physical-frame scheduling / closed #410 | `docs/NesFrameSchedulingRoadmap.md` |
-| GitHub roadmap execution | `docs/AgentExecution.md` |
-| Archived Z80 compiler history | `docs/LegacyZ80Compiler.md` |
+### Context budget
 
-`WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
+Startup context is bounded on purpose. A task normally loads only this file,
+`docs/AgentContext.md`, the live issue, and one routed owner document. If a
+route seems to need several owner documents at once, or an owner document is too
+large to hold alongside the code under change, treat that as a signal to split
+the document or the task, not to load the whole `docs/` tree. Keep any single
+routed document small enough to read next to the code it governs, and move
+completed history to `docs/history/` instead of growing an active document.
+
+`llms.txt` is a compact index for agents and RAG systems.
 
 ## Local Source Code
 
@@ -62,6 +60,17 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 
 The goal is a good in-game experience: smooth scrolling and movement, responsive controls, and music without stuttering. Acceptance is judged by that observable gameplay fluidity, not by byte-for-byte output. Aim to do it well, not perfectly. A ROM that plays well is correct even if its bytes move between builds.
 
+- A bug fix is *solved* when its named reproduction — the smallest deterministic
+  in-process behavioral test that fails because of the defect — flips from RED to
+  GREEN and stays green across two matching runs. It is not solved because the
+  ROM subjectively feels fluid. Write that reproduction before editing, prefer a
+  compiled-snippet `GameBoyTestCpu`/`NesTestCpu` test in the style of
+  `GameBoyRunnerLandingTests`, and iterate the fix against that single test.
+  Fluidity is the end-of-loop guard, run once on the final candidate, not the
+  target the fix loop iterates against. If the defect cannot be expressed as a
+  failing deterministic test within the reproduction budget, stop and hand it
+  back as an investigation carrying that reproduction attempt; do not keep
+  editing against the subjective fluidity signal.
 - The product gate is in-process behavioral simulation (`NesTestCpu` and `GameBoyTestCpu`): movement, jumps, landing, camera follow, collisions, audio cadence, deterministic execution, and absence of sustained backlog. Validate behavior on the freshly compiled ROM, not on a committed golden.
 - Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
 - ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
@@ -113,7 +122,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/runner/runner.retrosharp.json
 ```
 
-The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md`, `WARP.md`, or `src/RetroSharp.Cli/Program.cs`.
+The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md` or `src/RetroSharp.Cli/Program.cs`.
 
 Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln --verify-no-changes --no-restore` has been noisy in this repo because of older or vendored whitespace debt; prefer targeted formatting for touched files plus `git diff --check`.
 

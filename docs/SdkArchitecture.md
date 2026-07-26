@@ -192,7 +192,7 @@ but it is not a dynamic plugin loader, package manager, binary ABI, or migration
 mechanism for existing `RetroSharp.Portable2D` APIs.
 
 The current compiler-owned operation and target-intrinsic inventory lives in
-`docs/ArchitectureRoadmap.md` under "Compiler-Owned SDK Operation Inventory".
+`docs/ArchitectureOverview.md` under "Compiler-Owned SDK Operation Inventory".
 Use that table, especially its target-intrinsic taxonomy buckets
 (`core-runtime`, `portable-2d`, `platformer/plugin`, `target-specific`, and
 `compat/deprecated`), before adding a new `Sdk2DOperation`,

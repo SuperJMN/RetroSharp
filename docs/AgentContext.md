@@ -41,9 +41,14 @@ targets does not make every call in it a portable API contract.
 
 ## Route By Task
 
+This is the single task router for the repository. `AGENTS.md` defers here
+instead of keeping a second copy. Load only the one route that owns the task.
+
 | Question | Open next |
 | --- | --- |
-| What layer owns a new concept? | `ArchitectureRoadmap.md` |
+| What layer owns a new concept? | `ArchitectureOverview.md` |
+| Where are roadmap iterations and the AR-x.y backlog? | `ArchitectureRoadmap.md` |
+| What is the current language syntax subset? | `RetroSharp.Language.md` |
 | What does portable 2D expose? | `Portable2DSdkV1.md` |
 | Where is a deep module or production/test seam? | `AiNavigableArchitecture.md` |
 | How do frontend preparation, Actor lowering, and SDK lowering fit together? | `SdkArchitecture.md` |
@@ -51,14 +56,15 @@ targets does not make every call in it a portable API contract.
 | How should runner behavior be reproduced? | `GameBoyRunnerDebugging.md` |
 | What owns Game Boy runner physical-frame cadence? | `GameBoyRunnerObserverFidelity.md` |
 | Is a sample portable evidence? | `samples/README.md` and `samples/manifest.json` |
-| What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md` and the scenario-specific acceptance document |
-| Is the task about large maps or banking? | `LargeWorldsRoadmap.md` |
-| Is the task about generated-code CPU work? | `GeneratedCodePerformanceRoadmap.md` |
-| Is the task reviewing historical NES frame scheduling / closed #410? | `NesFrameSchedulingRoadmap.md` |
+| What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md`; per-scenario acceptance records are under `history/` |
+| What is the generated-code CPU-work contract? | `GeneratedCodeCpuWorkContract.md` |
+| Is the task about large maps or banking? | `GameBoyBankingRoadmap.md`, `NesLargeWorldsCartridgeProfile.md`; completed epic history in `history/LargeWorldsRoadmap.md` |
 | Is the task about issue execution or publication? | `AgentExecution.md` |
+| Reviewing a completed roadmap or closed-issue history? | `history/` (background only, e.g. `history/GeneratedCodePerformanceRoadmap.md`, `history/NesFrameSchedulingRoadmap.md`, `history/LegacyZ80Compiler.md`) |
 
-Load only the selected route. Several roadmap documents contain valuable
-completed execution history, but reading all of them up front adds noise and
+Load only the selected route. Completed execution history and per-issue
+acceptance records live under `docs/history/`; read them as background only, and
+never infer active status from them. Reading many routes up front adds noise and
 can make an old constraint look current.
 
 ## Decisions To Preserve
@@ -88,6 +94,11 @@ can make an old constraint look current.
 - Game Boy runner cadence investigations use SameBoy's `GB_run_frame` timeline
   as physical-frame authority. `GameBoyTestCpu` remains a behavioral simulator,
   not a physical-frame clock.
+- A bug fix iterates against one authority: the in-process behavioral simulator
+  (`GameBoyTestCpu`/`NesTestCpu`) that owns its named RED test. Physical
+  emulators and MCP transports are diagnostic confirmation only; do not alternate
+  oracles mid-fix, because a fix that greens one observer while another stays red
+  is not solved.
 - Transitional public forms remain supported until an explicit removal slice
   changes their contract.
 
@@ -154,7 +165,7 @@ Classify a regression by its primary observable:
 | Trap | Correct action |
 | --- | --- |
 | Asking CodeGraph to interpret prose | Query a concrete symbol, file path, or short literal; verify candidates in source and tests |
-| Assuming `RetroSharp.Cli --help` exists | Read `src/RetroSharp.Cli/Program.cs`, `README.md`, or `WARP.md`; unknown options fail |
+| Assuming `RetroSharp.Cli --help` exists | Read `src/RetroSharp.Cli/Program.cs` or `README.md`; unknown options fail |
 | Running several `dotnet` builds/tests in one checkout | Serialize them and use `-m:1`; shared build outputs can race |
 | Testing a stale tracked ROM | Compile once for the scenario and execute that fresh ROM |
 | Treating ROM equality or a dry-run diff as the product gate | Diagnose the change, then judge observable behavior and bounded CPU work |
@@ -164,6 +175,8 @@ Classify a regression by its primary observable:
 | Applying broad formatting to inherited debt | Format touched files only and run `git diff --check` |
 | Fixing hardware/emulator symptoms only in sample code | Inspect target runtime behavior first |
 | Debugging the complete runner without isolation | Use `tools/gameboy/runner_diagnostics.py` and locate the first failing step |
+| Editing a bug fix before a named RED test fails for it | Reproduce as the cheapest deterministic `*TestCpu` test first; iterate the fix until that test greens twice |
+| Alternating oracles while fixing a bug | Iterate against one in-process `*TestCpu` RED; keep physical emulators and MCP transports diagnostic and never swap them in mid-fix |
 | Calling local validation “published” | Prove upstream alignment separately, as required by `AGENTS.md` |
 
 In a new worktree, restore before using `--no-restore`. Do not run concurrent

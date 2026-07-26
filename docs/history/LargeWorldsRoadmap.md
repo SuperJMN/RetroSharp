@@ -52,7 +52,7 @@ ROMs from one manifest. No target trims the level, stubs audio, discards
 collision, or lowers the packed path as a no-op merely to make the ROM fit.
 The consolidated artifact hashes, probe commands, and SameBoy/AprNes MCP
 observations are recorded in
-[`docs/LargeWorldsStage1Checkpoint.md`](LargeWorldsStage1Checkpoint.md).
+[`docs/history/LargeWorldsStage1Checkpoint.md`](LargeWorldsStage1Checkpoint.md).
 
 ## 2. Baseline and root constraints
 
@@ -222,7 +222,7 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 ### LW-0.2: Decide the `WorldPack` metatile, chunk, compression, and staging format
 
 - Status: **complete; format accepted by
-  [`WorldPackFormatV1.md`](WorldPackFormatV1.md) with reproducible full-`stage1`
+  [`WorldPackFormatV1.md`](../WorldPackFormatV1.md) with reproducible full-`stage1`
   cost coverage.**
 - Layer: portable SDK asset model and target-lowering architecture.
 - Dependencies: `LW-0.1`.
@@ -248,7 +248,7 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 ### LW-0.3: Select the NES Large Worlds v1 cartridge profile
 
 - Status: **complete; mapper 4 / TVROM-style four-screen profile accepted by
-  [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md) with
+  [`NesLargeWorldsCartridgeProfile.md`](../NesLargeWorldsCartridgeProfile.md) with
   reproducible layout and emulator-capability evidence.**
 - Layer: NES target architecture and validation.
 - Dependencies: `LW-0.1`.
@@ -277,7 +277,7 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 ### LW-0.4: Define the 16-bit world-coordinate and collision-hit contract
 
 - Status: **complete; coordinate and collision contract accepted by
-  [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
+  [`WorldCoordinateCollisionContract.md`](../WorldCoordinateCollisionContract.md)
   with reproducible cross-target layout evidence.**
 - Layer: portable SDK contract with target lowering.
 - Dependencies: `LW-0.1`.
@@ -458,7 +458,7 @@ Recommended execution and merge order:
   tracked on GitHub.**
 - Layer: Game Boy linker/runtime foundation and validation.
 - Dependencies: merged `LW-1.1` through `LW-1.5` and the accepted
-  [`WorldPack` v1 contract](WorldPackFormatV1.md).
+  [`WorldPack` v1 contract](../WorldPackFormatV1.md).
 - Outcome: establish a fixed-bank, target-private MBC1 far-read protocol and a
   formal WRAM reservation for packed-world staging while preserving the exact
   ROM-only output path.
@@ -784,7 +784,7 @@ Recommended execution and merge order:
   are implemented.**
 - Layer: NES target linker/cartridge/runtime foundation and validation.
 - Dependencies: accepted
-  [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md) and
+  [`NesLargeWorldsCartridgeProfile.md`](../NesLargeWorldsCartridgeProfile.md) and
   merged `LW-1.1` through `LW-1.5`.
 - Outcome: add target-private PRG sections/configurable bases and a forced-test
   MMC3/TVROM link mode without changing the default mapper-0 bytes.

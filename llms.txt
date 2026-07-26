@@ -6,19 +6,20 @@
 - [docs/AgentContext.md](docs/AgentContext.md): concise current authority map, task router, code anchors, and known traps.
 - [docs/AiNavigableArchitecture.md](docs/AiNavigableArchitecture.md): deep-module owners, production/test seams, common change routes, and focused CodeGraph navigation.
 - [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
-- [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
 - [docs/AgentExecutionPostmortem.md](docs/AgentExecutionPostmortem.md): measured agent friction, diminishing-return failure modes, stop rules, and model-selection guidance.
-- [docs/LegacyZ80Compiler.md](docs/LegacyZ80Compiler.md): retired Z80 compiler path, exact recovery commit, and fork provenance.
+- [docs/history/README.md](docs/history/README.md): index of archived completed roadmaps, closed-issue narratives, and per-issue acceptance records (background only).
+- [docs/history/LegacyZ80Compiler.md](docs/history/LegacyZ80Compiler.md): retired Z80 compiler path, exact recovery commit, and fork provenance.
 
 ## Core Documentation
 - [README.md](README.md): project overview and examples.
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
-- [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
-- [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): completed execution history for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
-- [docs/GeneratedCodePerformanceRoadmap.md](docs/GeneratedCodePerformanceRoadmap.md): completed execution history for Actor Framework code-generation cliffs, target CPU-work reporting, and joint GB/NES cadence.
+- [docs/ArchitectureOverview.md](docs/ArchitectureOverview.md): active layer model, capability model, SDK operation model, golden rule, and agent task contract.
+- [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): roadmap iterations and the AR-x.y implementation backlog consumed by the issue-seeding script.
+- [docs/history/LargeWorldsRoadmap.md](docs/history/LargeWorldsRoadmap.md): completed execution history for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
+- [docs/history/GeneratedCodePerformanceRoadmap.md](docs/history/GeneratedCodePerformanceRoadmap.md): completed execution history for Actor Framework code-generation cliffs, target CPU-work reporting, and joint GB/NES cadence.
 - [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared fresh-ROM scenario schema, timing budgets, transient integrity, GB/NES adapters, and CI tiers.
-- [docs/ActorProjectileFunctionalAcceptance.md](docs/ActorProjectileFunctionalAcceptance.md): eight exact actor/projectile GB/NES timelines, retained OAM publication, pool lifecycle checks, and MCP parity evidence.
+- [docs/history/ActorProjectileFunctionalAcceptance.md](docs/history/ActorProjectileFunctionalAcceptance.md): eight exact actor/projectile GB/NES timelines, retained OAM publication, pool lifecycle checks, and MCP parity evidence.
 - [docs/NesLargeWorldsCartridgeProfile.md](docs/NesLargeWorldsCartridgeProfile.md): accepted LW-0.3 mapper-4/TVROM NES profile, measured stage1 bank layout, restoration invariant, mapper-0 policy, and emulator evidence.
 - [docs/WorldCoordinateCollisionContract.md](docs/WorldCoordinateCollisionContract.md): accepted LW-0.4 little-endian i16 coordinate, hit/no-hit, compatibility, and GB/NES lowering contract.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.

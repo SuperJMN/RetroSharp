@@ -35,6 +35,6 @@ still has no global enemy-kind switch in `main`.
 
 See `../../docs/Portable2DSdkV1.md` for the actor API and the hand-authored
 low-level equivalent pattern. See `../../docs/ActorFrameworkRoadmap.md` for the
-actor framework history and `../../docs/GeneratedCodePerformanceRoadmap.md` for
+actor framework history and `../../docs/history/GeneratedCodePerformanceRoadmap.md` for
 the remaining activation-scan and generated-code scaling work. Spawn activation
 v1 is explicitly one-shot; reactivation is not an open implicit-policy task.

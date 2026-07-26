@@ -462,7 +462,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
 
     private static void AssertReportDocuments(string target, params string[] facts)
     {
-        var report = File.ReadAllText(RepositoryFile("docs/LargeWorldsStage1Baseline.md"));
+        var report = File.ReadAllText(RepositoryFile("docs/history/LargeWorldsStage1Baseline.md"));
         Assert.Contains(target, report, StringComparison.Ordinal);
         foreach (var fact in facts)
         {

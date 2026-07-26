@@ -100,6 +100,8 @@ The adapters deliberately do not introduce target-specific acceptance rules:
 - `GameboyMcp` and `NesMcp` transports implement the same machine interface, so they feed the shared runner rather than introducing target-specific acceptance logic.
 - External-emulator launch scripts may provide transport, but the shared .NET runner remains the behavioral oracle and report producer.
 
+While fixing a bug, the in-process `GameBoyTestCpu`/`NesTestCpu` path that owns the failing RED test is the single authority the fix iterates against. `GameboyMcp`, `NesMcp`, and external-emulator transports are diagnostic confirmation, run once on the final candidate; do not swap the oracle mid-fix, because greening one observer while another stays red does not close the defect.
+
 Concrete sample adapters and scenarios are added by the ladder rung that owns the sample. CSL-2 establishes the contract and deliberately does not migrate all samples.
 
 The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vscroll.gb.json`, passes the exact tracked `samples/tiled-vscroll/vscroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.
@@ -111,7 +113,7 @@ scroll on GB/NES, and the Game Boy Window HUD. These bindings enable authored
 background and palette checks on every retained frame, exact gameplay-tick
 checks for every animated sample, request/resident/commit/visible camera
 deadlines, and legal video/OAM write timing. See
-[`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md)
+[`SimpleSampleFunctionalAcceptance.md`](history/SimpleSampleFunctionalAcceptance.md)
 for the matrix, reviewed budgets, hashes, MCP checkpoints, and focused command.
 
 RPH-3.5 binds the next eight canonical sample/target scenarios to the packed
@@ -122,7 +124,7 @@ lifecycles, bank/mapper restoration, and cycle-positioned video/OAM writes over
 long vertical, diagonal, reversal, circular-buffer, chunk, and bank-sensitive
 windows. Fixed state checkpoints retain forward, reverse, wrap, and chunk-return
 trajectory inside those windows. See
-[`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md) for
+[`PackedTiledFunctionalAcceptance.md`](history/PackedTiledFunctionalAcceptance.md) for
 the exact hashes, measured budgets, and external emulator checkpoints.
 
 The horizontal #335 slice extends that packed matrix with three stable sample
@@ -145,7 +147,7 @@ evidence adds explicit tick, input-to-state, and spawn-to-visible budgets. A
 controlled stale-OAM contract probe proves that a retained sprite from an
 unexecuted draw path fails immediately instead of being hidden by a later good
 frame. The accepted hashes and external emulator checkpoints are recorded in
-[`ActorProjectileFunctionalAcceptance.md`](ActorProjectileFunctionalAcceptance.md).
+[`ActorProjectileFunctionalAcceptance.md`](history/ActorProjectileFunctionalAcceptance.md).
 
 CSL-7 binds `platformer-landing` on Game Boy and NES to one shared source,
 one authored 32x20 Tiled map, the same wall/return/jump/fall input timeline,
@@ -155,7 +157,7 @@ apex and landing, return without reset, and exactly one source-owned gameplay
 reset. Every retained frame also checks the authored packed background, the
 complete player metasprite and unused OAM, bank/mapper restoration, and legal
 video/OAM timing. See
-[`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
+[`PlatformerLandingFunctionalAcceptance.md`](history/PlatformerLandingFunctionalAcceptance.md).
 
 CSL-5 binds `audio-mixed-load` on Game Boy and NES to one neutral production
 loop with BGM, two completed SFX, airborne work, collision probes, two moving
@@ -164,7 +166,7 @@ The contract separately checks service heartbeat, deterministic ordered APU
 events, SFX/DPCM lifecycle, gameplay cadence, retained visuals, bank state,
 and legal writes. It also gates the exact runner over eleven input-start phases
 and rejects controlled starvation. See
-[`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).
+[`AudioMixedLoadFunctionalAcceptance.md`](history/AudioMixedLoadFunctionalAcceptance.md).
 
 The production targets retain logical sprites before publication. Game Boy
 logical draws update the `$C600` shadow page and a ten-byte HRAM routine starts

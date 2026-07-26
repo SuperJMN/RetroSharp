@@ -10,10 +10,14 @@ Use this workflow when debugging Game Boy runtime behavior with `samples/runner/
 Debug from observable behavior back to the responsible layer:
 
 1. Reproduce with the full runner.
-2. Isolate the first failing runner diagnostic.
-3. Cross-check the emulator or debug bridge before blaming the ROM.
-4. Fix the narrowest responsible layer.
-5. Regenerate affected ROMs and run validation.
+2. Isolate the first failing runner diagnostic (`00`–`04`) so the smallest layer,
+   not the whole runner, is under test.
+3. Capture that first failing step as the cheapest deterministic in-process test —
+   its RED — before editing anything.
+4. Cross-check the emulator or debug bridge before blaming the ROM.
+5. Fix the narrowest responsible layer, iterating only against that RED until it
+   greens across two matching runs.
+6. Regenerate affected ROMs and run validation.
 
 ## Starting State
 
@@ -103,7 +107,7 @@ The old three-emulator differential remains reproducible only through the
 explicit `--mode historical-differential` option. It preserves evidence from
 closed issue #327 and must not be copied into an issue, PR, or validation
 checklist. See
-[`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md) for
+[`NesRunnerVisualParityAcceptance.md`](history/NesRunnerVisualParityAcceptance.md) for
 that historical capture.
 
 ## Diagnostic Ladder
@@ -175,14 +179,21 @@ Prefer the smallest layer that explains the first failing diagnostic:
 - Game Boy ROM lowering/runtime: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs` and nearby target code.
 - CLI/sample tooling: `src/RetroSharp.Cli/Program.cs` and `tools/gameboy/`.
 - Tests: `src/RetroSharp.GameBoy.Tests/GameBoyRomCompilerTests.cs` and `src/RetroSharp.Cli.Tests/CrossTargetCliAcceptanceTests.cs`.
-- Architecture docs: `docs/GameBoyTarget.md`, `docs/Portable2DSdkV1.md`, and `docs/ArchitectureRoadmap.md`.
+- Architecture docs: `docs/GameBoyTarget.md`, `docs/Portable2DSdkV1.md`, and `docs/ArchitectureOverview.md`.
 
 Do not move gameplay behavior into the language layer. Do not add portable SDK behavior without a target capability check. Keep transitional APIs working unless the roadmap explicitly removes them.
 
 ## Test The Fix
 
 The exact regenerated GB/NES landing and jump evidence for issue #319 is
-recorded in [`RunnerLandingAcceptance.md`](RunnerLandingAcceptance.md).
+recorded in [`RunnerLandingAcceptance.md`](history/RunnerLandingAcceptance.md).
+
+The fix is complete only when the reproduction test captured above flips from
+RED to GREEN and stays green across two matching runs. The diagnostic matrix and
+the broader solution build are end-of-loop guards, run once on that final
+candidate, not the per-edit target. If no such failing test can be written for
+the symptom, hand the work back as an investigation instead of tuning against a
+subjective visual read.
 
 Use focused tests first, then broader validation:
 

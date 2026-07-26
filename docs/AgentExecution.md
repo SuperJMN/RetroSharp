@@ -13,7 +13,7 @@ known traps.
 
 - Architecture and broad iteration backlog: `docs/ArchitectureRoadmap.md`
 - Dedicated epic execution plans: linked `docs/*Roadmap.md` files such as
-  `docs/LargeWorldsRoadmap.md` and `docs/GeneratedCodePerformanceRoadmap.md`
+  `docs/history/LargeWorldsRoadmap.md` and `docs/history/GeneratedCodePerformanceRoadmap.md`
 - Agent entrypoint: `AGENTS.md`
 - Current agent routing/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`
@@ -143,6 +143,31 @@ risk that requires it. Run the complete solution or other broad closeout gate
 once after selecting the final candidate, not between diagnostic iterations.
 At the 90-minute checkpoint, add no new dimensions or hypotheses: run only the
 cheapest already-named discriminator or hand off.
+
+## Reproduce Before Repairing
+
+An implementation issue already declares its exact RED reproduction. Treat that
+RED as an executable, not prose: the fix loop is gated on a single cheap
+deterministic test, not on a subjective read of the whole ROM.
+
+1. Before editing, express the defect as the smallest deterministic in-process
+   behavioral test that fails because of it. Prefer a compiled-snippet
+   `GameBoyTestCpu`/`NesTestCpu` test in the style of `GameBoyRunnerLandingTests`
+   over authoring a full `FunctionalAcceptance` scenario; the heavyweight
+   scenario tier is for durable acceptance rungs, not first reproduction.
+2. Iterate the fix against that one test. It is *solved* only when the named RED
+   flips to GREEN and stays green across two matching runs. Run the broad gate
+   and the fluidity guard once on that final candidate, never as the per-edit
+   target.
+3. If the defect cannot be reduced to a failing deterministic test within the
+   reproduction budget, do not start editing against the fluidity signal. Return
+   the work as an `investigation` carrying the reproduction attempt, the ranked
+   owner seam, and the first falsifiable hypothesis.
+
+Returning a reproducing RED plus a ranked owner seam without a landed fix is a
+first-class, low-stigma outcome. "Fixed but not solved" churn — repeated edits
+that never flip a named test — is the failure this gate exists to prevent.
+Prefer handing off a clean RED over another unfalsifiable edit.
 
 ## Machine-checkable issue gateway
 
@@ -423,3 +448,7 @@ Stop and return to the integrator if:
 - A target cannot support the requested behavior within declared capabilities.
 - The runner cannot be kept working without broad unrelated rewrites.
 - Two consecutive experiments produce no material information gain.
+- The defect cannot be reduced to a failing deterministic test within the
+  reproduction budget; return it as an investigation carrying the RED attempt.
+- A fix has been edited without a named RED test that it flips from red to
+  green; stop and reproduce first instead of tuning against the fluidity signal.
