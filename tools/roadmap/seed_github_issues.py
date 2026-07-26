@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ROADMAP = ROOT / "docs" / "ArchitectureRoadmap.md"
 sys.path.insert(0, str(ROOT / "tools" / "agent"))
 from issue_contract import render_exemption
+from issue_gateway import STATE_LABELS
 
 LABELS: dict[str, tuple[str, str]] = {
     "roadmap": ("6f42c1", "Architecture roadmap work"),
@@ -34,11 +35,8 @@ LABELS: dict[str, tuple[str, str]] = {
     "layer:validation": ("5319e7", "Validation, acceptance, or test infrastructure"),
     "target:gb": ("8dd6f9", "Game Boy target"),
     "target:nes": ("fef2c0", "NES target"),
-    "agent:ready": ("0e8a16", "Machine-checkable issue ready for dispatch"),
-    "agent:claimed": ("fbca04", "Machine-checkable issue currently leased"),
-    "agent:blocked": ("d73a4a", "Machine-checkable issue blocked"),
-    "agent:verified": ("1d76db", "Machine-checkable issue verified"),
 }
+LABELS.update(STATE_LABELS)
 
 PARALLEL_SAFE = {
     "AR-1.2",

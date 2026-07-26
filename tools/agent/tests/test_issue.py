@@ -21,6 +21,7 @@ from issue_gateway import (  # noqa: E402
     GatewayError,
     GitClaimStore,
     GitHubTracker,
+    STATE_LABELS,
 )
 
 
@@ -223,7 +224,9 @@ class IssueCliTests(unittest.TestCase):
                 "sub_issues": [],
                 "labels": [],
             }
-        self.fixture.write_text(json.dumps({"issues": issues}))
+        self.fixture.write_text(
+            json.dumps({"issues": issues, "labels": [{"name": name} for name in STATE_LABELS]})
+        )
 
     def invoke(
         self,
@@ -1004,6 +1007,63 @@ class IssueCliTests(unittest.TestCase):
         action = json.loads(result.stdout)["actions"][0]
         self.assertEqual([], lint(parse(action["body"])))
         self.assertEqual([], self.events())
+
+    def test_migration_provisions_missing_state_labels_before_any_issue_mutation(self) -> None:
+        self.write_fixture("legacy body")
+        data = json.loads(self.fixture.read_text())
+        data["labels"] = []
+        data["state_label_provision_failures"] = ["agent:blocked"]
+        original = data["issues"]["408"]
+        self.fixture.write_text(json.dumps(data))
+
+        result = self.invoke(
+            self.clone_a,
+            "migrate",
+            "--all-open",
+            "--apply",
+            expect=30,
+        )
+
+        self.assertEqual("state-label-provision-failed", json.loads(result.stdout)["error"])
+        after = json.loads(self.fixture.read_text())
+        self.assertEqual(original, after["issues"]["408"])
+        self.assertFalse(
+            any(event["kind"] in {"update-body", "transition"} for event in self.events())
+        )
+
+    def test_migration_provisions_missing_state_labels_idempotently(self) -> None:
+        self.write_fixture("legacy body")
+        data = json.loads(self.fixture.read_text())
+        data["labels"] = []
+        self.fixture.write_text(json.dumps(data))
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+        after_first_apply = json.loads(self.fixture.read_text())
+        events_after_first_apply = self.events()
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+
+        self.assertEqual(set(STATE_LABELS), {item["name"] for item in after_first_apply["labels"]})
+        self.assertEqual(events_after_first_apply, self.events())
+        self.invoke(self.clone_a, "lint", "--all-open")
+
+    def test_migration_tolerates_a_racing_state_label_provisioner(self) -> None:
+        self.write_fixture("legacy body")
+        data = json.loads(self.fixture.read_text())
+        data["labels"] = []
+        data["state_label_provision_races"] = ["agent:blocked"]
+        self.fixture.write_text(json.dumps(data))
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+
+        after = json.loads(self.fixture.read_text())
+        self.assertEqual(set(STATE_LABELS), {item["name"] for item in after["labels"]})
+        self.assertFalse(
+            any(
+                event["kind"] == "create-label" and event["label"] == "agent:blocked"
+                for event in self.events()
+            )
+        )
 
     def test_migration_repairs_missing_state_for_valid_exemption(self) -> None:
         self.write_fixture(

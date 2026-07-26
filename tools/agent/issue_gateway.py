@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Any
 
 
-STATE_LABELS = ("agent:ready", "agent:claimed", "agent:blocked", "agent:verified")
+STATE_LABELS: dict[str, tuple[str, str]] = {
+    "agent:ready": ("0e8a16", "Machine-checkable issue ready for dispatch"),
+    "agent:claimed": ("fbca04", "Machine-checkable issue currently leased"),
+    "agent:blocked": ("d73a4a", "Machine-checkable issue blocked"),
+    "agent:verified": ("1d76db", "Machine-checkable issue verified"),
+}
 CANONICAL_REPOSITORY = "SuperJMN/RetroSharp"
 
 
@@ -269,6 +274,43 @@ class GitHubTracker:
         args.extend(["--add-label", label])
         run(args, cwd=self.repo_root)
 
+    def provision_state_labels(self) -> None:
+        present = self._label_names()
+        for name, (color, description) in STATE_LABELS.items():
+            if name in present:
+                continue
+            result = run(
+                [
+                    "gh",
+                    "label",
+                    "create",
+                    name,
+                    "--repo",
+                    self.repo,
+                    "--color",
+                    color,
+                    "--description",
+                    description,
+                ],
+                cwd=self.repo_root,
+                check=False,
+            )
+            if result.returncode:
+                # A concurrent migration may have created this label after our
+                # inventory read. Re-read before treating the failure as fatal.
+                present = self._label_names()
+                if name not in present:
+                    detail = result.stderr.strip() or result.stdout.strip()
+                    raise GatewayError("state-label-provision-failed", f"{name}: {detail}")
+            else:
+                present.add(name)
+        missing = set(STATE_LABELS) - self._label_names()
+        if missing:
+            raise GatewayError(
+                "state-label-provision-incomplete",
+                ",".join(sorted(missing)),
+            )
+
     def comment(self, number: int, body: str) -> None:
         run(
             ["gh", "issue", "comment", str(number), "--repo", self.repo, "--body", body],
@@ -348,6 +390,28 @@ class GitHubTracker:
         )
         return [item for page in json.loads(result.stdout) for item in page]
 
+    def _label_names(self) -> set[str]:
+        result = run(
+            [
+                "gh",
+                "label",
+                "list",
+                "--repo",
+                self.repo,
+                "--limit",
+                "1000",
+                "--json",
+                "name",
+            ],
+            cwd=self.repo_root,
+        )
+        labels = json.loads(result.stdout)
+        return {
+            str(label["name"])
+            for label in labels
+            if isinstance(label, dict) and "name" in label
+        }
+
     def update_body(self, number: int, body: str) -> None:
         run(
             ["gh", "issue", "edit", str(number), "--repo", self.repo, "--body", body],
@@ -408,6 +472,33 @@ class FixtureTracker:
             }
         )
 
+    def provision_state_labels(self) -> None:
+        present = self._label_names()
+        for name in STATE_LABELS:
+            if name in present:
+                continue
+            failures = set(self.data.get("state_label_provision_failures", []))
+            if name in failures:
+                raise GatewayError("state-label-provision-failed", name)
+            races = set(self.data.get("state_label_provision_races", []))
+            if name in races:
+                self.data["labels"] = [*self.data.get("labels", []), {"name": name}]
+                self.fixture.write_text(json.dumps(self.data, sort_keys=True))
+                present = self._label_names()
+                if name not in present:
+                    raise GatewayError("state-label-provision-incomplete", name)
+                continue
+            self.data["labels"] = [*self.data.get("labels", []), {"name": name}]
+            self.fixture.write_text(json.dumps(self.data, sort_keys=True))
+            self._event({"kind": "create-label", "label": name})
+            present.add(name)
+        missing = set(STATE_LABELS) - self._label_names()
+        if missing:
+            raise GatewayError(
+                "state-label-provision-incomplete",
+                ",".join(sorted(missing)),
+            )
+
     def comment(self, number: int, body: str) -> None:
         self._event({"kind": "comment", "issue": number, "body": body})
 
@@ -450,6 +541,13 @@ class FixtureTracker:
             return
         with self.event_log.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(event, sort_keys=True) + "\n")
+
+    def _label_names(self) -> set[str]:
+        return {
+            str(label.get("name", ""))
+            for label in self.data.get("labels", [])
+            if isinstance(label, dict)
+        }
 
 
 def canonical_comment(event: str, payload: dict[str, Any], summary: str) -> str:

@@ -305,6 +305,7 @@ def command_migrate(args: argparse.Namespace, root: Path) -> int:
             }
         actions.append(action)
     if args.apply and not migration_errors:
+        issue_tracker.provision_state_labels()
         for action in actions:
             if "body" in action:
                 issue_tracker.update_body(int(action["issue"]), str(action["body"]))
