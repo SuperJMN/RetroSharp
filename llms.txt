@@ -8,6 +8,7 @@
 - [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
 - [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
+- [docs/AgentExecutionPostmortem.md](docs/AgentExecutionPostmortem.md): measured agent friction, diminishing-return failure modes, stop rules, and model-selection guidance.
 - [docs/LegacyZ80Compiler.md](docs/LegacyZ80Compiler.md): retired Z80 compiler path, exact recovery commit, and fork provenance.
 
 ## Core Documentation
