@@ -185,12 +185,14 @@ python3 tools/agent/issue.py migrate --all-open --dry-run
 ```
 
 Only an integrator with issue-edit authority may replace `--dry-run` with
-`--apply`. Migration is reentrant: when a body update succeeded but its label
-transition did not, a later run emits a state-only repair for a valid contract
-with missing or conflicting agent-state labels. Exemptions repair to blocked;
-dispatchable tasks derive blocked/ready from native dependencies. After
-migration, run `lint --all-open` again; do not claim acceptance from the preview
-alone.
+`--apply`. Before any issue body or state mutation, `--apply` provisions and
+rechecks all four AEX state labels; a provisioning failure leaves issues
+untouched and retryable. Migration is reentrant: when a body update succeeded
+but its label transition did not, a later run emits a state-only repair for a
+valid contract with missing or conflicting agent-state labels. Exemptions repair
+to blocked; dispatchable tasks derive blocked/ready from native dependencies.
+After migration, run `lint --all-open` again; do not claim acceptance from the
+preview alone.
 
 ## Worktree Ownership
 
