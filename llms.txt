@@ -14,7 +14,8 @@
 ## Core Documentation
 - [README.md](README.md): project overview and examples.
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
-- [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
+- [docs/ArchitectureOverview.md](docs/ArchitectureOverview.md): active layer model, capability model, SDK operation model, golden rule, and agent task contract.
+- [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): roadmap iterations and the AR-x.y implementation backlog consumed by the issue-seeding script.
 - [docs/history/LargeWorldsRoadmap.md](docs/history/LargeWorldsRoadmap.md): completed execution history for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
 - [docs/history/GeneratedCodePerformanceRoadmap.md](docs/history/GeneratedCodePerformanceRoadmap.md): completed execution history for Actor Framework code-generation cliffs, target CPU-work reporting, and joint GB/NES cadence.
 - [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared fresh-ROM scenario schema, timing budgets, transient integrity, GB/NES adapters, and CI tiers.

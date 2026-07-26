@@ -172,8 +172,8 @@ public sealed class ArchitectureBoundaryTests
     public void Sdk_operation_inventory_documentation_lists_current_compiler_owned_operations()
     {
         var root = RepositoryRoot();
-        var roadmap = File.ReadAllText(Path.Combine(root, "docs/ArchitectureRoadmap.md"));
-        var section = MarkdownSection(roadmap, "## Compiler-Owned SDK Operation Inventory");
+        var overview = File.ReadAllText(Path.Combine(root, "docs/ArchitectureOverview.md"));
+        var section = MarkdownSection(overview, "## Compiler-Owned SDK Operation Inventory");
         var expectedEntries = CompilerOwnedSdkOperationNames();
 
         var missing = expectedEntries

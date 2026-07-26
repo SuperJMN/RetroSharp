@@ -4,7 +4,7 @@ Status: experimental, intentionally narrow.
 
 The NES target compiles the constrained subset to mapper 0 when that exact image fits, then automatically retries an internal mapper 4 / TVROM-style four-screen profile when the final PRG/DPCM link requires banked world data. It supports tick-based input, logical sprites, staged packed-world row/column streaming beyond the preloaded 64x60 surface, runtime animation helpers, camera-relative collision queries, VGM/VGZ-sourced 2A03 BGM including DMC/DPCM, and the actor-framework acceptance slice. The shared runner loads complete `stage1.tmj`; its final image selects MMC3 automatically while smaller packed worlds may still fit mapper 0. NES still does not support HUD, generic world-space collision queries, expansion audio, runtime CHR banking, or public mapper APIs. See `docs/history/LargeWorldsRoadmap.md` for the completed cross-target packed-world and mapper execution plan.
 
-See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference.
+See `ArchitectureOverview.md` for the layer model that separates the RetroSharp language, portable 2D SDK, and target intrinsics (roadmap iterations and the `AR-x.y` backlog live in `ArchitectureRoadmap.md`), and `Portable2DSdkV1.md` for the current SDK v1 reference.
 
 ## Target Capabilities
 

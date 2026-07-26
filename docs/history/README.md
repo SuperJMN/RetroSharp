@@ -38,3 +38,7 @@ target and SDK documents under `../`.
 ## Retired subsystem
 
 - [`LegacyZ80Compiler.md`](LegacyZ80Compiler.md): retired Z80 compiler path, recovery commit, and fork provenance.
+
+## Target milestones
+
+- [`GameBoyTargetMilestones.md`](GameBoyTargetMilestones.md): completed Game Boy short-term checklist, dated progress snapshots, and closed framework backlog. Current subset lives in [`../GameBoyTarget.md`](../GameBoyTarget.md).

@@ -179,7 +179,7 @@ Prefer the smallest layer that explains the first failing diagnostic:
 - Game Boy ROM lowering/runtime: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs` and nearby target code.
 - CLI/sample tooling: `src/RetroSharp.Cli/Program.cs` and `tools/gameboy/`.
 - Tests: `src/RetroSharp.GameBoy.Tests/GameBoyRomCompilerTests.cs` and `src/RetroSharp.Cli.Tests/CrossTargetCliAcceptanceTests.cs`.
-- Architecture docs: `docs/GameBoyTarget.md`, `docs/Portable2DSdkV1.md`, and `docs/ArchitectureRoadmap.md`.
+- Architecture docs: `docs/GameBoyTarget.md`, `docs/Portable2DSdkV1.md`, and `docs/ArchitectureOverview.md`.
 
 Do not move gameplay behavior into the language layer. Do not add portable SDK behavior without a target capability check. Keep transitional APIs working unless the roadmap explicitly removes them.
 

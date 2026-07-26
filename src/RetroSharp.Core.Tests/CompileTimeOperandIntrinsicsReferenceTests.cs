@@ -5,11 +5,11 @@ using Xunit;
 public sealed class CompileTimeOperandIntrinsicsReferenceTests
 {
     [Fact]
-    public void Architecture_roadmap_links_to_compile_time_operand_intrinsic_design_note()
+    public void Architecture_overview_links_to_compile_time_operand_intrinsic_design_note()
     {
-        var roadmap = File.ReadAllText(RepositoryFile("docs/ArchitectureRoadmap.md"));
+        var overview = File.ReadAllText(RepositoryFile("docs/ArchitectureOverview.md"));
 
-        Assert.Contains("docs/CompileTimeOperandIntrinsics.md", roadmap, StringComparison.Ordinal);
+        Assert.Contains("docs/CompileTimeOperandIntrinsics.md", overview, StringComparison.Ordinal);
     }
 
     [Fact]
