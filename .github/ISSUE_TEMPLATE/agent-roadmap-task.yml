@@ -1,136 +1,80 @@
 name: Agent roadmap task
-description: Track one AR-x.y architecture roadmap task for agent execution.
+description: Create one AEX-1 machine-checkable issue contract.
 title: "AR-x.y: "
-labels:
-  - roadmap
-  - agent-task
-  - needs-integration
+labels: [roadmap, agent-task, needs-integration, agent:ready]
 body:
-  - type: dropdown
-    id: issue_kind
+  - type: markdown
     attributes:
-      label: Issue kind
-      description: Dispatch role for this issue. Only implementation issues own corrective code.
-      options:
-        - implementation
-        - certification-gate
-        - investigation
-        - epic/integrator
-    validations:
-      required: true
+      value: |
+        This form is the `aex-1` contract consumed by `tools/agent/issue.py`.
+        The active engineering policy is mandatory for every dispatch: **90-minute checkpoint / 120-minute hard stop**.
+  - type: dropdown
+    id: schema
+    attributes: {label: Schema, options: [aex-1]}
+    validations: {required: true}
   - type: input
-    id: roadmap_task
-    attributes:
-      label: Roadmap task
-      description: Stable task id from docs/ArchitectureRoadmap.md.
-      placeholder: "AR-1.1"
-    validations:
-      required: true
+    id: active_policy
+    attributes: {label: Active engineering policy, value: "90-minute checkpoint / 120-minute hard stop"}
+    validations: {required: true}
   - type: dropdown
-    id: layer
+    id: kind
     attributes:
-      label: Layer
-      description: Architectural layer touched by this task.
-      options:
-        - language
-        - sdk-2d
-        - target-intrinsic
-        - documentation
-        - validation
-    validations:
-      required: true
+      label: Kind
+      options: [implementation, certification-gate, investigation, epic/integrator]
+    validations: {required: true}
   - type: input
-    id: owner_seam
+    id: parent
     attributes:
-      label: Owner seam
-      description: The one module boundary that owns this issue's decision.
-      placeholder: "NesFramePlan profile selection"
-    validations:
-      required: true
-  - type: textarea
-    id: observable
-    attributes:
-      label: Single observable
-      description: One externally observable behavior whose change completes the issue.
-      placeholder: "Retained OAM publication and the camera transaction finish inside the selected video-safe window."
-    validations:
-      required: true
-  - type: textarea
-    id: red_reproduction
-    attributes:
-      label: Exact RED reproduction
-      description: Exact focused command, fixture or cartridge, and expected first failure.
-      placeholder: |
-        dotnet test ... --filter FullyQualifiedName=...
-        ROM: path and expected SHA-256
-        First failure: frame/cycle and assertion
-    validations:
-      required: true
-  - type: dropdown
-    id: active_budget
-    attributes:
-      label: Active engineering budget
-      description: Checkpoint/hard-stop budget; external waits do not count.
-      options:
-        - 90-minute checkpoint / 120-minute hard stop
-    validations:
-      required: true
+      label: Parent
+      description: Native parent issue number, for example #400. Implementation requires one.
+    validations: {required: true}
   - type: textarea
     id: dependencies
     attributes:
       label: Dependencies
-      description: List prerequisite roadmap tasks or issues.
-      placeholder: "Depends on: AR-1.1"
+      description: Native prerequisite issue numbers, one `- #123` per line, or `None`.
+      value: "None"
+    validations: {required: true}
+  - type: dropdown
+    id: layer
+    attributes: {label: Layer, options: [language, sdk-2d, target-intrinsic, documentation, validation]}
+    validations: {required: true}
+  - type: dropdown
+    id: target
+    attributes: {label: Target, options: [none, gb, nes, gb+nes]}
+    validations: {required: true}
+  - type: input
+    id: owner_seam
+    attributes: {label: Owner seam, description: One module boundary only.}
+    validations: {required: true}
   - type: textarea
-    id: candidate_files
-    attributes:
-      label: Candidate files
-      description: Files or areas the agent should inspect first.
-      placeholder: |
-        - docs/ArchitectureRoadmap.md
-        - src/RetroSharp.GameBoy/...
-    validations:
-      required: true
+    id: observable
+    attributes: {label: Single observable, description: One externally observable completion condition.}
+    validations: {required: true}
   - type: textarea
-    id: tasks
-    attributes:
-      label: Tasks
-      description: Concrete implementation steps.
-      placeholder: |
-        - [ ] Inspect current code path.
-        - [ ] Implement the scoped change.
-        - [ ] Update docs if public API changes.
-    validations:
-      required: true
+    id: no_goals
+    attributes: {label: No-goals, description: Explicitly list work that must not expand this dispatch.}
+    validations: {required: true}
   - type: textarea
-    id: acceptance
-    attributes:
-      label: Acceptance criteria
-      description: Observable criteria for completing this issue.
-      placeholder: |
-        - Existing Game Boy runner ROM still builds.
-        - Capability errors are deterministic.
-    validations:
-      required: true
+    id: red
+    attributes: {label: Exact RED, description: Exact command, expected exit code, and first failure signature.}
+    validations: {required: true}
   - type: textarea
     id: verification
+    attributes: {label: Verification, description: Commands required before handoff/close.}
+    validations: {required: true}
+  - type: textarea
+    id: publication
+    attributes: {label: Publication authority, description: Say whether local commit, push, PR, or merge is authorized.}
+    validations: {required: true}
+  - type: textarea
+    id: dispatch_metadata
     attributes:
-      label: Verification
-      description: Exact commands or checks required before closing.
-      placeholder: |
-        - dotnet test RetroSharp.sln
-        - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/gameboy-runner/runner.rs
-    validations:
-      required: true
+      label: Dispatch metadata
+      description: Include `Model: terra-high` and `Effort: high`; detector work may use terra-xhigh and sol-max needs a written escalation justification.
+      value: "Model: terra-high\nEffort: high"
+    validations: {required: true}
   - type: textarea
     id: handoff
-    attributes:
-      label: Handoff at checkpoint or hard stop
-      description: Where the preserved worktree and evidence return if focused acceptance is not green.
-      placeholder: |
-        Integrator: issue or owner
-        Worktree: ../RetroSharp-...
-        Branch: agent/...
-        Required evidence: RED command, ROM hash, first failing frame/cycle, next hypothesis
-    validations:
-      required: true
+    attributes: {label: Handoff destination, description: Integrator issue/owner and preserved worktree destination.}
+    validations: {required: true}
