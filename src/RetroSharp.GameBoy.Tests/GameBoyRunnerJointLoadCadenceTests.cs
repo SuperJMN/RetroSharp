@@ -10,6 +10,14 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 {
     private const int FrozenObservationOffset = 10;
     private const int RetainedPoseRegressionOffset = 24;
+    private static readonly string[] ForbiddenVideoSignals =
+    [
+        "bankWorkInCommit",
+        "decodeWorkInCommit",
+        "directoryWorkInVBlank",
+        "directoryWorkInCommit",
+        "decodeWorkInVBlank",
+    ];
 
     [Fact]
     public void Shared_runner_joint_load_cadence_gate()
@@ -134,8 +142,26 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Equal(first.ToJson(), second.ToJson());
         WriteDiagnostic("injected-stall", stalledReport);
         WriteDiagnostic("corrupted-oam", corrupted);
-        WriteDiagnostic("baseline", first);
+        var baselineDiagnostic = WriteDiagnostic("baseline", first);
+        Assert.Contains(
+            baselineDiagnostic,
+            line => line.Contains(
+                "verdict=NOT_REPRODUCED reviewedGapBound=1 freshness=\"no gap >1\"",
+                StringComparison.Ordinal));
+        Assert.All(
+            baselineDiagnostic.Where(line => line.Contains("kind=freshness-anomaly", StringComparison.Ordinal)),
+            line => Assert.Contains("gameplayDelta=", line, StringComparison.Ordinal));
         AssertFrameEvidence(first);
+    }
+
+    [Fact]
+    public void Freshness_anomaly_selection_requires_a_non_unit_gameplay_or_audio_delta()
+    {
+        var previous = new FunctionalFrameObservation(10, 20, 30, 0);
+
+        Assert.False(IsFreshnessAnomaly(new(11, 21, 31, 0), previous));
+        Assert.True(IsFreshnessAnomaly(new(11, 20, 31, 0), previous));
+        Assert.True(IsFreshnessAnomaly(new(11, 21, 32, 0), previous));
     }
 
     private static GameBoyFunctionalRomAdapter Adapter(IFunctionalRomMachineFactory factory) => new(
@@ -166,6 +192,8 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                         "playerX", "playerY", "playerGrounded", "cameraRequest", "cameraPrepare",
                         "cameraResident", "cameraCommit", "cameraRelease", "visibleCameraX",
                         "visibleCameraY", "visibleRomBank", "forbiddenVideoWork",
+                        "bankWorkInCommit", "decodeWorkInCommit", "directoryWorkInVBlank",
+                        "directoryWorkInCommit", "decodeWorkInVBlank",
                     },
                     signal => Assert.True(signals.ContainsKey(signal), $"frame={evidence.Observed.Frame} missing={signal}"));
                 Assert.NotNull(evidence.Observed.AudioProgress);
@@ -188,6 +216,11 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
         Assert.Contains(report.FrameEvidence, evidence => evidence.Observed.AudioProgress!.Music.Active);
         Assert.Contains(report.FrameEvidence, evidence => evidence.Observed.AudioProgress!.SoundEffect.Starts > 0);
         Assert.Contains(report.FrameEvidence, evidence => evidence.Observed.AudioProgress!.SoundEffect.Completions > 0);
+        Assert.All(
+            report.FrameEvidence,
+            evidence => Assert.All(
+                ForbiddenVideoSignals,
+                signal => Assert.Equal(0, evidence.Observed.StateSignals![signal])));
     }
 
     private static void AssertVisualsIntact(FunctionalFrameEvidence evidence)
@@ -201,8 +234,24 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             evidence.Observed.Sprites!.Select(sprite => $"{sprite.Id}:{sprite.Visible}:{sprite.OamSlot}:{string.Join(',', sprite.Oam)}"));
     }
 
-    private void WriteDiagnostic(string run, FunctionalAcceptanceReport report)
+    private IReadOnlyList<string> WriteDiagnostic(
+        string run,
+        FunctionalAcceptanceReport report)
     {
+        var lines = DiagnosticLines(run, report);
+        foreach (var line in lines)
+        {
+            output.WriteLine(line);
+        }
+
+        return lines;
+    }
+
+    private static IReadOnlyList<string> DiagnosticLines(
+        string run,
+        FunctionalAcceptanceReport report)
+    {
+        var lines = new List<string>();
         var timingFailures = report.TimingChecks.Where(check => !check.Passed).ToArray();
         var cadenceFailure = timingFailures.Any(check => check.Metric is
                 "gameplay-tick-ratio"
@@ -215,52 +264,137 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             : cadenceFailure
                 ? "CADENCE_RED"
                 : "STRUCTURAL_RED";
-        output.WriteLine(
-            $"runner-joint-load run={run} verdict={verdict} romSha256={report.RomSha256}");
-        foreach (var timing in timingFailures)
-        {
-            output.WriteLine(
-                $"run={run} timing code={timing.Metric} observed={timing.Observed:0.###} limit={timing.Limit:0.###} comparison={timing.Comparison}");
-        }
+        var freshness = cadenceFailure ? "gap >1" : "no gap >1";
+        lines.Add(
+            $"runner-joint-load run={run} verdict={verdict} reviewedGapBound=1 freshness=\"{freshness}\" romSha256={report.RomSha256}");
+        lines.AddRange(timingFailures.Select(timing =>
+            $"run={run} timing code={timing.Metric} observed={timing.Observed:0.###} limit={timing.Limit:0.###} comparison={timing.Comparison}"));
 
         if (report.IntegrityFailures.Count == 0)
         {
-            output.WriteLine($"run={run} first-frame failures=[]");
-            return;
+            lines.Add($"run={run} first-frame failures=[]");
+            AddFreshnessAnomalies(lines, run, report.FrameEvidence);
+            return lines;
         }
 
         var firstFrame = report.IntegrityFailures.Min(failure => failure.Frame);
-        foreach (var failure in report.IntegrityFailures.Where(failure => failure.Frame == firstFrame))
-        {
-            output.WriteLine($"run={run} first-frame failure={failure.Code}@{failure.Frame} detail={failure.Detail}");
-        }
+        lines.AddRange(report.IntegrityFailures
+            .Where(failure => failure.Frame == firstFrame)
+            .Select(failure => $"run={run} first-frame failure={failure.Code}@{failure.Frame} detail={failure.Detail}"));
 
         var evidence = report.FrameEvidence
             .Where(item => item.Observed.Frame >= firstFrame - 8 && item.Observed.Frame <= firstFrame)
             .ToArray();
-        for (var index = 0; index < evidence.Length; index++)
+        var previous = evidence[0].Observed;
+        foreach (var current in evidence.Skip(1))
         {
-            var current = evidence[index];
-            var previous = index == 0 ? null : evidence[index - 1];
-            var signals = current.Observed.StateSignals!;
-            output.WriteLine(
-                $"run={run} evidence frame={current.Observed.Frame} "
-                + $"cycle={signals["cpuCycle"]} lcd={signals["lcdPhase"]} reset={current.Observed.ResetCount} "
-                + $"gameplay={current.Observed.GameplayTicks}/{Delta(current.Observed.GameplayTicks, previous?.Observed.GameplayTicks)} "
-                + $"audio={current.Observed.AudioServiceTicks}/{Delta(current.Observed.AudioServiceTicks, previous?.Observed.AudioServiceTicks)} "
-                + $"sourceWait={signals["sourceWait"]} packedAudio={signals["packedAudioTick"]} apu={signals["apuEventCount"]} "
-                + $"sfx={signals["sfxStarts"]}/{signals["sfxActive"]}/{signals["sfxCompletions"]} "
-                + $"input={signals["inputMask"]} player={signals["playerX"]},{signals["playerY"]},{signals["playerGrounded"]} "
-                + $"camera={signals["cameraRequest"]}/{signals["cameraResident"]}/{signals["cameraCommit"]}/{signals["cameraRelease"]} "
-                + $"visible={signals["visibleCameraX"]},{signals["visibleCameraY"]} "
-                + $"bank={current.Observed.Bank?.SelectedBank}/{current.Observed.Bank?.ShadowBank} "
-                + $"forbidden={signals["forbiddenVideoWork"]} unsafe={current.Observed.VideoWrites!.Count(write => !write.Safe)}/{current.Observed.OamWrites!.Count(write => !write.Safe)} "
-                + $"playerOam={PlayerOam(current.Observed.Sprites)}/{ExpectedPlayerOam(current.Expected?.Sprites)}");
+            lines.Add(ObservationLine(run, "failure-evidence", current, previous));
+            previous = current.Observed;
+        }
+
+        return lines;
+    }
+
+    private static void AddFreshnessAnomalies(
+        ICollection<string> lines,
+        string run,
+        IReadOnlyList<FunctionalFrameEvidence> evidence)
+    {
+        var previous = evidence[0].Observed;
+        foreach (var current in evidence.Skip(1))
+        {
+            if (IsFreshnessAnomaly(current.Observed, previous))
+            {
+                lines.Add(ObservationLine(run, "freshness-anomaly", current, previous));
+            }
+
+            previous = current.Observed;
         }
     }
 
-    private static string Delta(long current, long? previous) =>
-        previous is null ? "-" : (current - previous.Value).ToString();
+    private static bool IsFreshnessAnomaly(
+        FunctionalFrameObservation current,
+        FunctionalFrameObservation previous) =>
+        current.GameplayTicks - previous.GameplayTicks != 1
+        || current.AudioServiceTicks - previous.AudioServiceTicks != 1;
+
+    private static string ObservationLine(
+        string run,
+        string kind,
+        FunctionalFrameEvidence current,
+        FunctionalFrameObservation previous)
+    {
+        var observed = current.Observed;
+        var signals = observed.StateSignals!;
+        var previousSignals = previous.StateSignals!;
+        var unsafeVideo = observed.VideoWrites!.Count(write => !write.Safe);
+        var unsafeOam = observed.OamWrites!.Count(write => !write.Safe);
+        var forbiddenDelta = ForbiddenVideoSignals.Sum(signal => ByteDelta(signals, previousSignals, signal));
+        var forbiddenCounters = string.Join(
+            ',',
+            ForbiddenVideoSignals.Select(signal =>
+                $"{signal}:{signals[signal]}/{ByteDelta(signals, previousSignals, signal)}"));
+        return $"run={run} kind={kind} frame={observed.Frame} frameDelta={observed.Frame - previous.Frame} "
+            + $"cycle={signals["cpuCycle"]} cycleDelta={signals["cpuCycle"] - previousSignals["cpuCycle"]} "
+            + $"lcd={signals["lcdPhase"]} lcdDelta={signals["lcdPhase"] - previousSignals["lcdPhase"]} "
+            + $"reset={observed.ResetCount} resetDelta={observed.ResetCount - previous.ResetCount} "
+            + $"sourceWait={signals["sourceWait"]} sourceWaitDelta={signals["sourceWait"] - previousSignals["sourceWait"]} "
+            + $"gameplay={observed.GameplayTicks} gameplayDelta={observed.GameplayTicks - previous.GameplayTicks} "
+            + $"audio={observed.AudioServiceTicks} audioDelta={observed.AudioServiceTicks - previous.AudioServiceTicks} "
+            + $"packedAudio={signals["packedAudioTick"]} packedAudioDelta={ByteDelta(signals, previousSignals, "packedAudioTick")} "
+            + $"apu={signals["apuEventCount"]} apuDelta={signals["apuEventCount"] - previousSignals["apuEventCount"]} "
+            + $"sfx={signals["sfxStarts"]}/{signals["sfxActive"]}/{signals["sfxCompletions"]} "
+            + $"sfxDelta={signals["sfxStarts"] - previousSignals["sfxStarts"]}/{signals["sfxActive"] - previousSignals["sfxActive"]}/{signals["sfxCompletions"] - previousSignals["sfxCompletions"]} "
+            + $"input={signals["inputMask"]} inputDelta={signals["inputMask"] - previousSignals["inputMask"]} "
+            + $"player={signals["playerX"]},{signals["playerY"]},{signals["playerGrounded"]} "
+            + $"playerDelta={signals["playerX"] - previousSignals["playerX"]},{signals["playerY"] - previousSignals["playerY"]},{signals["playerGrounded"] - previousSignals["playerGrounded"]} "
+            + $"camera={signals["cameraRequest"]}/{signals["cameraPrepare"]}/{signals["cameraResident"]}/{signals["cameraCommit"]}/{signals["cameraRelease"]} "
+            + $"cameraDelta={ByteDelta(signals, previousSignals, "cameraRequest")}/{ByteDelta(signals, previousSignals, "cameraPrepare")}/{ByteDelta(signals, previousSignals, "cameraResident")}/{ByteDelta(signals, previousSignals, "cameraCommit")}/{ByteDelta(signals, previousSignals, "cameraRelease")} "
+            + $"visible={signals["visibleCameraX"]},{signals["visibleCameraY"]} "
+            + $"visibleDelta={signals["visibleCameraX"] - previousSignals["visibleCameraX"]},{signals["visibleCameraY"] - previousSignals["visibleCameraY"]} "
+            + $"visibleRomBank={signals["visibleRomBank"]} visibleRomBankDelta={signals["visibleRomBank"] - previousSignals["visibleRomBank"]} "
+            + $"bank={observed.Bank?.SelectedBank}/{observed.Bank?.ShadowBank} "
+            + $"bankDelta={observed.Bank!.SelectedBank - previous.Bank!.SelectedBank}/{observed.Bank.ShadowBank - previous.Bank.ShadowBank} "
+            + $"forbidden={signals["forbiddenVideoWork"]} forbiddenDelta={forbiddenDelta} forbiddenCounters={forbiddenCounters} "
+            + $"unsafe={unsafeVideo}/{unsafeOam} "
+            + $"backgroundMatch={Flag(BackgroundMatches(current))} oamMatch={Flag(OamMatches(current))} "
+            + $"playerOam={PlayerOam(observed.Sprites)}/{ExpectedPlayerOam(current.Expected?.Sprites)}";
+    }
+
+    private static long ByteDelta(
+        IReadOnlyDictionary<string, long> current,
+        IReadOnlyDictionary<string, long> previous,
+        string signal) =>
+        (byte)(current[signal] - previous[signal]);
+
+    private static string Flag(bool value) => value ? "true" : "false";
+
+    private static bool BackgroundMatches(FunctionalFrameEvidence evidence)
+    {
+        var observed = evidence.Observed.Background;
+        var expected = evidence.Expected?.Background;
+        return observed is not null
+            && expected is not null
+            && observed.Count == expected.Count
+            && observed.Zip(expected).All(pair =>
+                pair.First.Location == pair.Second.Location
+                && pair.First.Tile == pair.Second.Tile
+                && pair.First.Palette == pair.Second.Palette);
+    }
+
+    private static bool OamMatches(FunctionalFrameEvidence evidence)
+    {
+        var observed = evidence.Observed.Sprites;
+        var expected = evidence.Expected?.Sprites;
+        return observed is not null
+            && expected is not null
+            && observed.Count == expected.Count
+            && observed.Zip(expected).All(pair =>
+                pair.First.Id == pair.Second.Id
+                && pair.First.Visible == pair.Second.Visible
+                && pair.First.OamSlot == pair.Second.OamSlot
+                && pair.First.Oam.SequenceEqual(pair.Second.Oam));
+    }
 
     private static string PlayerOam(IReadOnlyList<FunctionalSpriteObservation>? sprites) =>
         string.Join('.', sprites!.Single(sprite => sprite.Id == "player").Oam);
@@ -371,6 +505,11 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             drawStates[frame] = drawState;
             visibleCameraByFrame[frame] = visibleCamera;
             var audio = CaptureAudioProgress();
+            var bankWorkInCommit = cpu.Wram(PackedCameraMemory.BankWorkInCommit);
+            var decodeWorkInCommit = cpu.Wram(PackedCameraMemory.DecodeWorkInCommit);
+            var directoryWorkInVBlank = cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank);
+            var directoryWorkInCommit = cpu.Wram(PackedCameraMemory.DirectoryWorkInCommit);
+            var decodeWorkInVBlank = cpu.Wram(PackedCameraMemory.DecodeWorkInVBlank);
             var signals = new Dictionary<string, long>(StringComparer.Ordinal)
             {
                 ["cpuCycle"] = cpu.Cycles,
@@ -396,7 +535,16 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
                 ["visibleCameraY"] = visibleCamera.Y,
                 ["visibleRomBank"] = cpu.CurrentRomBank,
                 ["collisionQueries"] = cpu.WorldPackCollisionQueries.Count,
-                ["forbiddenVideoWork"] = ForbiddenVideoWork(),
+                ["bankWorkInCommit"] = bankWorkInCommit,
+                ["decodeWorkInCommit"] = decodeWorkInCommit,
+                ["directoryWorkInVBlank"] = directoryWorkInVBlank,
+                ["directoryWorkInCommit"] = directoryWorkInCommit,
+                ["decodeWorkInVBlank"] = decodeWorkInVBlank,
+                ["forbiddenVideoWork"] = bankWorkInCommit
+                    + decodeWorkInCommit
+                    + directoryWorkInVBlank
+                    + directoryWorkInCommit
+                    + decodeWorkInVBlank,
             };
             var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
@@ -417,7 +565,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
         private RunnerDrawState CapturePublishedDrawState()
         {
-            if (cpu.OamDmaTransfers.Count == 0)
+            if (cpu.OamDmaTransfers.Count == 0 || cpu.SourceWaitCompletions == 0)
             {
                 return EmptyDrawState;
             }
@@ -426,6 +574,15 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             var drawCycle = cpu.WramByteWrites.Last(write =>
                 write.Address == GameBoyRuntimeMemoryLayout.Sprites.OamShadowStart
                 && write.Cycles < publication.StartCycle).Cycles;
+            if (!cpu.WramWordWrites.Any(write =>
+                    write.LowAddress == addresses.PlayerXLow
+                    && write.Cycles <= drawCycle))
+            {
+                // Video initialization clears and publishes shadow OAM before source
+                // player state exists; that publication intentionally represents empty OAM.
+                return EmptyDrawState;
+            }
+
             return new(
                 ReadWordAt(addresses.PlayerXLow, drawCycle),
                 ReadWordAt(addresses.PlayerYLow, drawCycle),
@@ -448,15 +605,6 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             previous = current;
             return sequence == 0 ? null : sequence;
         }
-
-        private int ForbiddenVideoWork() => new[]
-        {
-            PackedCameraMemory.BankWorkInCommit,
-            PackedCameraMemory.DecodeWorkInCommit,
-            PackedCameraMemory.DirectoryWorkInVBlank,
-            PackedCameraMemory.DirectoryWorkInCommit,
-            PackedCameraMemory.DecodeWorkInVBlank,
-        }.Sum(address => cpu.Wram(address));
 
         private FunctionalAudioProgressObservation CaptureAudioProgress()
         {
@@ -564,11 +712,35 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 
         private int ReadWord(ushort low) => cpu.Wram(low) | (cpu.Wram((ushort)(low + 1)) << 8);
 
-        private int ReadWordAt(ushort low, long cycle) =>
-            cpu.WramWordWrites.LastOrDefault(write => write.LowAddress == low && write.Cycles <= cycle).Value;
+        private int ReadWordAt(ushort low, long cycle)
+        {
+            for (var index = cpu.WramWordWrites.Count - 1; index >= 0; index--)
+            {
+                var write = cpu.WramWordWrites[index];
+                if (write.LowAddress == low && write.Cycles <= cycle)
+                {
+                    return write.Value;
+                }
+            }
 
-        private byte ReadByteAt(ushort address, long cycle) =>
-            cpu.WramByteWrites.LastOrDefault(write => write.Address == address && write.Cycles <= cycle).Value;
+            throw new InvalidOperationException(
+                $"No WRAM word trace exists for address 0x{low:X4} at or before cycle {cycle}.");
+        }
+
+        private byte ReadByteAt(ushort address, long cycle)
+        {
+            for (var index = cpu.WramByteWrites.Count - 1; index >= 0; index--)
+            {
+                var write = cpu.WramByteWrites[index];
+                if (write.Address == address && write.Cycles <= cycle)
+                {
+                    return write.Value;
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"No WRAM byte trace exists for address 0x{address:X4} at or before cycle {cycle}.");
+        }
 
         private static GameBoyTestCpu CreateCpu(
             byte[] rom,
