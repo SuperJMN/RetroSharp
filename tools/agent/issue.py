@@ -32,6 +32,7 @@ from issue_gateway import (
     GitHubTracker,
     canonical_comment,
     run,
+    verify_canonical_origin,
     worktree_snapshot,
 )
 
@@ -229,20 +230,25 @@ def command_migrate(args: argparse.Namespace, root: Path) -> int:
                     }
                 )
                 migration_errors = True
-            elif len(agent_states(issue)) != 1:
+                continue
+            else:
+                states = agent_states(issue)
+                target_state = (
+                    "blocked"
+                    if contract.exemption or open_dependencies
+                    else "ready"
+                )
+                if states in (["claimed"], ["verified"]) or states == [target_state]:
+                    continue
                 actions.append(
                     {
                         "issue": int(issue["number"]),
                         "action": "state-only",
-                        "tracker_state": (
-                            "blocked"
-                            if contract.exemption or open_dependencies
-                            else "ready"
-                        ),
+                        "tracker_state": target_state,
                         "open_dependencies": open_dependencies,
                     }
                 )
-            continue
+                continue
         labels = label_names(issue)
         is_task = bool(
             labels
@@ -374,6 +380,7 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
     now = utcnow()
     lease_token = secrets.token_hex(24)
     fingerprint = token_fingerprint(lease_token)
+    claim_id = f"issue-{args.number}-{fingerprint}"
     branch = f"agent/work/issue-{args.number}-{fingerprint[:12]}"
     record = {
         "schema": "aex-1",
@@ -387,6 +394,7 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
         "dispatch_metadata": metadata.as_dict(),
         "checkpoint_push_allowed_at_dispatch": args.allow_checkpoint_push,
         "claim_fingerprint": fingerprint,
+        "claim_id": claim_id,
         "branch": branch,
         "worktree": None,
         "checkpoint": None,
@@ -410,8 +418,10 @@ def command_claim(args: argparse.Namespace, root: Path) -> int:
                 "claim",
                 {
                     "issue": args.number,
+                    "claim_id": claim_id,
                     "run_id": args.run_id,
                     "claim_sha": claim_sha,
+                    "contract_sha256": contract.digest,
                     "base": base,
                     "expires_at": record["expires_at"],
                     "branch": branch,
@@ -486,10 +496,11 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
     claim_store, claim_sha, record, _ = live_claim(args, root, issue_tracker)
     destination = args.path.resolve()
     branch = str(record["branch"])
+    gateway_repo = Path(str(record.get("gateway_repo", root))).resolve()
     recorded = record.get("worktree")
     if recorded:
         if destination != Path(str(recorded)).resolve() or not worktree_matches(
-            destination, branch, str(record["base"])
+            destination, branch, str(record["base"]), gateway_repo
         ):
             raise CliError(
                 WORKTREE_DENIED,
@@ -509,7 +520,7 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
     created = False
     branch_created = False
     if destination.exists() and not worktree_matches(
-        destination, branch, str(record["base"])
+        destination, branch, str(record["base"]), gateway_repo
     ):
         raise CliError(
             WORKTREE_DENIED,
@@ -543,7 +554,9 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
                 },
             )
         created = True
-        if not worktree_matches(destination, branch, str(record["base"])):
+        if not worktree_matches(
+            destination, branch, str(record["base"]), gateway_repo
+        ):
             run(
                 ["git", "worktree", "remove", str(destination)],
                 cwd=root,
@@ -570,7 +583,9 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
             and authenticate(current[1], args.lease_token)
             and Path(str(current[1].get("worktree", ""))).resolve()
             == destination
-            and worktree_matches(destination, branch, str(record["base"]))
+            and worktree_matches(
+                destination, branch, str(record["base"]), gateway_repo
+            )
         ):
             claim_sha = current[0]
         else:
@@ -598,8 +613,10 @@ def command_worktree(args: argparse.Namespace, root: Path) -> int:
     return OK
 
 
-def worktree_matches(path: Path, branch: str, base: str) -> bool:
+def worktree_matches(path: Path, branch: str, base: str, gateway_repo: Path) -> bool:
     if not path.is_dir():
+        return False
+    if git_common_dir(path) != git_common_dir(gateway_repo):
         return False
     actual_branch = run(
         ["git", "branch", "--show-current"],
@@ -618,11 +635,26 @@ def worktree_matches(path: Path, branch: str, base: str) -> bool:
     )
 
 
+def git_common_dir(path: Path) -> Path | None:
+    result = run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=path,
+        check=False,
+    )
+    if result.returncode:
+        return None
+    common_dir = Path(result.stdout.strip())
+    if not common_dir.is_absolute():
+        common_dir = path / common_dir
+    return common_dir.resolve()
+
+
 def push_checkpoint(
     args: argparse.Namespace,
     claim_store: GitClaimStore,
     record: dict[str, Any],
     worktree: Path,
+    gateway_repo: Path,
 ) -> None:
     authority = record["publication_authority"]
     if not args.validation:
@@ -645,6 +677,8 @@ def push_checkpoint(
             PUSH_DENIED,
             {"issue": args.number, "error": "unsafe-publication-authority"},
         )
+    if not args.tracker_fixture:
+        verify_canonical_origin(gateway_repo)
     status = run(
         ["git", "status", "--short", "--branch", "--untracked-files=all"],
         cwd=worktree,
@@ -664,11 +698,10 @@ def push_checkpoint(
         [
             "git",
             "push",
-            "--set-upstream",
             claim_store.origin,
-            f"HEAD:refs/heads/{branch}",
+            f"refs/heads/{branch}:refs/heads/{branch}",
         ],
-        cwd=worktree,
+        cwd=gateway_repo,
         check=False,
     )
     if result.returncode:
@@ -688,7 +721,7 @@ def push_checkpoint(
             claim_store.origin,
             f"refs/heads/{branch}:refs/remotes/origin/{branch}",
         ],
-        cwd=worktree,
+        cwd=gateway_repo,
     )
     counts = run(
         [
@@ -696,9 +729,9 @@ def push_checkpoint(
             "rev-list",
             "--left-right",
             "--count",
-            f"HEAD...refs/remotes/origin/{branch}",
+            f"refs/heads/{branch}...refs/remotes/origin/{branch}",
         ],
-        cwd=worktree,
+        cwd=gateway_repo,
     ).stdout.strip()
     if counts != "0\t0":
         raise CliError(
@@ -725,21 +758,25 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
             WORKTREE_DENIED,
             {"issue": args.number, "error": "recorded-worktree-missing"},
         )
-    snapshot = worktree_snapshot(worktree)
     expected_branch = (
         f"agent/work/issue-{args.number}-"
         f"{str(record['claim_fingerprint'])[:12]}"
     )
-    if record["branch"] != expected_branch or snapshot["branch"] != expected_branch:
+    gateway_repo = Path(str(record.get("gateway_repo", ""))).resolve()
+    if not str(record.get("gateway_repo", "")) or not worktree_matches(
+        worktree,
+        expected_branch,
+        str(record["base"]),
+        gateway_repo,
+    ):
         raise CliError(
             WORKTREE_DENIED,
             {
                 "issue": args.number,
-                "error": "recorded-worktree-branch-mismatch",
-                "expected": expected_branch,
-                "actual": snapshot["branch"],
+                "error": "recorded-worktree-not-owned-by-gateway",
             },
         )
+    snapshot = worktree_snapshot(worktree)
     if (
         run(
             [
@@ -760,10 +797,12 @@ def command_checkpoint(args: argparse.Namespace, root: Path) -> int:
         )
     pushed = False
     if args.allow_checkpoint_push:
-        push_checkpoint(args, claim_store, record, worktree)
+        push_checkpoint(args, claim_store, record, worktree, gateway_repo)
         pushed = True
     checkpoint = {
         "issue": args.number,
+        "claim_id": record["claim_id"],
+        "contract_sha256": record["contract_sha256"],
         "run_id": record["run_id"],
         "base": record["base"],
         "head": snapshot["head"],
@@ -850,6 +889,8 @@ def command_release(args: argparse.Namespace, root: Path) -> int:
             )
     payload = {
         "issue": args.number,
+        "claim_id": record["claim_id"],
+        "contract_sha256": record["contract_sha256"],
         "run_id": record["run_id"],
         "state": tracker_state,
         "claim_sha": claim_sha,

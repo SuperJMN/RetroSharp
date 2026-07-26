@@ -28,6 +28,11 @@ def token_fingerprint_for_test(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def canonical_payload(body: str) -> dict[str, object]:
+    state = body.split("<!-- retrosharp-agent-state\n", 1)[1].split("\n-->", 1)[0]
+    return json.loads(state)["payload"]
+
+
 def contract(
     *,
     parent: str = "#1",
@@ -493,6 +498,20 @@ class IssueCliTests(unittest.TestCase):
         )
         live_tracker.verify_origin()
 
+    def test_live_tracker_rejects_fork_when_gh_resolves_the_fork(self) -> None:
+        live_tracker = GitHubTracker.__new__(GitHubTracker)
+        live_tracker.repo_root = self.clone_a
+        live_tracker.repo = "fork-owner/RetroSharp"
+        git(
+            self.clone_a,
+            "remote",
+            "set-url",
+            "origin",
+            "git@github.com:fork-owner/RetroSharp.git",
+        )
+        with self.assertRaises(GatewayError):
+            live_tracker.verify_origin()
+
     def test_ttl_is_bounded_to_one_through_120(self) -> None:
         for ttl in ("0", "121"):
             result = subprocess.run(
@@ -734,6 +753,53 @@ class IssueCliTests(unittest.TestCase):
         )
         self.assertTrue(json.loads(result.stdout)["idempotent"])
 
+    def test_worktree_rejects_a_same_branch_fork_clone(self) -> None:
+        self.claim(self.clone_a)
+        fork_remote = self.root / "fork.git"
+        fork_clone = self.root / "fork-clone"
+        git(self.root, "clone", "--bare", str(self.remote), str(fork_remote))
+        git(self.root, "clone", str(fork_remote), str(fork_clone))
+        git(fork_clone, "checkout", "-b", self.branches["run-a"])
+
+        self.invoke(
+            self.clone_a,
+            "worktree",
+            "408",
+            "--lease-token",
+            self.tokens["run-a"],
+            str(fork_clone),
+            expect=26,
+        )
+
+    def test_checkpoint_rejects_a_fork_clone_recorded_as_worktree(self) -> None:
+        self.write_fixture(contract(checkpoint_push="allowed"))
+        self.claim(self.clone_a, "run-a", "--allow-checkpoint-push")
+        fork_remote = self.root / "fork.git"
+        fork_clone = self.root / "fork-clone"
+        git(self.root, "clone", "--bare", str(self.remote), str(fork_remote))
+        git(self.root, "clone", str(fork_remote), str(fork_clone))
+        git(fork_clone, "checkout", "-b", self.branches["run-a"])
+        store = GitClaimStore(self.clone_a)
+        claim_sha, record = store.read(408)
+        record["worktree"] = str(fork_clone)
+        record["gateway_repo"] = str(self.clone_a.resolve())
+        store.update(408, claim_sha, record)
+
+        self.invoke(
+            self.clone_b,
+            *self.checkpoint_args(),
+            "--allow-checkpoint-push",
+            expect=26,
+        )
+        self.assertFalse(
+            git(
+                fork_clone,
+                "ls-remote",
+                "origin",
+                f"refs/heads/{self.branches['run-a']}",
+            ).stdout.strip()
+        )
+
     def test_checkpoint_push_requires_contract_and_dispatch_authority(self) -> None:
         self.claim(self.clone_a)
         self.worktree()
@@ -899,6 +965,38 @@ class IssueCliTests(unittest.TestCase):
         self.assertTrue(
             all(self.tokens["run-a"] not in body for body in comments)
         )
+        payloads = {
+            event["kind"]: canonical_payload(str(event["body"]))
+            for event in events
+            if event["kind"]
+            in {"comment", "checkpoint-comment", "release-comment"}
+        }
+        claim_id = f"issue-408-{token_fingerprint_for_test(self.tokens['run-a'])}"
+        contract_hash = parse(contract(checkpoint_push="allowed")).digest
+        for kind in ("checkpoint-comment", "release-comment"):
+            self.assertEqual(claim_id, payloads[kind]["claim_id"])
+            self.assertEqual(contract_hash, payloads[kind]["contract_sha256"])
+        self.assertEqual(claim_id, payloads["comment"]["claim_id"])
+        self.assertEqual(contract_hash, payloads["comment"]["contract_sha256"])
+
+    def test_lint_rejects_duplicate_contract_headings_and_keys(self) -> None:
+        body = contract().replace(
+            "## Owner seam\n\nRemote issue claim gateway\n",
+            "## Owner seam\n\nRemote issue claim gateway\n\n"
+            "## Issue kind\n\nimplementation\n",
+        ).replace(
+            "Local commit: allowed",
+            "Local commit: allowed\nLocal commit: forbidden",
+        ).replace(
+            "Model: terra-high",
+            "Model: terra-high\nModel: terra-xhigh",
+        )
+        self.write_fixture(body)
+        result = self.invoke(self.clone_a, "lint", "408", expect=20)
+        errors = json.loads(result.stdout)["reports"][0]["errors"]
+        self.assertIn("duplicate-section:Kind", errors)
+        self.assertIn("publication:duplicate-local-commit", errors)
+        self.assertIn("dispatch:duplicate-model", errors)
 
     def test_migration_dry_run_produces_explicit_lint_clean_exemption(self) -> None:
         self.write_fixture("legacy body")
@@ -925,6 +1023,55 @@ class IssueCliTests(unittest.TestCase):
 
         self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
         self.invoke(self.clone_a, "lint", "--all-open")
+
+    def test_migration_moves_ready_exemption_to_blocked(self) -> None:
+        self.write_fixture(
+            render_exemption(source="fixture", reason="Not dispatchable.")
+        )
+        preview = self.invoke(
+            self.clone_a, "migrate", "--all-open", "--dry-run"
+        )
+        action = json.loads(preview.stdout)["actions"][0]
+        self.assertEqual("state-only", action["action"])
+        self.assertEqual("blocked", action["tracker_state"])
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+        issue = json.loads(self.fixture.read_text())["issues"]["408"]
+        self.assertEqual([{"name": "agent:blocked"}], issue["labels"])
+
+    def test_migration_moves_ready_task_with_open_dependency_to_blocked(self) -> None:
+        self.write_fixture(
+            contract(dependencies="- #2"),
+            blocked_by=[2],
+            dependency_state="OPEN",
+        )
+        preview = self.invoke(
+            self.clone_a, "migrate", "--all-open", "--dry-run"
+        )
+        action = json.loads(preview.stdout)["actions"][0]
+        self.assertEqual("state-only", action["action"])
+        self.assertEqual("blocked", action["tracker_state"])
+
+        self.invoke(self.clone_a, "migrate", "--all-open", "--apply")
+        self.invoke(self.clone_a, "lint", "--all-open")
+
+    def test_migration_preserves_claimed_and_verified_states(self) -> None:
+        self.write_fixture(
+            contract(dependencies="- #2"),
+            blocked_by=[2],
+            dependency_state="OPEN",
+        )
+        for state in ("claimed", "verified"):
+            data = json.loads(self.fixture.read_text())
+            data["issues"]["408"]["labels"] = [{"name": f"agent:{state}"}]
+            self.fixture.write_text(json.dumps(data))
+            preview = self.invoke(
+                self.clone_a, "migrate", "--all-open", "--dry-run"
+            )
+            actions = json.loads(preview.stdout)["actions"]
+            self.assertFalse(
+                any(action["issue"] == 408 for action in actions)
+            )
 
     def test_migration_repairs_multiple_states_from_open_dependencies(self) -> None:
         self.write_fixture(

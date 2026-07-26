@@ -13,6 +13,7 @@ from typing import Any
 
 
 STATE_LABELS = ("agent:ready", "agent:claimed", "agent:blocked", "agent:verified")
+CANONICAL_REPOSITORY = "SuperJMN/RetroSharp"
 
 
 class GatewayError(RuntimeError):
@@ -174,6 +175,23 @@ class GitClaimStore:
         return line.split()[0] if line else None
 
 
+def verify_canonical_origin(repo_root: Path) -> None:
+    remote = run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo_root,
+    ).stdout.strip()
+    match = re.search(
+        r"(?:github\.com[/:])([^/:\s]+/[^/\s]+?)(?:\.git)?$",
+        remote,
+    )
+    actual = match.group(1).removesuffix(".git") if match else None
+    if actual is None or actual.lower() != CANONICAL_REPOSITORY.lower():
+        raise GatewayError(
+            "origin-repository-not-canonical",
+            f"origin={remote} canonical={CANONICAL_REPOSITORY}",
+        )
+
+
 class GitHubTracker:
     def __init__(self, repo_root: Path):
         self.repo_root = repo_root
@@ -181,20 +199,12 @@ class GitHubTracker:
         self.repo = json.loads(result.stdout)["nameWithOwner"]
 
     def verify_origin(self) -> None:
-        remote = run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=self.repo_root,
-        ).stdout.strip()
-        match = re.search(
-            r"(?:github\.com[/:])([^/:\s]+/[^/\s]+?)(?:\.git)?$",
-            remote,
-        )
-        actual = match.group(1).removesuffix(".git") if match else None
-        if actual is None or actual.lower() != self.repo.lower():
+        if self.repo.lower() != CANONICAL_REPOSITORY.lower():
             raise GatewayError(
-                "origin-repository-mismatch",
-                f"origin={remote} github={self.repo}",
+                "github-repository-not-canonical",
+                f"github={self.repo} canonical={CANONICAL_REPOSITORY}",
             )
+        verify_canonical_origin(self.repo_root)
 
     def issue(self, number: int) -> dict[str, Any]:
         result = run(

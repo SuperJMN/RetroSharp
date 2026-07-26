@@ -136,14 +136,16 @@ python3 tools/agent/issue.py worktree <issue> --lease-token <winner-token> ../Re
 Claims use one unique commit at
 `refs/heads/agent/claims/issue-<number>`. Remote creation and every later
 mutation use compare-and-swap semantics, so separate clones cannot both win.
-The gateway always uses the `origin` remote and verifies that it names the same
-live GitHub repository selected by `gh`; there is no caller-selected remote.
+The gateway is anchored to the versioned canonical repository
+`SuperJMN/RetroSharp`. It rejects a fork even when `gh` resolves that fork;
+there is no caller-selected remote.
 Only the CAS winner receives the immutable lease token required by worktree,
 checkpoint, and release commands; tracker comments never contain it. The work
 branch is derived as
 `agent/work/issue-<number>-<token-fingerprint-prefix>` and is deliberately
 separate: releasing a claim deletes only the lock ref. Canonical tracker
-comments and the work branch preserve checkpoint/handoff evidence.
+comments preserve the durable claim identity and contract hash with each
+checkpoint/handoff receipt.
 
 The lease remains bound to the `origin/master` SHA recorded at claim time.
 Later `master` advancement does not invalidate parallel work. Contract or
@@ -168,8 +170,9 @@ Checkpoint pushes are disabled unless all of these are true:
 - dispatch used `claim --allow-checkpoint-push`;
 - execution uses `checkpoint --allow-checkpoint-push`;
 - at least one validation result is recorded;
-- the recorded worktree is clean, its claim base remains an ancestor, and it
-  passes submodule and `git diff --check` checks;
+- the recorded worktree belongs to the gateway repository, is clean, its claim
+  base remains an ancestor, and it passes submodule and `git diff --check`
+  checks;
 - the derived branch is pushed normally without force and exact remote
   alignment is verified afterward.
 

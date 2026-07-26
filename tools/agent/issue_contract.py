@@ -63,6 +63,7 @@ class DispatchMetadata:
 class Contract:
     sections: dict[str, str]
     body: str
+    parse_errors: tuple[str, ...] = ()
 
     @property
     def digest(self) -> str:
@@ -79,20 +80,28 @@ class Contract:
 def parse(body: str) -> Contract:
     matches = list(re.finditer(r"(?m)^#{2,3} ([^\n]+)\s*$", body))
     sections: dict[str, str] = {}
+    parse_errors: list[str] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
         title = match.group(1).strip()
-        sections[_FORM_ALIASES.get(title.lower(), title)] = body[match.end():end].strip()
-    return Contract(sections, body)
+        canonical_title = _FORM_ALIASES.get(title.lower(), title)
+        if canonical_title in sections:
+            parse_errors.append(f"duplicate-section:{canonical_title}")
+            continue
+        sections[canonical_title] = body[match.end():end].strip()
+    return Contract(sections, body, tuple(sorted(set(parse_errors))))
 
 
 def lint(contract: Contract) -> list[str]:
+    errors = list(contract.parse_errors)
     if contract.exemption:
         if contract.sections.get("Schema") != SCHEMA_VERSION:
-            return ["schema:expected-aex-1"]
-        return []
+            errors.append("schema:expected-aex-1")
+        return sorted(set(errors))
 
-    errors = [f"missing:{name}" for name in REQUIRED if not contract.sections.get(name)]
+    errors.extend(
+        f"missing:{name}" for name in REQUIRED if not contract.sections.get(name)
+    )
     if contract.sections.get("Schema") != SCHEMA_VERSION:
         errors.append("schema:expected-aex-1")
 
@@ -147,9 +156,12 @@ def publication_authority(
     contract: Contract,
 ) -> tuple[PublicationAuthority | None, list[str]]:
     section = contract.sections.get("Publication authority", "")
-    fields = _key_values(section)
+    fields, duplicate_fields = _key_values(section)
     required = ("local commit", "checkpoint push", "pull request", "merge")
     errors = [
+        f"publication:duplicate-{field.replace(' ', '-')}"
+        for field in duplicate_fields
+    ] + [
         f"publication:missing-{name.replace(' ', '-')}" for name in required if name not in fields
     ]
     for name in required:
@@ -166,8 +178,13 @@ def publication_authority(
 
 
 def dispatch_metadata(contract: Contract) -> tuple[DispatchMetadata | None, list[str]]:
-    fields = _key_values(contract.sections.get("Dispatch metadata", ""))
-    errors: list[str] = []
+    fields, duplicate_fields = _key_values(
+        contract.sections.get("Dispatch metadata", "")
+    )
+    errors = [
+        f"dispatch:duplicate-{field.replace(' ', '-')}"
+        for field in duplicate_fields
+    ]
     model = fields.get("model", "").lower()
     effort = fields.get("effort", "").lower()
     if model not in {"terra-high", "terra-xhigh", "sol-max"}:
@@ -356,13 +373,18 @@ def value(contract: Contract, name: str) -> str:
     return contract.sections.get(name, "").strip().strip("`").lower()
 
 
-def _key_values(section: str) -> dict[str, str]:
+def _key_values(section: str) -> tuple[dict[str, str], list[str]]:
     result: dict[str, str] = {}
+    duplicates: list[str] = []
     for line in section.splitlines():
         match = re.fullmatch(r"\s*([^:]+):\s*(.+?)\s*", line)
         if match:
-            result[match.group(1).strip().lower()] = match.group(2).strip()
-    return result
+            key = match.group(1).strip().lower()
+            if key in result:
+                duplicates.append(key)
+                continue
+            result[key] = match.group(2).strip()
+    return result, sorted(set(duplicates))
 
 
 def _migration_layer(
