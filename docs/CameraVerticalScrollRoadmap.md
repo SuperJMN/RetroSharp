@@ -200,8 +200,8 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
     vertical extent the camera can reach, or provide a `World.Map(...)` path with
     explicit taller height for the sample.
   - [x] Keep `retrosharpWorldY` / `retrosharpStreamY` alignment intact (see
-    `docs/AgentContext.md` Tiled section) so background and world layers stay
-    visually aligned when the band shifts.
+    `docs/AgentContext.md`, “Runner And Tiled Facts”) so background and world
+    layers stay visually aligned when the band shifts.
 - Verify:
   - [x] The VS-1 sample reads distinct rows as it scrolls (not a repeating band).
   - [x] `dotnet test` green; tracked ROMs regenerated only if a tracked sample

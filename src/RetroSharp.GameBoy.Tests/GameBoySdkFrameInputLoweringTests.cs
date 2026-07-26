@@ -6,11 +6,9 @@ using RetroSharp.Parser;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkFrameInputLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
@@ -25,13 +23,11 @@ public sealed class GameBoySdkFrameInputLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30]), "ROM should first wait until the previous VBlank has ended.");
         Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38]), "ROM should then wait until the next VBlank begins.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
     {
         var builder = new GbBuilder();
@@ -75,7 +71,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
         new("Wait-frame lowering must not use source operand context.");
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_poll_input_operation_to_deterministic_game_boy_bytes()
     {
         var builder = new GbBuilder();
@@ -89,7 +84,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Direct_button_read_and_bare_button_identifiers_are_rejected()
     {
         const string source = """
@@ -108,7 +102,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Bare_button_identifiers_are_rejected_by_input_facade()
     {
         const string source = """
@@ -125,7 +118,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Theory]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     [InlineData("Button.A")]
     [InlineData("Button.B")]
     [InlineData("Button.Select")]
@@ -158,11 +150,10 @@ public sealed class GameBoySdkFrameInputLoweringTests
                               }
                               """;
 
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+        _ = GameBoyRomCompiler.CompileSource(source);
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Input_facade_predicates_lower_like_explicit_numeric_checks()
     {
         const string explicitComparisonSource = """
@@ -201,7 +192,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_tick_input_api_for_variable_jump()
     {
         const string source = """
@@ -237,7 +227,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xEA, 0xF1, 0xC0]), "input_poll should snapshot the previous button mask before reading the current tick.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0x47]), "input_poll should read the settled action-button group into the current tick mask.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0xB0, 0xEA, 0xF0, 0xC0]), "input_poll should read the settled direction-button group and store a combined button mask.");
@@ -249,7 +238,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Input_poll_settles_joypad_rows_before_latching_buttons()
     {
         const string source = """
@@ -264,7 +252,6 @@ public sealed class GameBoySdkFrameInputLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0x47]), "input_poll should discard early action-row reads so DMG hardware has time to settle.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0xCB, 0x37]), "input_poll should discard early d-pad-row reads so DMG hardware has time to settle.");
         Assert.True(ContainsSequence(rom, [0xEA, 0xF0, 0xC0, 0x3E, 0x30, 0xE0, 0x00]), "input_poll should deselect both joypad rows after latching the snapshot.");

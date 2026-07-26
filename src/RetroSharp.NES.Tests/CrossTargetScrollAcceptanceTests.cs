@@ -74,10 +74,9 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Same_source_lowers_to_a_rom_on_both_targets()
     {
         var baseDirectory = RepoRoot();
-        var gbRom = GameBoyRomCompiler.CompileSource(HorizontalScrollSource, baseDirectory);
+        _ = GameBoyRomCompiler.CompileSource(HorizontalScrollSource, baseDirectory);
         var nesRom = NesRomCompiler.CompileSource(HorizontalScrollSource, baseDirectory);
 
-        Assert.Equal(32768, gbRom.Length);
         Assert.NotEmpty(nesRom);
     }
 
@@ -116,8 +115,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
 
-        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
 
         var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(0x08, nesRom[6] & 0x08);
@@ -130,8 +128,7 @@ public sealed class CrossTargetScrollAcceptanceTests
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 
-        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
 
         var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(0x08, nesRom[6] & 0x08);
@@ -149,8 +146,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
 
-        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
 
         var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(0x08, nesRom[6] & 0x08);
@@ -172,8 +168,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
 
-        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
 
         var program = BuildNesProgram(source, sampleDirectory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
@@ -242,8 +237,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        var gbRom = GameBoyRomCompiler.CompileSource(verticalSource);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(verticalSource);
 
         var nesRom = NesRomCompiler.CompileSource(verticalSource);
         Assert.NotEmpty(nesRom);
@@ -266,8 +260,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        var gbRom = GameBoyRomCompiler.CompileSource(collisionSource);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(collisionSource);
 
         var nesRom = NesRomCompiler.CompileSource(collisionSource);
         Assert.NotEmpty(nesRom);
@@ -293,8 +286,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        var gbRom = GameBoyRomCompiler.CompileSource(collisionSource);
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(collisionSource);
 
         var nesRom = NesRomCompiler.CompileSource(collisionSource);
         Assert.NotEmpty(nesRom);
@@ -329,8 +321,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        var gbRom = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
 
         var nesRom = NesRomCompiler.CompileSource(actorSource, RepoRoot());
         Assert.NotEmpty(nesRom);
@@ -360,8 +351,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        var gbRom = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
-        Assert.Equal(32768, gbRom.Length);
+        _ = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
 
         var nesRom = NesRomCompiler.CompileSource(actorSource, RepoRoot());
         Assert.NotEmpty(nesRom);

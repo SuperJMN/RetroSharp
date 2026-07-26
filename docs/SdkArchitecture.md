@@ -74,9 +74,10 @@ runtime, stream, lowerer, and byte building; NES separates the validated
 executable `NesPhysicalFrameScheduler`. Feature partial names are
 deliberately rename-safe. Compiled owner types must be
 declared in those roots and absent from `GameBoyRomBuilder.cs` or
-`NesRomBuilder.cs`. Every focused SDK test method, plus intentional focused
-frontend callers, declares compiled `RetroSharp.TestOwnership` metadata, while
-executable-member enumeration and IL traversal are shared by all symbol guards.
+`NesRomBuilder.cs`. Focused suites own ordinary target-lowering regressions by
+locality and primary observable. Only intentional focused-frontend exceptions
+need compiled `RetroSharp.TestOwnership` metadata; executable-member enumeration
+and IL traversal remain shared by the symbol guards.
 
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,

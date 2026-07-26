@@ -8,37 +8,32 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
 {
     private const ushort UserVariableStart = 0xC000;
 
-    public static TheoryData<string, string, string, string?> ProductionSamples => new()
+    public static TheoryData<string, string, string> ProductionSamples => new()
     {
         {
             "static-drawing",
             "samples/static-drawing/drawing.rs",
-            "validation/scenarios/static-drawing.gb.json",
-            "samples/static-drawing/drawing.gb"
+            "validation/scenarios/static-drawing.gb.json"
         },
         {
             "cross-target-camera",
             "samples/cross-target-camera/camera.rs",
-            "validation/scenarios/cross-target-camera.gb.json",
-            null
+            "validation/scenarios/cross-target-camera.gb.json"
         },
         {
             "source-vscroll",
             "samples/source-vscroll/vscroll.rs",
-            "validation/scenarios/source-vscroll.gb.json",
-            null
+            "validation/scenarios/source-vscroll.gb.json"
         },
         {
             "source-free-scroll",
             "samples/source-free-scroll/freescroll.rs",
-            "validation/scenarios/source-free-scroll.gb.json",
-            "samples/source-free-scroll/freescroll.gb"
+            "validation/scenarios/source-free-scroll.gb.json"
         },
         {
             "window-hud",
             "samples/window-hud/hud.rs",
-            "validation/scenarios/window-hud.gb.json",
-            null
+            "validation/scenarios/window-hud.gb.json"
         },
     };
 
@@ -47,20 +42,13 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
     public void Production_rom_passes_the_shared_functional_scenario(
         string sampleId,
         string sourceRelativePath,
-        string scenarioRelativePath,
-        string? trackedRomRelativePath)
+        string scenarioRelativePath)
     {
         var sourcePath = RepositoryFile(sourceRelativePath);
         var sourceDirectory = Path.GetDirectoryName(sourcePath)
             ?? throw new InvalidOperationException($"Could not locate the directory for '{sourceRelativePath}'.");
         var source = File.ReadAllText(sourcePath);
-        var firstRom = GameBoyRomCompiler.CompileSource(source, sourceDirectory);
-        var regeneratedRom = GameBoyRomCompiler.CompileSource(source, sourceDirectory);
-        Assert.Equal(firstRom, regeneratedRom);
-        if (trackedRomRelativePath is not null)
-        {
-            Assert.Equal(File.ReadAllBytes(RepositoryFile(trackedRomRelativePath)), firstRom);
-        }
+        var rom = GameBoyRomCompiler.CompileSource(source, sourceDirectory);
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         var factory = new SimpleGameBoyMachineFactory(sampleId);
@@ -74,7 +62,7 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(sourceRelativePath.Replace(".rs", ".gb", StringComparison.Ordinal), firstRom),
+            new FunctionalRomArtifact(sourceRelativePath.Replace(".rs", ".gb", StringComparison.Ordinal), rom),
             adapter,
             new AuthoredGameBoyBackgroundOracle(sampleId, factory));
         var failureFrames = report.IntegrityFailures
@@ -94,7 +82,7 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
             + string.Join(Environment.NewLine, report.IntegrityFailures.Take(20))
             + Environment.NewLine
             + string.Join(Environment.NewLine, failureState));
-        Assert.Equal(firstRom, factory.LoadedRom);
+        Assert.Equal(rom, factory.LoadedRom);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);
         Assert.Equal(scenario.ObservationFrames, report.FrameEvidence.Count);

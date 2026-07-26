@@ -124,8 +124,6 @@ public sealed class GameBoyRunnerLandingTests
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             sdkPluginRegistry: null);
         var playerSprite = oracleProgram.SpriteAssets["mario_player"];
-        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
-        Assert.Equal(trackedRom, build.Rom);
         var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
         var playerX = variables["player.x"].Address;
         var playerY = variables["player.y"].Address;
@@ -137,7 +135,7 @@ public sealed class GameBoyRunnerLandingTests
         var cameraY = variables["view.y"].Address;
         var respawnPhase = variables["frame.respawnPhase"].Address;
         var world = GameBoyTiledMapImporter.Load(Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"));
-        var cpu = new GameBoyTestCpu(trackedRom) { CycleAccurateLy = true };
+        var cpu = new GameBoyTestCpu(build.Rom) { CycleAccurateLy = true };
         cpu.TracedWramBytes.Add(playerY);
         cpu.TracedWramBytes.Add(checked((ushort)(playerY + 1)));
         cpu.TracedWramBytes.Add(respawnPhase);

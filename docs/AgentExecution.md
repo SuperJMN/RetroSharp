@@ -5,7 +5,9 @@ Last updated: 2026-07-18.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
 
-For generic repo orientation, read `../AGENTS.md` first. For memory-derived context, known traps, recent changes, and validation commands, read `AgentContext.md`.
+For generic repo orientation, read `../AGENTS.md` first. Use
+`AgentContext.md` for the current authority map, task router, code anchors, and
+known traps.
 
 ## Source Of Truth
 
@@ -13,7 +15,7 @@ For generic repo orientation, read `../AGENTS.md` first. For memory-derived cont
 - Dedicated epic execution plans: linked `docs/*Roadmap.md` files such as
   `docs/LargeWorldsRoadmap.md` and `docs/GeneratedCodePerformanceRoadmap.md`
 - Agent entrypoint: `AGENTS.md`
-- Agent memory/context: `docs/AgentContext.md`
+- Current agent routing/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`
 - Issue template: `.github/ISSUE_TEMPLATE/agent-roadmap-task.yml`
 - Pull request template: `.github/PULL_REQUEST_TEMPLATE.md`

@@ -624,7 +624,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0]), "actor draw should read the camera X low byte.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE1, 0xC0]), "actor draw should read the camera X high byte.");
         Assert.True(ContainsSequence(rom, [0xFE, 0xA0, 0xD2]), "actor draw should cull screen X values at or beyond the 160px Game Boy viewport.");
@@ -877,7 +876,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0]), "runtime spawn activation should read camera X low instead of materializing all slots at compile time.");
     }
 
@@ -1028,7 +1026,6 @@ public partial class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFE, 0x30]), "SpawnWindow width 48 should lower to a runtime screen-X window check.");
     }
 
@@ -1047,9 +1044,7 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
+        _ = GameBoyRomCompiler.CompileSource(source);
     }
 
     [Fact]

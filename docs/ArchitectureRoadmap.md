@@ -159,7 +159,7 @@ Intrinsic work belongs here:
 | `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge. |
 | `Camera.AabbTiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors and projected world-space actors on long maps; requires target support for `CameraRelativeAabb`. |
 | `Camera.AabbHitTop(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge. Returns an aligned world-pixel `i16` top or `-1`/`0xFFFF` for no hit; byte destinations remain compatible only for active worlds up to 32 hardware rows. Requires target support for `CameraRelativeAabbHitTop`. |
-| `World.Column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `World.Column(...)` now. |
+| `World.Column(...)` | Portable SDK resource/setup | Compact source authoring for one world column; use `World.Load(...)` for editable Tiled maps. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
 | `map_flags_at(...)` | Portable SDK candidate | Reads generated world flag rows. |
 | `map_stream_column(...)` | Target intrinsic/transitional | SDK camera should own streaming. |
@@ -553,7 +553,12 @@ The first portable world resource lives under `RetroSharp.Core.Sdk`:
 
 Interpreting Tiled collision data into portable `WorldTileFlags` is target-neutral and lives in `RetroSharp.Core.Sdk.Tiled.TiledCollisionFlags`. It reads Tiled JSON/XML objectgroups, `retrosharpCollision`/`retrosharpFlags` custom properties, and collision-layer GIDs without any Game Boy or NES specifics, so collision modeling is shared rather than owned by a target backend. The Game Boy Tiled importer still owns the genuinely target-specific work (Game Boy tile quantization, deduplication, single-tilemap flattening) and calls this shared collision interpretation.
 
-The first Game Boy integration is `World.Column(...)`, `World.Flags(...)`, and `World.Map(width, streamY, height)`. `World.Map(...)` builds a `WorldMap2D`, derives the initial visible background rows from it, regenerates the streaming ROM column tables, and generates parallel collision flag tables from the same resource. `World.Column(...)` remains as a compatibility path for older tests and samples, but new runner-level world data should use `World.Column(...)` and `World.Flags(...)`.
+The first Game Boy integration is `World.Column(...)`, `World.Flags(...)`, and
+`World.Map(width, streamY, height)`. `World.Map(...)` builds a `WorldMap2D`,
+derives the initial visible background rows from it, regenerates the streaming
+ROM column tables, and generates parallel collision flag tables from the same
+resource. `World.Column(...)` and `World.Flags(...)` remain the compact
+source-authored path; editable runner-level maps should use `World.Load(...)`.
 
 ## Agent Task Contract
 

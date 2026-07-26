@@ -49,7 +49,6 @@ public sealed class NesMusicTests
 
         var rom = NesRomCompiler.CompileSource(source, directory);
 
-        Assert.Equal(40976, rom.Length);
         Assert.Equal((byte)'N', rom[0]);
         Assert.Equal((byte)'E', rom[1]);
         Assert.Equal((byte)'S', rom[2]);
@@ -103,7 +102,6 @@ public sealed class NesMusicTests
 
         var rom = NesRomCompiler.CompileSource(source, directory);
 
-        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(rom, [0x03, 0x08]), "Compiled NES SFX trace should keep pulse 1 trigger writes.");
         Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Audio.Update should write SFX pulse 1 registers through the shared indirect $40xx writer.");
         // Sfx.Play only arms the SFX engine (STA $0312 = SfxActive); it must not touch the music tick.

@@ -7,11 +7,9 @@ using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkSpriteLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -34,7 +32,6 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x55, 0x33, 0xAA, 0xCC]), "ROM should contain tile data loaded from the editable sprite asset.");
         Assert.True(ContainsSequence(rom, [0xCD, 0x80, 0xFF]), "Video.WaitVBlank should publish shadow OAM through the HRAM DMA routine.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xC6]), "sprite_draw should write the logical Y plus the Game Boy sprite offset to shadow OAM.");
@@ -43,7 +40,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_composes_16x32_assets_from_four_hardware_sprites()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -57,7 +53,6 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xC6]), "Top-left piece should use the logical Y coordinate in shadow OAM.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xC6]), "Top-right piece should add the 8 px X offset in shadow OAM.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xC6]), "Bottom-left piece should add the 16 px Y offset in shadow OAM.");
@@ -65,7 +60,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_accepts_logical_flip_x_and_flips_logical_metasprites_horizontally()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -80,7 +74,6 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x20]), "sprite_draw should lower logical flipX to the Game Boy OAM X-flip bit.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "sprite_draw should test the logical flipX boolean before placing metasprite pieces.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xC6]), "X-flipped first logical piece should move to the mirrored top-right shadow OAM X coordinate.");
@@ -90,7 +83,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_accepts_logical_palette_slot_and_lowers_to_game_boy_object_palette_bit()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -104,12 +96,10 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xC6]), "palette slot 1 should lower to the Game Boy OBP1 shadow OAM attribute bit.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_combines_logical_flip_x_and_palette_slot_in_oam_attributes()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -123,12 +113,10 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xC6]), "flipX and palette slot 1 should combine into shadow OAM attributes without exposing raw flags in source.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -146,7 +134,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_flips_against_logical_width_before_padding()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(18, 16)));
@@ -161,14 +148,12 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xC6]), "The first 8 px piece should move to logical X + 10 in shadow OAM when an 18 px sprite is flipped.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xC6]), "The middle 8 px piece should move to logical X + 2 in shadow OAM when an 18 px sprite is flipped.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xC6]), "The padded edge shadow OAM piece should straddle the logical origin instead of adding padded left spacing.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_rejects_raw_oam_attribute_constants_in_portable_flip_argument()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -186,7 +171,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_treats_frame_as_a_logical_frame_index()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -205,12 +189,10 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite_draw should multiply the logical frame by the per-frame tile count in shadow OAM.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_draw_logical_sprite_operation_to_game_boy_metasprite_bytes()
     {
         var builder = new GbBuilder();
@@ -240,7 +222,6 @@ public sealed class GameBoySdkSpriteLoweringTests
         Assert.True(ContainsSequence(bytes, [0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite draw operation should use the first generated tile for the first shadow OAM entry.");
     }
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_actor_draw_with_animation_frame_as_sprite_draw_frame()
     {
         const string source = """
@@ -265,7 +246,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_sprite_draw_with_runtime_operands()
     {
         const string source = """
@@ -290,7 +270,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_sprite_draw_from_compile_time_operand_intrinsic()
     {
         const string source = """
@@ -314,7 +293,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_reuses_one_runtime_struct_index_inside_the_operation()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -357,7 +335,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_does_not_reuse_runtime_struct_offsets_for_different_indices()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -388,7 +365,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_runtime_struct_offset_reuse_ends_with_each_operation()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -418,7 +394,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_initializes_runtime_struct_offset_before_internal_flip_branches()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -454,7 +429,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compilation_rejects_sprite_draws_that_exceed_one_frame_hardware_sprite_budget()
     {
         var draws = string.Join(
@@ -480,7 +454,6 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compilation_rejects_constant_y_sprite_draws_that_exceed_scanline_budget()
     {
         var draws = string.Join(

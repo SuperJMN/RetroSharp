@@ -1,7 +1,9 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **complete; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, NES
-`LW-3.1` through `LW-3.4`, and joint acceptance `LW-3.5` are implemented.**
+Status: **complete historical execution record; Waves 0 and 1, Game Boy
+`LW-2.1` through `LW-2.5`, NES `LW-3.1` through `LW-3.4`, and joint acceptance
+`LW-3.5` are implemented. Do not dispatch work from old checklists without a
+live issue.**
 Last updated: 2026-07-14.
 
 Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.

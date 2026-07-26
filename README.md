@@ -323,6 +323,8 @@ The sample sources have been migrated to the current language surface: symbolic 
 
 ## AI agent orientation
 
-AI CLI agents should start with `AGENTS.md`. `llms.txt` provides a compact index, and `docs/AgentContext.md` preserves recent project memory, known traps, reliable commands, and publication expectations.
-
-See `docs/ProjectOverview.md` for the reader-facing project overview, `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, `docs/LargeWorldsRoadmap.md` for the full-`stage1` packed-world/banking/mapper execution plan, `docs/GeneratedCodePerformanceRoadmap.md` for the measured GB/NES generated-code performance execution plan, `docs/NesFrameSchedulingRoadmap.md` for the #410 physical-frame/OAM/packed-camera execution chain, `docs/FunctionalRomAcceptance.md` for exact-ROM scenarios, cadence budgets, transient integrity, and GB/NES adapters, `docs/ActorProjectileFunctionalAcceptance.md` for sustained actor/projectile OAM and lifecycle acceptance, `docs/NesLargeWorldsCartridgeProfile.md` for the accepted future mapper-4/TVROM NES bank contract, `docs/WorldCoordinateCollisionContract.md` for the accepted 16-bit logical coordinate and collision-hit ABI, `docs/ActorFrameworkRoadmap.md` for the actor framework slice, `docs/CameraVerticalScrollRoadmap.md` for the AR-5 vertical scroll execution plan, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.
+AI CLI agents should start with `AGENTS.md`, then read the concise current
+router in `docs/AgentContext.md` and the live issue or specification. Open only
+the task-owning reference selected there; completed roadmaps are historical
+context, not a mandatory startup bundle. `llms.txt` is the complete compact
+documentation index.

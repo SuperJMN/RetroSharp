@@ -68,8 +68,6 @@ public sealed class NesRunnerLandingTests
             sdkPluginRegistry: null).VideoProgram;
         var playerSprite = oracleProgram.SpriteAssets["mario_player"];
         var playerPaletteSlot = oracleProgram.ResolveSpritePaletteBaseSlot("mario_player", 0);
-        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.nes"));
-        Assert.Equal(trackedRom, build.Rom);
         var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
         var playerX = variables["player.x"].Address;
         var playerY = variables["player.y"].Address;
@@ -83,7 +81,7 @@ public sealed class NesRunnerLandingTests
         var world = NesTiledWorldImporter.Load(
             Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"),
             NesVideoProgram.FirstSpriteTile + 95);
-        var cpu = new NesTestCpu(trackedRom);
+        var cpu = new NesTestCpu(build.Rom);
         cpu.TracedRamBytes.Add(playerY);
         cpu.TracedRamBytes.Add(checked((ushort)(playerY + 1)));
         cpu.TracedRamBytes.Add(respawnPhase);

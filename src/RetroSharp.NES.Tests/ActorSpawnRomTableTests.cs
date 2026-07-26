@@ -14,7 +14,6 @@ public partial class NesRomCompilerTests
     [InlineData(64)]
     [InlineData(128)]
     [InlineData(240)]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Actor_spawn_rom_lookup_has_constant_nes_shape_and_exact_columns(int recordCount)
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.ObjectsJson(recordCount));
@@ -65,7 +64,6 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Rom_tables_record_the_nes_wide_spawn_payload_delta()
     {
         const int recordCount = 16;
@@ -102,7 +100,6 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Wide_spawn_layer_uses_bounded_nes_spatial_candidate_rom_index()
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.SpacedObjectsJson(recordCount: 240, spacing: 16));
@@ -129,7 +126,6 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "FocusedLowering")]
     public void Spatial_spawn_window_marks_used_only_after_successful_nes_slot_claim()
     {
         var baseDirectory = WriteActorSpawnMap(ActorSpawnRomTableFixture.SpacedObjectsJson(recordCount: 33, spacing: 16));

@@ -3,11 +3,9 @@ namespace RetroSharp.GameBoy.Tests;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkAnimationLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Animation_frame_maps_constant_ticks_through_looping_clip_data()
     {
         const string source = """
@@ -24,7 +22,6 @@ public sealed class GameBoySdkAnimationLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x02, 0xFE]), "tick 0 should select frame 1 through the complete zero-extended I16 intrinsic return.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x06, 0xFE]), "tick 5 should still select frame 1 through the complete zero-extended I16 intrinsic return.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x0A, 0xFE]), "tick 6 should select frame 2 through the complete zero-extended I16 intrinsic return.");
@@ -33,7 +30,6 @@ public sealed class GameBoySdkAnimationLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Animation_frame_lowers_dynamic_ticks_with_predictable_modulo_and_boundary_checks()
     {
         const string source = """
@@ -47,7 +43,6 @@ public sealed class GameBoySdkAnimationLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFE, 0x12, 0xDA]), "animation_frame should compare the tick against total clip duration before modulo subtraction.");
         Assert.True(ContainsSequence(rom, [0xD6, 0x12]), "animation_frame should subtract total clip duration while the tick is outside the clip.");
         Assert.True(ContainsSequence(rom, [0xFE, 0x06, 0xDA]), "animation_frame should test the first frame boundary.");

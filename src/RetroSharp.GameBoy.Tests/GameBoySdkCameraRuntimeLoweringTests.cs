@@ -3,11 +3,9 @@ namespace RetroSharp.GameBoy.Tests;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
-[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkCameraRuntimeLoweringTests
 {
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_camera_runtime_to_world_scroll_state_and_streaming()
     {
         const string source = """
@@ -42,7 +40,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE0, 0xC0, 0xEA, 0xE1, 0xC0, 0xEA, 0xE2, 0xC0]), "camera_init should initialize the 16-bit world X and fine scroll state.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x15, 0xEA, 0xE4, 0xC0, 0x3E, 0x1F, 0xEA, 0xE5, 0xC0]), "camera_init should prefetch one column beyond the 20 full visible columns for fine-scroll partial tiles.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x05, 0xEA, 0xE6, 0xC0]), "camera_init should seed the right source cursor to the fine-scroll partial edge column.");
@@ -58,7 +55,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_compares_requested_x_before_reusing_camera_steps()
     {
         const string source = """
@@ -76,7 +72,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x2D, 0xC1, 0xFA, 0x01, 0xC0, 0xEA, 0x4A, 0xC1, 0x3E, 0x10, 0xEA, 0x2E, 0xC1]), "camera_set_position should cache both requested word bytes and seed the two-tile per-frame step budget.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x4A, 0xC1, 0x47, 0xFA, 0xE1, 0xC0, 0xB8, 0xDA]), "camera_set_position should compare requested and current X high bytes before selecting a direction.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE0, 0xC0, 0xB8, 0xCA]), "camera_set_position should compare X low bytes when the high bytes match and keep a no-movement path.");
@@ -85,7 +80,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_tracks_y_state_and_applies_vertical_scroll()
     {
         const string source = """
@@ -103,7 +97,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE8, 0xC0, 0xEA, 0xE9, 0xC0, 0xEA, 0xEA, 0xC0]), "camera_init should initialize the 16-bit world Y and fine scroll state.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x4A, 0xC1, 0x47, 0xFA, 0xE9, 0xC0, 0xB8, 0xDA]), "camera_set_position should compare requested and current Y high bytes before selecting a direction.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE8, 0xC0, 0xB8, 0xCA]), "camera_set_position should compare Y low bytes when the high bytes match and keep a no-movement path.");
@@ -113,7 +106,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_streams_bottom_row_when_y_crosses_tile_down()
     {
         const string source = """
@@ -131,7 +123,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x0B, 0xEA, 0xEB, 0xC0, 0x3E, 0x0F, 0xEA, 0xEC, 0xC0]), "camera_init should seed top and bottom background row cursors.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xED, 0xC0, 0x3E, 0x04, 0xEA, 0xEE, 0xC0]), "camera_init should seed top and bottom source row cursors.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xEA, 0x1B, 0xC1]), "downward crossing should queue the current bottom source row for deferred streaming.");
@@ -143,7 +134,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_streams_top_row_when_y_crosses_tile_up()
     {
         const string source = """
@@ -161,7 +151,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xD6, 0x01, 0xEA, 0xEB, 0xC0]), "upward row streaming should move the top background row cursor before streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xD6, 0x01, 0xEA, 0xED, 0xC0]), "upward row streaming should move the top source row cursor before streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x1B, 0xC1]), "upward crossing should queue the wrapped top source row for deferred streaming.");
@@ -171,7 +160,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
     {
         const string source = """
@@ -206,14 +194,12 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x13, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "camera_tile_column_at should add a screen tile column to the camera's source-left column.");
         Assert.True(ContainsSequence(rom, [0xFE, 0x10, 0xDA]), "camera_tile_column_at should branch when the source column is already inside the configured map width.");
         Assert.True(ContainsSequence(rom, [0xD6, 0x10]), "camera_tile_column_at should wrap columns by subtracting the configured map width.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_tilemap_fill_column_to_runtime_vram_writes()
     {
         const string source = """
@@ -229,14 +215,12 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0x47]), "ROM should preserve the tile id in B.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0xA0, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should write row 13 at $99A0 + column.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0xC0, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should write row 14 at $99C0 + column.");
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_map_columns_to_rom_data_and_streams_them_to_vram()
     {
         const string source = """
@@ -256,7 +240,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x01, 0x05]), "ROM should contain map row 0 data.");
         Assert.True(ContainsSequence(rom, [0x02, 0x06]), "ROM should contain map row 1 data.");
         Assert.True(ContainsSequence(rom, [0x03, 0x07]), "ROM should contain map row 2 data.");
@@ -267,7 +250,6 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_horizontal_streaming_fills_configured_visible_world_rows()
     {
         const string source = """
