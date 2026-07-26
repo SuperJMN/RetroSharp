@@ -17,6 +17,14 @@ internal sealed partial class GameBoySdkOperationLowerer
     private const int VisibleScreenTileHeight = 18;
     private const int BackgroundTileMapWidth = 32;
     private const int BackgroundTileMapHeight = 32;
+    // Refill value for the vertical-motion countdown (GameBoyRuntimeMemoryLayout.PackedCamera
+    // .DiagonalVerticalMotionCountdown): keep the prefetch armed for a frame after the last vertical
+    // step (one frame survives the per-frame decrement) so a diagonal that briefly runs level does
+    // not thrash between prefetch and reactive paths, without over-arming a reversing follow camera.
+    private const byte DiagonalVerticalMotionFrames = 2;
+    // Prefetch the next column edge two pixels into each tile, so the freshly revealed column is
+    // already resident and the camera never has to stall at the tile boundary.
+    private const byte DiagonalColumnPrefetchFineOffset = 2;
 
     private void EmitStreamMapColumn(Sdk2DOperation.StreamMapColumn operation)
     {
@@ -126,6 +134,8 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalColumnCount);
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalRowKind);
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalRowCount);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
             builder.LoadAImmediate(PendingStreamColumn);
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalNextStreamKind);
         }
@@ -155,44 +165,24 @@ internal sealed partial class GameBoySdkOperationLowerer
     {
         var config = EnsureCameraConfigured("camera_set_position");
 
-        if (framePlan.SerializePackedDiagonalPreparation && usesPackedCameraRuntime && ProgramQueuesDiagonalStreaming())
-        {
-            context.EmitWordExpressionToA(operation.X, highByte: false);
-            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow);
-            context.EmitWordExpressionToA(operation.X, highByte: true);
-            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh);
-            context.EmitWordExpressionToA(operation.Y, highByte: false);
-            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow);
-            context.EmitWordExpressionToA(operation.Y, highByte: true);
-            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh);
-            builder.LoadAImmediate(1);
-            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetFresh);
-            EmitSelectPackedDiagonalPreparationAxis();
-
-            EmitCameraSetAxisPosition(
-                GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow,
-                GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh,
-                GameBoyRuntimeMemoryLayout.Camera.XLow,
-                GameBoyRuntimeMemoryLayout.Camera.XHigh,
-                () => EmitCameraMoveLeftStep(config),
-                () => EmitCameraMoveRightStep(config),
-                "camera_set_position_right",
-                "camera_set_position_x_end");
-            EmitCameraSetAxisPosition(
-                GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow,
-                GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh,
-                GameBoyRuntimeMemoryLayout.Camera.YLow,
-                GameBoyRuntimeMemoryLayout.Camera.YHigh,
-                () => EmitCameraMoveUpStep(config),
-                () => EmitCameraMoveDownStep(config),
-                "camera_set_position_down",
-                "camera_set_position_y_end");
-            EmitAdvancePackedDiagonalPreparationAxis();
-            return;
-        }
-
         if (operation.Axes.HasFlag(ScrollAxes.Horizontal))
         {
+            if (ProgramQueuesDiagonalStreaming() && operation.Axes.HasFlag(ScrollAxes.Vertical))
+            {
+                // Age the "recent vertical motion" countdown once per frame. The vertical walk step
+                // refreshes it whenever the camera actually scrolls vertically, so the horizontal
+                // column prefetch only fires during real diagonal motion. Purely horizontal motion
+                // lets the countdown reach zero and falls back to the cheaper reactive crossing, so a
+                // heavy horizontal-only frame is never burdened with an early ~full-frame edge decode.
+                var ageDone = builder.CreateLabel("packed_camera_vertical_motion_age_done");
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+                builder.CompareImmediate(0);
+                builder.JumpAbsolute(0xCA, ageDone);
+                builder.SubtractAImmediate(1);
+                builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+                builder.Label(ageDone);
+            }
+
             EmitCameraSetAxisPosition(
                 operation.X,
                 GameBoyRuntimeMemoryLayout.Camera.XLow,
@@ -214,83 +204,6 @@ internal sealed partial class GameBoySdkOperationLowerer
                 "camera_set_position_down",
                 "camera_set_position_y_end");
         }
-    }
-
-    private void EmitSelectPackedDiagonalPreparationAxis()
-    {
-        var xCrosses = builder.CreateLabel("packed_diagonal_x_crosses");
-        var checkY = builder.CreateLabel("packed_diagonal_check_y_crossing");
-        var yCrosses = builder.CreateLabel("packed_diagonal_y_crosses");
-        var preferRow = builder.CreateLabel("packed_diagonal_prefer_row");
-        var done = builder.CreateLabel("packed_diagonal_preparation_axis_ready");
-
-        builder.XorA();
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparedAxis);
-
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.XHigh);
-        builder.LoadBFromA();
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh);
-        builder.CompareB();
-        builder.JumpAbsolute(0xC2, xCrosses);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.XLow);
-        builder.AndImmediate(0xF8);
-        builder.LoadBFromA();
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow);
-        builder.AndImmediate(0xF8);
-        builder.CompareB();
-        builder.JumpAbsolute(0xC2, xCrosses);
-        builder.JumpAbsolute(checkY);
-
-        builder.Label(xCrosses);
-        builder.LoadAImmediate(PendingStreamColumn);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-
-        builder.Label(checkY);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.YHigh);
-        builder.LoadBFromA();
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh);
-        builder.CompareB();
-        builder.JumpAbsolute(0xC2, yCrosses);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.YLow);
-        builder.AndImmediate(0xF8);
-        builder.LoadBFromA();
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow);
-        builder.AndImmediate(0xF8);
-        builder.CompareB();
-        builder.JumpAbsolute(0xC2, yCrosses);
-        builder.JumpAbsolute(done);
-
-        builder.Label(yCrosses);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.JumpAbsolute(0xCA, preferRow);
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalNextPreparationAxis);
-        builder.CompareImmediate(PendingStreamRow);
-        builder.JumpAbsolute(0xC2, done);
-
-        builder.Label(preferRow);
-        builder.LoadAImmediate(PendingStreamRow);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreferredPreparationAxis);
-        builder.Label(done);
-    }
-
-    private void EmitAdvancePackedDiagonalPreparationAxis()
-    {
-        var preparedRow = builder.CreateLabel("packed_diagonal_prepared_row");
-        var done = builder.CreateLabel("packed_diagonal_preparation_advanced");
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparedAxis);
-        builder.CompareImmediate(PendingStreamColumn);
-        builder.JumpAbsolute(0xC2, preparedRow);
-        builder.LoadAImmediate(PendingStreamRow);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalNextPreparationAxis);
-        builder.JumpAbsolute(done);
-        builder.Label(preparedRow);
-        builder.CompareImmediate(PendingStreamRow);
-        builder.JumpAbsolute(0xC2, done);
-        builder.LoadAImmediate(PendingStreamColumn);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalNextPreparationAxis);
-        builder.Label(done);
     }
 
     private void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)

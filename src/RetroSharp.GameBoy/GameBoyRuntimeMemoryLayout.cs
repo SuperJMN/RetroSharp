@@ -288,13 +288,11 @@ internal static class GameBoyRuntimeMemoryLayout
         internal const ushort EdgeExpansionAddressLow = 0xC1A9;
         internal const ushort EdgeExpansionAddressHigh = 0xC1AA;
         internal const ushort EdgeExpansionBank = 0xC1AB;
-        internal const ushort DiagonalTargetXLow = 0xC1AC;
-        internal const ushort DiagonalTargetXHigh = 0xC1AD;
-        internal const ushort DiagonalTargetYLow = 0xC1AE;
-        internal const ushort DiagonalTargetYHigh = 0xC1AF;
-        internal const ushort DiagonalPreferredPreparationAxis = 0xC1B0;
-        internal const ushort DiagonalPreparedAxis = 0xC1B1;
-        internal const ushort DiagonalNextPreparationAxis = 0xC1B2;
+        // Diagonal column-prefetch scheduling state. These two cells (and 0xC1AC-0xC1AF, 0xC1B2, and
+        // 0xC1E7, now unlabeled) previously backed the serialized diagonal-preparation scheduler, which
+        // has been retired in favour of the mid-tile column prefetch plus reactive row crossing.
+        internal const ushort DiagonalColumnPrefetchLatch = 0xC1B0;
+        internal const ushort DiagonalVerticalMotionCountdown = 0xC1B1;
         internal const ushort VisualCache2Valid = 0xC1B3;
         internal const ushort VisualCache2ChunkLow = 0xC1B4;
         internal const ushort VisualCache2ChunkHigh = 0xC1B5;

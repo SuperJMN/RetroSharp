@@ -516,9 +516,9 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.InRange(followedY, (byte)1, (byte)64);
         Assert.Equal(followedX, followedY);
 
-        // Move to the final fine-scroll pixel before a diagonal tile crossing.
-        // Within a tile both axes may publish together; the edge boundary is the
-        // point that must serialize its column and row payloads across VBlanks.
+        // Move to the final fine-scroll pixel before a diagonal tile crossing. The visible camera
+        // now publishes both axes together every frame; the column and row VRAM payloads still
+        // commit one edge per VBlank behind that smooth scroll rather than stalling it.
         for (var alignmentFrame = 0;
              alignmentFrame < 8 && (cpu.IoRegister(0xFF43) & 0x07) != 0x07;
              alignmentFrame++)
@@ -545,21 +545,12 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             + $"{cpu.Wram(PackedCameraMemory.ResidentCount)}/{cpu.Wram(PackedCameraMemory.CommitCount)}/{cpu.Wram(PackedCameraMemory.ReleaseCount)} "
             + $"forbidden={cpu.Wram(PackedCameraMemory.BankWorkInCommit)}/{cpu.Wram(PackedCameraMemory.DecodeWorkInCommit)}/{cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank)}";
         Assert.True(cpu.IoRegister(0xFF43) > followedX, $"The leading column should publish within the bounded preparation window. {leadingAxisDiagnostics}");
-        Assert.Equal(followedY, cpu.IoRegister(0xFF42));
-
-        const int maximumTrailingAxisPublicationFrames = 4;
-        for (var publicationFrame = 0;
-             publicationFrame < maximumTrailingAxisPublicationFrames
-             && cpu.IoRegister(0xFF42) <= followedY;
-             publicationFrame++)
-        {
-            cpu.RunAdditionalFrames(1);
-        }
-
-        var trailingAxisDiagnostics = $"SCX={cpu.IoRegister(0xFF43)} SCY={cpu.IoRegister(0xFF42)} "
-            + $"lifecycle={cpu.Wram(PackedCameraMemory.RequestCount)}/{cpu.Wram(PackedCameraMemory.PrepareCount)}/{cpu.Wram(PackedCameraMemory.ResidentCount)}/"
-            + $"{cpu.Wram(PackedCameraMemory.CommitCount)}/{cpu.Wram(PackedCameraMemory.ReleaseCount)}";
-        Assert.True(cpu.IoRegister(0xFF42) > followedY, $"The staggered row should publish within the bounded serialized preparation window. {trailingAxisDiagnostics}");
+        // The freeze fix publishes both axes of the visible camera together every frame, so the
+        // trailing row's scroll advances alongside the leading column instead of stalling behind it.
+        // The column and row VRAM payloads still commit one edge per VBlank behind that smooth scroll.
+        Assert.True(
+            cpu.IoRegister(0xFF42) > followedY,
+            $"The trailing row should publish together with the leading column. {leadingAxisDiagnostics}");
         Assert.Equal(cpu.IoRegister(0xFF43), cpu.IoRegister(0xFF42));
         Assert.Equal(cpu.Wram(PackedCameraMemory.CommitCount), cpu.Wram(PackedCameraMemory.ReleaseCount));
     }

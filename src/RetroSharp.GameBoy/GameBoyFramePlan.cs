@@ -17,7 +17,6 @@ internal sealed record GameBoyFramePlan(
     bool UsesRetainedOam,
     bool UsesPackedCameraRuntime,
     byte MaximumCameraWalkStepsPerFrame,
-    bool SerializePackedDiagonalPreparation,
     IReadOnlyList<GameBoyPhysicalFrameWindow> Windows,
     IReadOnlyList<GameBoyFrameWork> MandatoryWork,
     IReadOnlyList<GameBoyStagedFrameWork> StagedWork)
@@ -88,7 +87,6 @@ internal sealed record GameBoyFramePlan(
             usesRetainedOam,
             usesPackedCameraRuntime,
             CameraWalkStepsPerFrame,
-            SerializePackedDiagonalPreparation: true,
             [
                 new GameBoyPhysicalFrameWindow(SdkCpuWorkWindowIds.Frame, DmgCyclesPerFrame),
                 new GameBoyPhysicalFrameWindow(SdkCpuWorkWindowIds.VideoSafe, DmgCyclesPerVideoSafeWindow),

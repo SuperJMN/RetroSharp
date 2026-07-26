@@ -15,7 +15,7 @@ and packed-camera details.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `audio-mixed-load.gb` | `adcef49366405e81912c1de028809662de497e97c2fd630ab11ecf5595dbe1ef` |
+| `audio-mixed-load.gb` | `e5a9ff3b851e93092470ea1a71ef5bf9ac6f407a7f7b66c5a0b00c54598fb491` |
 | `audio-mixed-load.nes` | `2c70f5e910916f2541ece692528064c653801ec90c31c1f24d33cae5a1725d17` |
 | NES runtime ABI sidecar | `99e9d062b99b3bfd7a5299af8ed6a22ee1988567e94dbdc91fcf734bcdc77668` |
 | exact tracked `runner.nes` | `26ab400141da8bfd8b502f5272463e5fd0236d170ba17901526f41b064f0d727` |
