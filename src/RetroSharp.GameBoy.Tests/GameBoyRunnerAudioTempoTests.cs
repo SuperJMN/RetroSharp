@@ -291,19 +291,41 @@ public sealed class GameBoyRunnerAudioTempoTests
             packedWorld.SerializedBytes,
             enablePackedCameraCache: true,
             enableDiagonalVisualCache: true);
-        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
-        cpu.RunFrames(130);
-
-        AssertPayload(0xC170, runtime.Layout.EdgeSlots[0].Start);
-        AssertPayload(0xC17A, runtime.Layout.EdgeSlots[1].Start);
-
-        void AssertPayload(ushort metadata, ushort payload)
+        var observedResidentRow = false;
+        for (var slot = 0; slot < 2 && !observedResidentRow; slot++)
         {
-            Assert.Equal(2, cpu.Wram((ushort)(metadata + 1)));
-            var worldRow = cpu.Wram((ushort)(metadata + 3)) | cpu.Wram((ushort)(metadata + 4)) << 8;
-            var sourceColumn = cpu.Wram((ushort)(metadata + 7)) | cpu.Wram((ushort)(metadata + 8)) << 8;
-            var payloadLength = cpu.Wram((ushort)(metadata + 9));
+            var cpu = new GameBoyTestCpu(rom);
+            var metadata = GameBoyPackedCameraRuntime.SlotMetadata(slot);
+            for (var payload = 0; payload < 32; payload++)
+            {
+                cpu.RunUntilWramEquals(metadata, GameBoyPackedCameraRuntime.Resident);
+                var axis = cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.AxisOffset));
+                if (axis != GameBoyPackedCameraRuntime.Row)
+                {
+                    cpu.RunUntilWramEquals(metadata, GameBoyPackedCameraRuntime.Released);
+                    continue;
+                }
+
+                AssertPayload(cpu, metadata, runtime.Layout.EdgeSlots[slot].Start);
+                observedResidentRow = true;
+                break;
+            }
+        }
+
+        Assert.True(observedResidentRow, "Expected the first packed row payload to become resident.");
+
+        void AssertPayload(GameBoyTestCpu cpu, ushort metadata, ushort payload)
+        {
+            Assert.Equal(
+                GameBoyPackedCameraRuntime.Row,
+                cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.AxisOffset)));
+            var worldRow = cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset))
+                           | cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset)) << 8;
+            var sourceColumn = cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.OrthogonalLowOffset))
+                               | cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.OrthogonalHighOffset)) << 8;
+            var payloadLength = cpu.Wram((ushort)(metadata + GameBoyPackedCameraRuntime.PayloadLengthOffset));
             var expected = Enumerable.Range(0, payloadLength)
                 .Select(offset => (byte)worldTileGrid.TileIdAt((sourceColumn + offset) % worldTileGrid.Width, worldRow))
                 .ToArray();

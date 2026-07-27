@@ -350,15 +350,15 @@ public sealed class GameBoyStagedCameraTests
     }
 
     [Fact]
-    public void Diagonal_staging_prefetches_the_column_then_commits_column_first_and_row_second()
+    public void Diagonal_staging_prefetches_the_row_then_retries_and_commits_the_column()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """
             void Main() {
                 World.Load("tall.tmj");
                 Camera.Init(16, 0, 40);
-                Camera.SetPosition(8, 8);
                 while (true) {
+                    Camera.SetPosition(8, 8);
                     Video.WaitVBlank();
                     Camera.Apply();
                 }
@@ -376,24 +376,23 @@ public sealed class GameBoyStagedCameraTests
         };
 
         cpu.RunUntilWramEquals(WorldPackMemory.ValidationState, 1);
-        var writesBeforeColumn = cpu.VramWrites.Count;
+        var writesBeforeRow = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
+        Assert.Equal(Row, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
         Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
-        Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
-        // The column edge is now prefetched during the rightward walk, so it commits before the
-        // vertical walk publishes its first pixel; the visible Y is still 0 at the column release.
-        Assert.Equal(0, cpu.Wram(0xC14F));
-        Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
-        var writesBeforeRow = cpu.VramWrites.Count;
+        Assert.Equal(7, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
+        Assert.Equal(8, cpu.Wram(0xC14F));
+        Assert.Equal(21, cpu.VramWrites.Count - writesBeforeRow);
+        var writesBeforeColumn = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
 
-        Assert.Equal(Row, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
+        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
+        Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(8, cpu.Wram(0xC14F));
-        Assert.Equal(21, cpu.VramWrites.Count - writesBeforeRow);
+        Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
         Assert.Equal(2, cpu.Wram(PackedCameraMemory.ResidentCount));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
@@ -826,7 +825,7 @@ public sealed class GameBoyStagedCameraTests
     }
 
     [Fact]
-    public void Repeated_diagonal_crossings_alternate_column_row_column_row()
+    public void Repeated_diagonal_crossings_alternate_row_column_row_column()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """
@@ -857,8 +856,8 @@ public sealed class GameBoyStagedCameraTests
                 (ushort)(cpu.Wram(PackedCameraMemory.VisibleCameraYLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraYHigh) << 8)));
         }
 
-        Assert.Equal(new byte[] { Column, Row, Column, Row }, observed);
-        Assert.Equal(new (ushort X, ushort Y)[] { (8, 7), (16, 15), (16, 15), (16, 16) }, visibleCoordinates);
+        Assert.Equal(new byte[] { Row, Column, Row, Column }, observed);
+        Assert.Equal(new (ushort X, ushort Y)[] { (7, 15), (15, 15), (15, 16), (16, 16) }, visibleCoordinates);
         Assert.Equal(16, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(16, cpu.Wram(0xC14F));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));

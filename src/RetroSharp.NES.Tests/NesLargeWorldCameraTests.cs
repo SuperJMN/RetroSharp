@@ -810,6 +810,57 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
+    public void Diagonal_position_prefetches_at_fine_x_two_and_crosses_only_after_the_column_is_resident()
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        const string source = """
+            void Main() {
+                Video.Init();
+                World.Load("assets/maps/stage1.tmj");
+                Camera.Init(312, 0, 40);
+                while (true) {
+                    Camera.SetPosition(8, 8);
+                    Video.WaitVBlank();
+                    Camera.Apply();
+                }
+            }
+            """;
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.TracedRamBytes.Add(NesRuntimeMemoryLayout.Camera.X);
+        cpu.TracedRamBytes.Add(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+        cpu.TracedRamBytes.Add(PendingAxes);
+        for (var frame = 0; frame < 120 && cpu.ScrollX != 8; frame++)
+        {
+            cpu.RunFrames(cpu.PhysicalFrames + 1);
+        }
+
+        var latchWrite = Assert.Single(
+            cpu.RamByteWrites,
+            write => write.Address == NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection
+                     && write.Value == Positive);
+        var fineXAtPrefetch = cpu.RamByteWrites
+            .Where(write => write.Address == NesRuntimeMemoryLayout.Camera.X && write.Cycle <= latchWrite.Cycle)
+            .Last();
+        Assert.Equal(2, fineXAtPrefetch.Value & 0x07);
+        Assert.Contains(
+            cpu.RamByteWrites,
+            write => write.Address == PendingAxes
+                     && (write.Value & Column) != 0
+                     && write.Cycle >= latchWrite.Cycle);
+        Assert.Equal(8, cpu.ScrollX);
+        Assert.Equal(1, cpu.Ram(RequestCount));
+        Assert.Equal(1, cpu.Ram(PrepareCount));
+        Assert.Equal(1, cpu.Ram(ResidentCount));
+        Assert.Equal(1, cpu.Ram(CommitCount));
+        Assert.Equal(1, cpu.Ram(ReleaseCount));
+        Assert.Equal(0, cpu.Ram(PendingAxes));
+    }
+
+    [Fact]
     public void Packed_commit_rejects_a_mismatched_16_bit_pending_tag_without_mutating_the_resident_slot()
     {
         var serialized = NesWorldPackPlacementTests.CreateSyntheticWorldPack();

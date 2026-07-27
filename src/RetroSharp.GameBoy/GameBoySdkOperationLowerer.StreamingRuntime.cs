@@ -10,7 +10,8 @@ internal sealed partial class GameBoySdkOperationLowerer
         byte direction,
         ushort sourceLow,
         ushort? sourceHigh,
-        ushort targetColumn)
+        ushort targetColumn,
+        GameBoyCameraConfig config)
     {
         builder.LoadAImmediate(GameBoyPackedCameraRuntime.Column);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
@@ -20,6 +21,17 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitCopyByte(targetColumn, GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
         EmitCopyByte(GameBoyRuntimeMemoryLayout.Camera.TopBackgroundRow, GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
         EmitCopyWordOrZeroHigh(GameBoyRuntimeMemoryLayout.Camera.TopSourceRow, null, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            var startReady = builder.CreateLabel("packed_camera_column_vertical_start_ready");
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
+            builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
+            builder.JumpAbsolute(0xC2, startReady);
+            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
+            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
+            builder.Label(startReady);
+        }
+
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PreparedSlot);
     }
@@ -29,7 +41,8 @@ internal sealed partial class GameBoySdkOperationLowerer
         ushort sourceRow,
         ushort targetRow,
         GameBoyCameraConfig config,
-        int cursorDelta)
+        int cursorDelta,
+        bool useDiagonalTargetX = false)
     {
         builder.LoadAImmediate(GameBoyPackedCameraRuntime.Row);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
@@ -39,21 +52,49 @@ internal sealed partial class GameBoySdkOperationLowerer
         builder.LoadAImmediate(0);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
         EmitStoreAddressWithDeltaModulo(targetRow, 32, cursorDelta, GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
-        var targetReady = builder.CreateLabel("packed_camera_row_target_start_ready");
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn);
-        builder.AddAImmediate(1);
-        builder.CompareImmediate(32);
-        builder.JumpAbsolute(0xDA, targetReady);
-        builder.SubtractAImmediate(32);
-        builder.Label(targetReady);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-        EmitCopyWordOrZeroHigh(
-            GameBoyRuntimeMemoryLayout.Camera.ScreenLeftColumn,
-            config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.ScreenLeftColumnHigh : null,
-            GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow,
-            GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
+        if (useDiagonalTargetX)
+        {
+            EmitStorePackedDiagonalRowHorizontalStart();
+        }
+        else
+        {
+            var targetReady = builder.CreateLabel("packed_camera_row_target_start_ready");
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.LeftBackgroundColumn);
+            builder.AddAImmediate(1);
+            builder.CompareImmediate(32);
+            builder.JumpAbsolute(0xDA, targetReady);
+            builder.SubtractAImmediate(32);
+            builder.Label(targetReady);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+            EmitCopyWordOrZeroHigh(
+                GameBoyRuntimeMemoryLayout.Camera.ScreenLeftColumn,
+                config.MapWidth > byte.MaxValue ? GameBoyRuntimeMemoryLayout.Camera.ScreenLeftColumnHigh : null,
+                GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow,
+                GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
+        }
+
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PreparedSlot);
+    }
+
+    private void EmitStorePackedDiagonalRowHorizontalStart()
+    {
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow);
+        builder.LoadEFromA();
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh);
+        builder.LoadDFromA();
+        for (var shift = 0; shift < 3; shift++)
+        {
+            builder.Emit(0xCB, 0x3A); // SRL D
+            builder.Emit(0xCB, 0x1B); // RR E
+        }
+
+        builder.LoadAFromE();
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
+        builder.AndImmediate(31);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+        builder.LoadAFromD();
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
     }
 
     private void EmitStoreAddressWithDeltaModulo(ushort source, int modulo, int delta, ushort target)

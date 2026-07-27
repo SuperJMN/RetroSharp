@@ -22,6 +22,8 @@ internal sealed partial class GameBoySdkOperationLowerer
     // step (one frame survives the per-frame decrement) so a diagonal that briefly runs level does
     // not thrash between prefetch and reactive paths, without over-arming a reversing follow camera.
     private const byte DiagonalVerticalMotionFrames = 2;
+    private const byte DiagonalColumnPreparationEmitted = 1;
+    private const byte DiagonalRowPreparationEmitted = 2;
     // Prefetch the next column edge two pixels into each tile, so the freshly revealed column is
     // already resident and the camera never has to stall at the tile boundary.
     private const byte DiagonalColumnPrefetchFineOffset = 2;
@@ -136,6 +138,8 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalRowCount);
             builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalColumnPrefetchLatch);
             builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalVerticalMotionCountdown);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparationEmittedThisFrame);
             builder.LoadAImmediate(PendingStreamColumn);
             builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.PendingDiagonalNextStreamKind);
         }
@@ -164,6 +168,29 @@ internal sealed partial class GameBoySdkOperationLowerer
     private void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
     {
         var config = EnsureCameraConfigured("camera_set_position");
+        var packedDiagonal = usesPackedCameraRuntime
+                             && operation.Axes.HasFlag(ScrollAxes.Horizontal)
+                             && operation.Axes.HasFlag(ScrollAxes.Vertical);
+
+        if (packedDiagonal)
+        {
+            context.EmitWordExpressionToA(operation.X, highByte: false);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow);
+            context.EmitWordExpressionToA(operation.X, highByte: true);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh);
+            context.EmitWordExpressionToA(operation.Y, highByte: false);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow);
+            context.EmitWordExpressionToA(operation.Y, highByte: true);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh);
+            var preparationStateReady = builder.CreateLabel("packed_camera_preparation_state_ready");
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparationEmittedThisFrame);
+            builder.CompareImmediate(DiagonalRowPreparationEmitted);
+            builder.JumpAbsolute(0xCA, preparationStateReady);
+            builder.LoadAImmediate(0);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalPreparationEmittedThisFrame);
+            builder.Label(preparationStateReady);
+            EmitPrefetchPackedDiagonalRow(config);
+        }
 
         if (operation.Axes.HasFlag(ScrollAxes.Horizontal))
         {
@@ -183,26 +210,56 @@ internal sealed partial class GameBoySdkOperationLowerer
                 builder.Label(ageDone);
             }
 
-            EmitCameraSetAxisPosition(
-                operation.X,
-                GameBoyRuntimeMemoryLayout.Camera.XLow,
-                GameBoyRuntimeMemoryLayout.Camera.XHigh,
-                () => EmitCameraMoveLeftStep(config),
-                () => EmitCameraMoveRightStep(config),
-                "camera_set_position_right",
-                "camera_set_position_x_end");
+            if (packedDiagonal)
+            {
+                EmitCameraSetAxisPosition(
+                    GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow,
+                    GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXHigh,
+                    GameBoyRuntimeMemoryLayout.Camera.XLow,
+                    GameBoyRuntimeMemoryLayout.Camera.XHigh,
+                    () => EmitCameraMoveLeftStep(config),
+                    () => EmitCameraMoveRightStep(config),
+                    "camera_set_position_right",
+                    "camera_set_position_x_end");
+            }
+            else
+            {
+                EmitCameraSetAxisPosition(
+                    operation.X,
+                    GameBoyRuntimeMemoryLayout.Camera.XLow,
+                    GameBoyRuntimeMemoryLayout.Camera.XHigh,
+                    () => EmitCameraMoveLeftStep(config),
+                    () => EmitCameraMoveRightStep(config),
+                    "camera_set_position_right",
+                    "camera_set_position_x_end");
+            }
         }
 
         if (operation.Axes.HasFlag(ScrollAxes.Vertical))
         {
-            EmitCameraSetAxisPosition(
-                operation.Y,
-                GameBoyRuntimeMemoryLayout.Camera.YLow,
-                GameBoyRuntimeMemoryLayout.Camera.YHigh,
-                () => EmitCameraMoveUpStep(config),
-                () => EmitCameraMoveDownStep(config),
-                "camera_set_position_down",
-                "camera_set_position_y_end");
+            if (packedDiagonal)
+            {
+                EmitCameraSetAxisPosition(
+                    GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYLow,
+                    GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetYHigh,
+                    GameBoyRuntimeMemoryLayout.Camera.YLow,
+                    GameBoyRuntimeMemoryLayout.Camera.YHigh,
+                    () => EmitCameraMoveUpStep(config),
+                    () => EmitCameraMoveDownStep(config),
+                    "camera_set_position_down",
+                    "camera_set_position_y_end");
+            }
+            else
+            {
+                EmitCameraSetAxisPosition(
+                    operation.Y,
+                    GameBoyRuntimeMemoryLayout.Camera.YLow,
+                    GameBoyRuntimeMemoryLayout.Camera.YHigh,
+                    () => EmitCameraMoveUpStep(config),
+                    () => EmitCameraMoveDownStep(config),
+                    "camera_set_position_down",
+                    "camera_set_position_y_end");
+            }
         }
     }
 

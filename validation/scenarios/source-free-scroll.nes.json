@@ -7,10 +7,10 @@
   "observationFrames": 600,
   "inputs": [],
   "checkpoints": [
-    { "id": "maximum-requested", "frame": 282, "expectedSignals": { "sourceCameraX": 248, "sourceCameraY": 248 } },
-    { "id": "maximum-visible", "frame": 283, "expectedSignals": { "visibleCameraX": 248, "visibleCameraY": 248 } },
-    { "id": "origin-requested", "frame": 562, "expectedSignals": { "sourceCameraX": 0, "sourceCameraY": 0 } },
-    { "id": "origin-visible", "frame": 563, "expectedSignals": { "visibleCameraX": 0, "visibleCameraY": 0 } }
+    { "id": "maximum-requested", "frame": 283, "expectedSignals": { "sourceCameraX": 248, "sourceCameraY": 248 } },
+    { "id": "maximum-visible", "frame": 284, "expectedSignals": { "visibleCameraX": 248, "visibleCameraY": 248 } },
+    { "id": "origin-requested", "frame": 563, "expectedSignals": { "sourceCameraX": 0, "sourceCameraY": 0 } },
+    { "id": "origin-visible", "frame": 564, "expectedSignals": { "visibleCameraX": 0, "visibleCameraY": 0 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,
