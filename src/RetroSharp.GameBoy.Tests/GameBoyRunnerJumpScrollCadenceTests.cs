@@ -10,7 +10,7 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
     private const int JumpHeldFrames = 40;
 
     [Fact]
-    public void Shared_runner_jump_adds_no_horizontal_scroll_stall()
+    public void Shared_runner_jump_does_not_stall_gameplay_during_packed_streaming()
     {
         var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             RunnerSample.CompiledSource(),
@@ -34,15 +34,26 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
             reproduction.HorizontalStalls <= reference.HorizontalStalls,
             $"Jump scrolling added horizontal stalls: reference={reference.Summary}; jump={reproduction.Summary}.");
         Assert.True(
+            reproduction.PackedReleaseGameplayStalls == 0,
+            $"Packed streaming stalled gameplay during the jump: reference={reference.Summary}; jump={reproduction.Summary}.");
+        Assert.True(
             reproduction.MaximumGameplayGap <= 1,
             $"Jump scrolling produced a sustained gameplay gap: reference={reference.Summary}; jump={reproduction.Summary}.");
         Assert.True(
             reproduction.MaximumAudioGap <= reference.MaximumAudioGap,
             $"Jump scrolling added an audio gap: reference={reference.Summary}; jump={reproduction.Summary}.");
         Assert.InRange(reproduction.MaximumRequestedVisibleLag, 0, 2);
+        Assert.NotEmpty(reproduction.ExtendedColumns);
+        Assert.All(reproduction.ExtendedColumns, observation => Assert.Equal(21, observation.PayloadLength));
+        Assert.Contains(
+            reproduction.ExtendedColumns,
+            observation => observation.RowLatch == GameBoyPackedCameraRuntime.Negative);
+        Assert.Contains(
+            reproduction.ExtendedColumns,
+            observation => observation.RowLatch == GameBoyPackedCameraRuntime.Positive);
         Assert.True(
-            reproduction.ExtendedColumnWhileRowLatched,
-            $"Jump scrolling never prepared the extended column needed by the prefetched row: {reproduction.Summary}.");
+            reproduction.MaximumCommitVramWrites <= 21,
+            $"Packed edge commit exceeded its 21-write VBlank budget: {reproduction.Summary}.");
         Assert.True(reproduction.LifecycleDrained, $"Jump lifecycle did not drain: {reproduction.Summary}.");
         Assert.Equal(0, reproduction.ForbiddenVideoWork);
     }
@@ -55,6 +66,7 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
             EnforceVblankVramWrites = true,
         };
         cpu.TracedWramBytes.Add(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
+        cpu.TracedWramBytes.Add(GameBoyRuntimeMemoryLayout.PackedCamera.LastCommitVramWrites);
         for (var slot = 0; slot < 2; slot++)
         {
             var metadata = GameBoyPackedCameraRuntime.SlotMetadata(slot);
@@ -138,30 +150,46 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
             Math.Max(
                 Math.Abs(frame.RequestedCameraX - frame.VisibleCameraX),
                 Math.Abs(frame.RequestedCameraY - frame.VisibleCameraY)));
+        var packedReleaseGameplayStalls = frames
+            .Zip(frames.Skip(1), (previous, current) => (previous, current))
+            .Count(pair =>
+                pair.current.Releases != pair.previous.Releases
+                && pair.current.GameplayTicks == pair.previous.GameplayTicks);
         var requests = Difference(cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.RequestCount), initialRequests);
         var prepares = Difference(cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.PrepareCount), initialPrepares);
         var residents = Difference(cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.ResidentCount), initialResidents);
         var commits = Difference(cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.CommitCount), initialCommits);
         var releases = Difference(cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.ReleaseCount), initialReleases);
-        var extendedColumnWhileRowLatched = Enumerable.Range(0, 2).Any(slot =>
-        {
-            var metadata = GameBoyPackedCameraRuntime.SlotMetadata(slot);
-            var axisAddress = (ushort)(metadata + GameBoyPackedCameraRuntime.AxisOffset);
-            var payloadLengthAddress = (ushort)(metadata + GameBoyPackedCameraRuntime.PayloadLengthOffset);
-            return cpu.WramByteWrites
-                .Where(write => write.Address == payloadLengthAddress && write.Value == 20)
-                .Any(write =>
-                    cpu.WramByteWrites
-                        .Where(candidate => candidate.Address == axisAddress && candidate.Cycles <= write.Cycles)
-                        .Select(candidate => candidate.Value)
-                        .LastOrDefault() == GameBoyPackedCameraRuntime.Column
-                    && cpu.WramByteWrites
-                        .Where(candidate =>
-                            candidate.Address == GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch
-                            && candidate.Cycles <= write.Cycles)
-                        .Select(candidate => candidate.Value)
-                        .LastOrDefault() != 0);
-        });
+        var extendedColumns = Enumerable.Range(0, 2)
+            .SelectMany(slot =>
+            {
+                var metadata = GameBoyPackedCameraRuntime.SlotMetadata(slot);
+                var axisAddress = (ushort)(metadata + GameBoyPackedCameraRuntime.AxisOffset);
+                var payloadLengthAddress = (ushort)(metadata + GameBoyPackedCameraRuntime.PayloadLengthOffset);
+                return cpu.WramByteWrites
+                    .Where(write =>
+                        write.Address == payloadLengthAddress
+                        && write.Value > 19
+                        && cpu.WramByteWrites
+                            .Where(candidate => candidate.Address == axisAddress && candidate.Cycles <= write.Cycles)
+                            .Select(candidate => candidate.Value)
+                            .LastOrDefault() == GameBoyPackedCameraRuntime.Column)
+                    .Select(write => new ExtendedColumnObservation(
+                        write.Value,
+                        cpu.WramByteWrites
+                            .Where(candidate =>
+                                candidate.Address == GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch
+                                && candidate.Cycles <= write.Cycles)
+                            .Select(candidate => candidate.Value)
+                            .LastOrDefault()))
+                    .Where(observation => observation.RowLatch != 0);
+            })
+            .ToArray();
+        var maximumCommitVramWrites = cpu.WramByteWrites
+            .Where(write => write.Address == GameBoyRuntimeMemoryLayout.PackedCamera.LastCommitVramWrites)
+            .Select(write => (int)write.Value)
+            .DefaultIfEmpty()
+            .Max();
         var forbiddenVideoWork = new[]
         {
             GameBoyRuntimeMemoryLayout.PackedCamera.BankWorkInCommit,
@@ -177,10 +205,12 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
             frames.Min(frame => frame.PlayerY),
             frames.Min(frame => frame.RequestedCameraY),
             horizontalStalls,
+            packedReleaseGameplayStalls,
             maximumGameplayGap,
             maximumAudioGap,
             maximumRequestedVisibleLag,
-            extendedColumnWhileRowLatched,
+            extendedColumns,
+            maximumCommitVramWrites,
             requests == prepares && prepares == residents && residents == commits && commits == releases,
             forbiddenVideoWork,
             requests,
@@ -228,6 +258,8 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
         ushort CameraX,
         ushort CameraY);
 
+    private sealed record ExtendedColumnObservation(int PayloadLength, int RowLatch);
+
     private sealed record FrameObservation(
         int Frame,
         int HardwareScrollX,
@@ -257,10 +289,12 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
         int MaximumPlayerY,
         int MaximumRequestedCameraY,
         int HorizontalStalls,
+        int PackedReleaseGameplayStalls,
         int MaximumGameplayGap,
         int MaximumAudioGap,
         int MaximumRequestedVisibleLag,
-        bool ExtendedColumnWhileRowLatched,
+        IReadOnlyList<ExtendedColumnObservation> ExtendedColumns,
+        int MaximumCommitVramWrites,
         bool LifecycleDrained,
         int ForbiddenVideoWork,
         int Requests,
@@ -271,10 +305,12 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
         string StallFrames)
     {
         public string Summary =>
-            $"stalls={HorizontalStalls}, gameplayGap={MaximumGameplayGap}, audioGap={MaximumAudioGap}, "
+            $"stalls={HorizontalStalls}, packedReleaseGameplayStalls={PackedReleaseGameplayStalls}, "
+            + $"gameplayGap={MaximumGameplayGap}, audioGap={MaximumAudioGap}, "
             + $"lag={MaximumRequestedVisibleLag}, playerY={InitialPlayerY}->{MaximumPlayerY}, "
             + $"cameraY={InitialRequestedCameraY}->{MaximumRequestedCameraY}, "
-            + $"extendedColumn={ExtendedColumnWhileRowLatched}, "
+            + $"extendedColumns=[{string.Join(",", ExtendedColumns.Select(column => $"{column.PayloadLength}@{column.RowLatch}"))}], "
+            + $"commitWrites={MaximumCommitVramWrites}, "
             + $"lifecycle={Requests}/{Prepares}/{Residents}/{Commits}/{Releases}, forbidden={ForbiddenVideoWork}, "
             + $"stallFrames=[{StallFrames}]";
     }

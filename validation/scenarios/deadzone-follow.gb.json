@@ -7,9 +7,9 @@
   "observationFrames": 400,
   "inputs": [],
   "checkpoints": [
-    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 231, "user1": 223, "user2": 134, "user3": 134, "user4": 1, "user5": 1, "visibleCameraX": 134, "visibleCameraY": 134, "commitCount": 34 } },
+    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 229, "user1": 221, "user2": 132, "user3": 132, "user4": 1, "user5": 1, "visibleCameraX": 132, "visibleCameraY": 132, "commitCount": 34 } },
     { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 159, "user1": 151, "user2": 96, "user3": 96, "user4": 255, "user5": 255, "visibleCameraX": 96, "visibleCameraY": 96, "commitCount": 46 } },
-    { "id": "returning-through-chunks", "frame": 400, "expectedSignals": { "user0": 153, "user1": 145, "user2": 57, "user3": 57, "user4": 1, "user5": 1, "visibleCameraX": 56, "visibleCameraY": 56, "commitCount": 76 } }
+    { "id": "returning-through-chunks", "frame": 400, "expectedSignals": { "user0": 151, "user1": 143, "user2": 54, "user3": 54, "user4": 1, "user5": 1, "visibleCameraX": 54, "visibleCameraY": 54, "commitCount": 76 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,
@@ -24,7 +24,7 @@
   "budgetEvidence": {
     "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
     "hardwareTimingRationale": "Dead-zone following requests at most one pixel per axis per gameplay tick; packed preparation remains outside VBlank and commits one bounded axis edge at a time.",
-    "productionTraceRationale": "The exact tracked deadzone.gb at pre-Large-Worlds commit 95f166886713ff3b88bc1e17c03ef0ffe93d649a completes 400/400 source VBlank waits after the same 20-frame warm-up. The smooth diagonal streaming that removes the tile-boundary freeze prefetches the next column a full tile ahead while publishing the camera every frame; on this reversing dead-zone follow that raises the diagonal residency/visibility ceiling to three frames and can drop two consecutive gameplay ticks around a follow reversal, while the average cadence improves to at least 95 percent. Rendering stays exact (no background mismatches) and the motion stays fluid, so these are expressed as upper-bound budgets rather than the earlier zero-headroom equalities."
+    "productionTraceRationale": "The exact tracked deadzone.gb at pre-Large-Worlds commit 95f166886713ff3b88bc1e17c03ef0ffe93d649a completes 400/400 source VBlank waits after the same 20-frame warm-up. The smooth diagonal streaming that removes the tile-boundary freeze prefetches the next column a full tile ahead while publishing the camera every frame; on this reversing dead-zone follow that raises the diagonal residency/visibility ceiling to three frames and can drop two consecutive gameplay ticks around a follow reversal, while the average cadence improves to at least 95 percent. The 21-tile diagonal column coverage keeps both endpoints around the prefetched row and shifts these exact checkpoints within the same budgets. Rendering stays exact (no background mismatches) and the motion stays fluid, so these are expressed as upper-bound budgets rather than the earlier zero-headroom equalities."
   },
   "budgets": {
     "minimumGameplayTickRatio": 0.95,

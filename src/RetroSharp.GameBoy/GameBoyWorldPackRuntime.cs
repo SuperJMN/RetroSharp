@@ -177,7 +177,8 @@ internal sealed record GameBoyWorldPackRuntimePlan(
 internal static class GameBoyWorldPackRuntimeEmitter
 {
     private const int PackedColumnPayloadTiles = 19;
-    private const int PackedColumnPayloadTilesWithPrefetchedRow = PackedColumnPayloadTiles + 1;
+    // Keep both column endpoints around the prefetched diagonal row in the same resident edge.
+    private const int PackedColumnPayloadTilesWithPrefetchedRow = PackedColumnPayloadTiles + 2;
 
     private sealed record DecoderLabels(
         string Raw,
