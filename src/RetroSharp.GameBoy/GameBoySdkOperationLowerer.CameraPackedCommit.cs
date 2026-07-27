@@ -336,6 +336,7 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset)), GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset)), GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
         EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.DirectionOffset)), GameBoyRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.PayloadLengthOffset)), GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         builder.LoadAImmediate(expectedAxis);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.JumpAbsolute(valid);
@@ -349,7 +350,8 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
             builder.LoadCFromA();
             EmitBackgroundTileAddressToHl(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-            builder.Emit(0x06, 19); // LD B,19
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
+            builder.LoadBFromA();
             var noCarry = builder.CreateLabel("packed_camera_column_target_no_carry");
             var noWrap = builder.CreateLabel("packed_camera_column_target_no_wrap");
             builder.Label(loop);
@@ -369,7 +371,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.Label(noCarry);
             builder.Emit(0x05); // DEC B
             builder.JumpAbsolute(0xC2, loop);
-            builder.LoadAImmediate(19);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         }
         else
         {

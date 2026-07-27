@@ -510,11 +510,38 @@ internal sealed partial class NesSdkOperationLowerer
     private void EmitPackedWideSourceColumnSubroutine()
     {
         var mapWidth = packedWideSourceColumnMapWidth;
+        var nonNegative = builder.CreateLabel("camera_pixel_column_wide_non_negative");
+        var negativeInRange = builder.CreateLabel("camera_pixel_column_wide_negative_in_range");
         var subtract = builder.CreateLabel("camera_pixel_column_wide_subtract");
         var done = builder.CreateLabel("camera_pixel_column_wide_end");
 
         builder.Label(PackedWideSourceColumnSubroutineLabel);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.CollisionColumnScratch);
+        builder.CompareImmediate(0x80);
+        builder.JumpIf(0x90, nonNegative);
+
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
+        builder.ClearCarry();
+        builder.AddZeroPage(NesRuntimeMemoryLayout.Runtime.CollisionColumnScratch);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.TileColumnHigh);
+        builder.AddImmediate(byte.MaxValue);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXHigh);
+        builder.CompareImmediate(byte.MaxValue);
+        builder.JumpIf(0xD0, negativeInRange);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.ClearCarry();
+        builder.AddImmediate(mapWidth & 0xFF);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.LoadAImmediate(byte.MaxValue);
+        builder.AddImmediate((mapWidth >> 8) & 0xFF);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXHigh);
+        builder.JumpAbsolute(done);
+
+        builder.Label(negativeInRange);
+        builder.JumpAbsolute(done);
+
+        builder.Label(nonNegative);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         builder.ClearCarry();
         builder.AddZeroPage(NesRuntimeMemoryLayout.Runtime.CollisionColumnScratch);
@@ -655,6 +682,21 @@ internal sealed partial class NesSdkOperationLowerer
 
     internal void EmitReferencedSubroutines()
     {
+        if (packedColumnRequestSubroutineReferenced)
+        {
+            EmitPackedColumnRequestSubroutine();
+        }
+
+        if (packedColumnPrefetchSubroutineReferenced)
+        {
+            EmitPackedColumnPrefetchSubroutine();
+        }
+
+        if (packedRowRequestSubroutineReferenced)
+        {
+            EmitPackedRowRequestSubroutine();
+        }
+
         if (packedWideSourceColumnSubroutineReferenced)
         {
             EmitPackedWideSourceColumnSubroutine();

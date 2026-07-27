@@ -39,6 +39,7 @@ internal static class GameBoyPackedCameraRuntime
 internal static class GameBoyPackedCameraRuntimeEmitter
 {
     private const byte SafeActiveScanlineEnd = 128;
+    private const byte SafeRowPlaneScanlineEnd = 136;
 
     internal static void EmitWaitOutsideVBlank(GbBuilder builder)
     {
@@ -81,6 +82,19 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.CompareImmediate(SafeActiveScanlineEnd);
         builder.JumpAbsolute(0xDA, done); // JP C,done on the safe active-display fast path.
         builder.Label(wait);
+        EmitWaitOutsideVBlank(builder);
+        builder.Label(done);
+    }
+
+    internal static void EmitWaitForSafeRowPlaneCopy(GbBuilder builder)
+    {
+        var done = builder.CreateLabel("packed_world_row_plane_guard_done");
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadHighRamA(0x44); // LY
+        builder.CompareImmediate(SafeRowPlaneScanlineEnd);
+        builder.JumpAbsolute(0xDA, done);
         EmitWaitOutsideVBlank(builder);
         builder.Label(done);
     }

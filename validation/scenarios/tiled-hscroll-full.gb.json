@@ -8,11 +8,11 @@
   "inputs": [],
   "checkpoints": [
     { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 96 } },
-    { "id": "first-horizontal-chunk-window", "frame": 185, "expectedSignals": { "visibleCameraX": 115 } },
-    { "id": "circular-buffer-wrap-window", "frame": 305, "expectedSignals": { "visibleCameraX": 235 } },
-    { "id": "later-horizontal-chunk-window", "frame": 425, "expectedSignals": { "visibleCameraX": 355 } },
-    { "id": "near-right-edge", "frame": 2316, "expectedSignals": { "visibleCameraX": 2235 } },
-    { "id": "return-after-reversal", "frame": 2553, "expectedSignals": { "visibleCameraX": 1998 } }
+    { "id": "first-horizontal-chunk-window", "frame": 184, "expectedSignals": { "visibleCameraX": 115 } },
+    { "id": "circular-buffer-wrap-window", "frame": 304, "expectedSignals": { "visibleCameraX": 235 } },
+    { "id": "later-horizontal-chunk-window", "frame": 424, "expectedSignals": { "visibleCameraX": 355 } },
+    { "id": "near-right-edge", "frame": 2315, "expectedSignals": { "visibleCameraX": 2235 } },
+    { "id": "return-after-reversal", "frame": 2552, "expectedSignals": { "visibleCameraX": 1998 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

@@ -18,8 +18,8 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Tile size | 8x8 |
 | Background buffer | 32x32 tiles |
 | Fine scroll | X and Y |
-| Background tile write budget | 21 tile writes per explicit stream edge; packed commits write one 19-tile column or one 21-tile row per VBlank |
-| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable edge slots, preserve same-axis order across consecutive VBlanks, and prefetch the diagonal column edge mid-tile while the row edge streams reactively at the crossing. Word-wide-map columns admit a syntactically valid slot to VBlank before metadata validation; narrow columns and rows retain validate-then-admit ordering |
+| Background tile write budget | 21 tile writes per explicit stream edge; packed commits write one 19-tile column, one 20-tile diagonal-intersection column, or one 21-tile row per VBlank |
+| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable edge slots, preserve same-axis order across consecutive VBlanks, prefetch the diagonal row before walking, and retry the alternating column on the next source call. Word-wide-map columns admit a syntactically valid slot to VBlank before metadata validation; narrow columns and rows retain validate-then-admit ordering |
 | Camera positioning | `Camera.SetPosition(x, y)` walks the camera toward the requested position one pixel at a time, bounded to at most two tile crossings (16 px) per axis per call so a single call per frame reaches runner-scale targets without stale edges |
 | Attribute write budget | 0 per frame on the current DMG target |
 | Hardware sprites | 40 total, 10 per scanline |
@@ -406,9 +406,13 @@ limits and therefore uses packed staging.
 The packed runtime tags two peer edge slots with lifecycle, axis, direction,
 logical world-edge word, circular target, orthogonal start, and payload length.
 `Camera.SetPosition(...)` requests and fully prepares the required 19-tile
-column or 21-tile row outside VBlank. A diagonal source call prepares at most
-one axis, column-first for the initial pair and alternating thereafter; the
-other request resumes cooperatively on a later source call. Only a matching immutable `resident` slot
+column or 21-tile row outside VBlank. While a prefetched row remains latched,
+an intersecting column extends to 20 tiles so a later horizontal crossing
+cannot leave the future top or bottom cell stale. A diagonal source call evaluates both
+word destinations once, prepares the upcoming row before either axis walks,
+and carries the column retry into the next source call. Repeated crossings
+therefore alternate row/column without starting two preparations in one source
+tick. Only a matching immutable `resident` slot
 can enter `committing`; malformed, unavailable, or wrongly tagged data leaves
 the visible camera at the last safe pixel and retries without publishing an
 unstaged edge. A reversal may release an uncommitted resident peer but never a
@@ -418,16 +422,17 @@ committing one.
 copies at most one resident payload to VRAM per VBlank, publishes the matching
 camera coordinate only after the copy, and then releases the slot. Two
 same-axis crossings preserve near/far order over consecutive VBlanks. Diagonal
-peers prefetch the column edge mid-tile and stream the row edge reactively at
-the crossing, keeping the two edge decodes on separate frames without stalling
-either axis. Three standard or six diagonal visual
+peers prefetch the row before movement, then retry the existing mid-tile column
+prefetch on the next source call. A matching row latch lets the crossing update
+its cursors without decoding again. Three standard or six diagonal visual
 cache slots retain the working row/column groups so reverse and crossing paths
 do not repeatedly decode the same chunks. Instrumentation records per-commit VRAM
 writes plus any bank, decode, or directory work observed either in the critical
-section or physically at LY 144-153; acceptance requires 19 or 21 writes and
-zero forbidden-work counts. A fixed-bank wait routine treats only LY 0-135 as
-safe, reserving an eight-scanline guard band before VBlank around every
-sensitive read/write. Cooperative preparation waits service packed audio once
+section or physically at LY 144-153; acceptance requires 19, 20, or 21 writes and
+zero forbidden-work counts. Row-plane preparation starts only through LY
+0-135, reserving an eight-scanline guard band before VBlank; the final
+constant-time bank restore uses a narrower one-scanline write guard.
+Cooperative preparation waits service packed audio once
 per real frame, so deferrals and bank-spanning decodes do not slow BGM.
 Raw and RLE decode checkpoints wait out VBlank before continuing. The RLE
 decoder uses a scanline-128 inline guard when audio is inactive, retains the
@@ -443,10 +448,11 @@ inferring it from tracker cursors.
 For packed camera worlds whose complete hardware-tile column plane is at most
 16 KiB and fits immediately after the final WorldPack segment in one ROM
 window, the linker emits that immutable target-private derived plane and column
-preparation copies 19 contiguous or wrapped tiles with one bank selection.
-WorldPack v1 bytes remain unchanged. Row edges and all non-column/fallback
-paths keep generic preparation, while a diagonal's column component may use
-the plane. Maps at most 255 hardware columns wide, outside the 19-255
+preparation copies 19 contiguous or wrapped tiles with one bank selection, or
+20 while a diagonal row latch requires the future intersection. The
+same column-major plane supplies a non-wrapping 21-tile row through a bounded
+stride copy; a row that wraps the source width retains generic preparation.
+WorldPack v1 bytes remain unchanged. Maps at most 255 hardware columns wide, outside the 19-255
 hardware-row range, or whose layout does not fit keep the existing chunk
 decoder. For a word-wide-map column, a pending slot id is checked for the
 syntactic 0/1 range before any VBlank wait, admitted before resident-tag
@@ -470,7 +476,7 @@ ROM-only, demonstrating that final-link output, not
 The focused acceptance reconstructs all 60 runtime visual/collision chunks,
 checks the Y=304 / `FFFF` collision ABI, traverses the whole horizontal range
 in both directions plus the vertical range, and observes the 16-bit column-256
-tag, 19/21 write bounds, matching lifecycle counts, safe wrong-tag reversal,
+tag, 19/20/21 write bounds, matching lifecycle counts, safe wrong-tag reversal,
 LY 136-153 guard band, bank restoration, and exactly one packed-audio tick per
 real frame. Set `RETROSHARP_FULL_STAGE1_TRAVERSAL_ROM` or
 `RETROSHARP_FULL_STAGE1_RUNNER_ROM` while running the focused acceptance class
@@ -512,9 +518,9 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `Camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. For horizontal-only programs, `streamY + streamHeight` must fit inside the 32-row Game Boy background tilemap. Programs that actually move vertically with `Camera.SetPosition(x, y)` may pass the full loaded source-map height; the runtime clips the initial circular VRAM window to the rows that fit while using the full generated source-row table for later vertical streaming. Call it after declaring the source map and before `Camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`Camera.SetPosition(x, y)` is the position-based camera API. `x` and `y` collect as complete little-endian word expressions; byte-backed constants, locals, struct fields, and array elements remain compatible and zero-extend. The Game Boy lowering compares both requested bytes with the current 16-bit camera position, then walks one pixel at a time toward it, up to 16 px per axis per call. A tile-boundary crossing advances logical source cursors and queues the exposed column or row for deferred streaming, which `Camera.Apply()` commits during VBlank. Maps up to 4,096 hardware columns keep screen-left and exposed-edge coordinates as words, including pending edge tags and row/column ROM addressing; circular background slots stay modulo 32. Raw same-axis movement can queue and commit two exposed edges in one `Camera.Apply()` call. The packed scheduler prepares the same two logical peers but commits them in order over consecutive VBlanks. Diagonal programs queue columns and rows separately, then drain one axis queue per VBlank; the column streamer writes the 19 rows that can become visible and the row streamer writes 21 columns from the complete logical source-column word. On the raw path, `Camera.Apply()` retains both hardware scroll bytes while either diagonal edge remains pending, then publishes X/Y together after both edges are resident; a partially updated diagonal view is never retained. Packed programs keep their independently tagged staged publication rules. The shared runner uses one `Camera.SetPosition(x, y)` sync call per frame through `view.ApplyPosition()` after updating dead-zone camera state, `samples/source-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/source-free-scroll/freescroll.rs` plus `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
+`Camera.SetPosition(x, y)` is the position-based camera API. `x` and `y` collect as complete little-endian word expressions; byte-backed constants, locals, struct fields, and array elements remain compatible and zero-extend. A packed diagonal call materializes both word destinations once, prepares the next vertical row when both axes move, then walks one pixel at a time toward them, up to 16 px per axis per call. A tile-boundary crossing advances logical source cursors and queues the exposed column or row for deferred streaming, which `Camera.Apply()` commits during VBlank. Maps up to 4,096 hardware columns keep screen-left and exposed-edge coordinates as words, including pending edge tags and row/column ROM addressing; circular background slots stay modulo 32. Raw same-axis movement can queue and commit two exposed edges in one `Camera.Apply()` call. The packed scheduler prepares the same two logical peers but commits them in order over consecutive VBlanks. Diagonal programs queue columns and rows separately, then drain one axis queue per VBlank; the column streamer normally writes the 19 rows that can become visible and extends to the latched future row as a 20th tile when needed, while the row streamer writes 21 columns from the complete logical source-column word. On the raw path, `Camera.Apply()` retains both hardware scroll bytes while either diagonal edge remains pending, then publishes X/Y together after both edges are resident; a partially updated diagonal view is never retained. Packed programs keep their independently tagged staged publication rules. The shared runner uses one `Camera.SetPosition(x, y)` sync call per frame through `view.ApplyPosition()` after updating dead-zone camera state, `samples/source-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/source-free-scroll/freescroll.rs` plus `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
 
-`Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits queued columns or rows into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. The shared runner calls `Camera.Apply()` immediately after the wait and then issues `Sprite.Draw(...)`; on a packed-edge commit frame the backend retains the prior OAM entries and refreshes them on the next frame so VRAM and OAM work stay inside the same VBlank budget. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. When a raw same-axis `Camera.SetPosition(...)` crosses two tile boundaries in one frame, the backend stores both target/source pairs and commits them in order during the same `Camera.Apply()` VBlank. The packed scheduler instead consumes one immutable peer per VBlank so it never exceeds 21 tile writes. Diagonal programs keep separate column and row queues; the column edge is prefetched a couple of pixels into each tile while the row edge streams reactively at the crossing, so the two edge decodes land on different frames and neither axis stalls at the tile boundary, and `Camera.Apply()` publishes the logical camera to `SCX`/`SCY` every frame for smooth 1 px scrolling. The raw row streamer counts the remaining source columns in a register and wraps with a bounded decrement/branch loop; all 21 writes therefore finish inside DMG VBlank, including a row that starts four columns before the source-map wrap. The large per-row streamer is only emitted when the program can scroll vertically, and the diagonal column-prefetch pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
+`Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits queued columns or rows into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. The shared runner calls `Camera.Apply()` immediately after the wait and then issues `Sprite.Draw(...)`; on a packed-edge commit frame the backend retains the prior OAM entries and refreshes them on the next frame so VRAM and OAM work stay inside the same VBlank budget. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. If a diagonal row is already prefetched, that column carries one extra intersection tile so a later vertical crossing cannot expose stale data. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. When a raw same-axis `Camera.SetPosition(...)` crosses two tile boundaries in one frame, the backend stores both target/source pairs and commits them in order during the same `Camera.Apply()` VBlank. The packed scheduler instead consumes one immutable peer per VBlank so it never exceeds 21 tile writes. Diagonal programs keep separate column and row queues: the next row is resident before the vertical boundary, its latch advances the camera without another decode, and the column prefetch retries on the following source call. `Camera.Apply()` alternates those prepared peers and publishes the logical camera to `SCX`/`SCY` every frame for smooth 1 px scrolling. The raw row streamer counts the remaining source columns in a register and wraps with a bounded decrement/branch loop; all 21 writes therefore finish inside DMG VBlank, including a row that starts four columns before the source-map wrap. The large per-row streamer is only emitted when the program can scroll vertically, and the diagonal column-prefetch pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
 Packed startup compares the complete v1 header byte-for-byte, validates a
 position-sensitive 32-bit rolling fingerprint over the complete linked

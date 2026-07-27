@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "2120ff483ea3f1b9b32fe0ee2200caa9c5d59ce2ed352d793123bce86f5e5790",
-  "romSha256": "26ab400141da8bfd8b502f5272463e5fd0236d170ba17901526f41b064f0d727",
+  "abiFingerprint": "fab54d2a6f6dd63b08414a32371d615ca68ab7e5e8591d48a0d57350cd6b3016",
+  "romSha256": "e316d9e7a25be0e212ce1555699d0e68d294ae6648b5f1beb879f241b6afc94c",
   "ranges": [
     {
       "id": "UserLocals",
@@ -447,8 +447,26 @@
     },
     {
       "domain": "camera",
+      "name": "SetPositionTargetYLow",
+      "address": 797,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
       "name": "SourceColumnHigh",
       "address": 798,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "SetPositionTargetYHigh",
+      "address": 799,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PrefetchedColumnDirection",
+      "address": 800,
       "owner": "ExtendedCameraState"
     },
     {
@@ -1669,6 +1687,10 @@
     {
       "name": "packed camera.ResidentFrameLowOffset",
       "value": 11
+    },
+    {
+      "name": "packed camera.RetryAfterApply",
+      "value": 64
     },
     {
       "name": "packed camera.Row",

@@ -171,7 +171,9 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort TileColumnHigh = 0x031A;
         internal const ushort TileRowHigh = 0x031B;
         internal const ushort SourceRowHigh = 0x031C;
+        internal const ushort SetPositionTargetYLow = 0x031D;
         internal const ushort SourceColumnHigh = 0x031E;
+        internal const ushort SetPositionTargetYHigh = 0x031F;
         internal const ushort PendingColumnSourceHigh = 0x0321;
         internal const ushort PendingRowSourceColumnHigh = 0x0323;
     }
@@ -284,6 +286,7 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort PendingColumn = 0x03D0;
         internal const ushort PendingRow = 0x03E0;
         internal const ushort VisibleCameraTileRow = 0x03F0;
+        internal const ushort PrefetchedColumnDirection = 0x0320;
         internal const byte PayloadIndexScratch = 0xE4;
         internal const byte PointerLow = 0xE8;
         internal const byte PointerHigh = 0xE9;

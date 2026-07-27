@@ -10,65 +10,9 @@ internal sealed partial class NesSdkOperationLowerer
     {
         if (usePackedCamera)
         {
-            var canRequest = builder.CreateLabel("nes_packed_column_can_request");
-            var done = builder.CreateLabel("nes_packed_column_request_done");
-            EmitPackedAxisRequestGuard(
-                NesPackedCameraRuntime.Column,
-                direction,
-                NesRuntimeMemoryLayout.PackedCamera.PendingColumn,
-                canRequest,
-                done);
-            builder.Label(canRequest);
-            builder.LoadAImmediate(NesPackedCameraRuntime.Column);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
             builder.LoadAImmediate(direction);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
-            builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
-            if (config.MapWidth > byte.MaxValue)
-            {
-                builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceColumnHigh);
-            }
-            else
-            {
-                builder.LoadAImmediate(0);
-            }
-
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
-            builder.LoadAImmediate(config.StreamY);
-            if (config.UseFourScreenNametables)
-            {
-                builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
-                if (config.MapHeight > byte.MaxValue)
-                {
-                    builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.TileRowHigh);
-                }
-                else
-                {
-                    builder.LoadAImmediate(0);
-                }
-            }
-            else
-            {
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-                builder.LoadAImmediate(0);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
-            }
-
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
-            builder.LoadAImmediate(Math.Min(NesTarget.Capabilities.ScreenTiles.Height, config.StreamHeight));
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-            builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
-            builder.JumpIf(0xD0, done);
-            EmitStorePackedPendingDescriptor(NesRuntimeMemoryLayout.PackedCamera.PendingColumn, NesPackedCameraRuntime.Column);
-            builder.LoadAImmediate((byte)NesWorldPackResult.Success);
-            builder.Label(done);
+            EmitCallPackedColumnRequest(config);
             return;
         }
 
@@ -86,59 +30,110 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
     }
 
+    private void EmitCallPackedColumnRequest(NesCameraConfig config)
+    {
+        RegisterPackedColumnRuntime(config);
+        packedColumnRequestSubroutineReferenced = true;
+        builder.CallSubroutine(PackedColumnRequestSubroutineLabel);
+    }
+
+    private void RegisterPackedColumnRuntime(NesCameraConfig config)
+    {
+        if (packedColumnRuntimeConfig is { } existing && existing != config)
+        {
+            throw new InvalidOperationException(
+                $"Packed camera column runtime was configured inconsistently: {existing} versus {config}.");
+        }
+
+        packedColumnRuntimeConfig = config;
+    }
+
+    private void EmitPackedColumnRequestSubroutine()
+    {
+        var config = packedColumnRuntimeConfig
+                     ?? throw new InvalidOperationException("Packed column request runtime requires camera configuration.");
+        var pendingExists = builder.CreateLabel("nes_packed_column_pending_exists");
+        var canRequest = builder.CreateLabel("nes_packed_column_can_request");
+        var blocked = builder.CreateLabel("nes_packed_column_request_blocked");
+        var done = builder.CreateLabel("nes_packed_column_request_done");
+
+        builder.Label(PackedColumnRequestSubroutineLabel);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
+        builder.AndImmediate(NesPackedCameraRuntime.Column);
+        builder.BranchRelative(0xF0, canRequest);
+
+        builder.Label(pendingExists);
+        builder.LoadAAbsolute(
+            checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.PendingColumn + NesPackedCameraRuntime.DirectionOffset)));
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.BranchRelative(0xD0, canRequest);
+        builder.Label(blocked);
+        builder.LoadAImmediate(NesPackedCameraRuntime.NoSlot);
+        builder.Return();
+
+        builder.Label(canRequest);
+        builder.LoadAImmediate(NesPackedCameraRuntime.Column);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
+        if (config.MapWidth > byte.MaxValue)
+        {
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceColumnHigh);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.LoadAImmediate(config.StreamY);
+        if (config.UseFourScreenNametables)
+        {
+            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
+            if (config.MapHeight > byte.MaxValue)
+            {
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.TileRowHigh);
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+            }
+        }
+        else
+        {
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
+        }
+
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
+        builder.LoadAImmediate(Math.Min(NesTarget.Capabilities.ScreenTiles.Height, config.StreamHeight));
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
+        builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.JumpIf(0xD0, done);
+        EmitStorePackedPendingDescriptor(
+            NesRuntimeMemoryLayout.PackedCamera.PendingColumn,
+            NesPackedCameraRuntime.Column);
+        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.Label(done);
+        builder.Return();
+    }
+
     private void EmitQueuePendingCameraRow(byte direction, NesCameraConfig config)
     {
         if (usePackedCamera)
         {
-            var canRequest = builder.CreateLabel("nes_packed_row_can_request");
-            var done = builder.CreateLabel("nes_packed_row_request_done");
-            EmitPackedAxisRequestGuard(
-                NesPackedCameraRuntime.Row,
-                direction,
-                NesRuntimeMemoryLayout.PackedCamera.PendingRow,
-                canRequest,
-                done);
-            builder.Label(canRequest);
-            builder.LoadAImmediate(NesPackedCameraRuntime.Row);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
             builder.LoadAImmediate(direction);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
-            builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceRow);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
-            if (config.MapHeight > byte.MaxValue)
-            {
-                builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceRowHigh);
-            }
-            else
-            {
-                builder.LoadAImmediate(0);
-            }
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetRow);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
-            if (config.MapWidth > byte.MaxValue)
-            {
-                builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceColumnHigh);
-            }
-            else
-            {
-                builder.LoadAImmediate(0);
-            }
-
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
-            builder.LoadAImmediate(32);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-            builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
-            builder.JumpIf(0xD0, done);
-            EmitStorePackedPendingDescriptor(NesRuntimeMemoryLayout.PackedCamera.PendingRow, NesPackedCameraRuntime.Row);
-            builder.LoadAImmediate((byte)NesWorldPackResult.Success);
-            builder.Label(done);
+            RegisterPackedColumnRuntime(config);
+            packedRowRequestSubroutineReferenced = true;
+            builder.CallSubroutine(PackedRowRequestSubroutineLabel);
             return;
         }
 
@@ -163,33 +158,34 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
     }
 
-    private void EmitPackedAxisRequestGuard(
-        byte axis,
-        byte direction,
-        ushort pending,
-        string canRequest,
-        string done)
+    private void EmitPackedRowRequestSubroutine()
     {
-        var pendingExists = builder.CreateLabel("nes_packed_axis_pending_exists");
-        var checkSlot1 = builder.CreateLabel("nes_packed_axis_check_slot_1");
-        var checkSlot1Axis = builder.CreateLabel("nes_packed_axis_check_slot_1_axis");
-        var blocked = builder.CreateLabel("nes_packed_axis_request_blocked");
+        var config = packedColumnRuntimeConfig
+                     ?? throw new InvalidOperationException("Packed row request runtime requires camera configuration.");
+        var pendingExists = builder.CreateLabel("nes_packed_row_pending_exists");
+        var checkSlot1 = builder.CreateLabel("nes_packed_row_check_slot_1");
+        var checkSlot1Axis = builder.CreateLabel("nes_packed_row_check_slot_1_axis");
+        var canRequest = builder.CreateLabel("nes_packed_row_can_request");
+        var blocked = builder.CreateLabel("nes_packed_row_request_blocked");
+        var done = builder.CreateLabel("nes_packed_row_request_done");
 
+        builder.Label(PackedRowRequestSubroutineLabel);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
-        builder.AndImmediate(axis);
+        builder.AndImmediate(NesPackedCameraRuntime.Row);
         builder.JumpIf(0xD0, pendingExists);
         builder.JumpAbsolute(canRequest);
 
         builder.Label(pendingExists);
-        builder.LoadAAbsolute(checked((ushort)(pending + NesPackedCameraRuntime.DirectionOffset)));
-        builder.CompareImmediate(direction);
+        builder.LoadAAbsolute(
+            checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.PendingRow + NesPackedCameraRuntime.DirectionOffset)));
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
         builder.JumpIf(0xF0, blocked);
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset);
         builder.CompareImmediate(NesPackedCameraRuntime.Committing);
         builder.JumpIf(0xD0, checkSlot1);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.AxisOffset);
-        builder.CompareImmediate(axis);
+        builder.CompareImmediate(NesPackedCameraRuntime.Row);
         builder.JumpIf(0xF0, blocked);
 
         builder.Label(checkSlot1);
@@ -199,32 +195,69 @@ internal sealed partial class NesSdkOperationLowerer
         builder.JumpAbsolute(canRequest);
         builder.Label(checkSlot1Axis);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.AxisOffset);
-        builder.CompareImmediate(axis);
+        builder.CompareImmediate(NesPackedCameraRuntime.Row);
         builder.JumpIf(0xD0, canRequest);
 
         builder.Label(blocked);
         builder.LoadAImmediate(NesPackedCameraRuntime.NoSlot);
         builder.JumpAbsolute(done);
+
+        builder.Label(canRequest);
+        builder.LoadAImmediate(NesPackedCameraRuntime.Row);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceRow);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
+        if (config.MapHeight > byte.MaxValue)
+        {
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceRowHigh);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetRow);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
+        if (config.MapWidth > byte.MaxValue)
+        {
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SourceColumnHigh);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
+        builder.LoadAImmediate(32);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
+        builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.JumpIf(0xD0, done);
+        EmitStorePackedPendingDescriptor(
+            NesRuntimeMemoryLayout.PackedCamera.PendingRow,
+            NesPackedCameraRuntime.Row);
+        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.Label(done);
+        builder.Return();
     }
 
     private void EmitStorePackedPendingDescriptor(ushort destination, byte axis)
     {
-        foreach (var (source, offset) in new (ushort Source, int Offset)[]
-                 {
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitAxis, NesPackedCameraRuntime.AxisOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitDirection, NesPackedCameraRuntime.DirectionOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, NesPackedCameraRuntime.WorldEdgeLowOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, NesPackedCameraRuntime.WorldEdgeHighOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitTarget, NesPackedCameraRuntime.TargetOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow, NesPackedCameraRuntime.OrthogonalLowOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, NesPackedCameraRuntime.OrthogonalHighOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, NesPackedCameraRuntime.PayloadLengthOffset),
-                     (NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart, NesPackedCameraRuntime.TargetStartOffset),
-                 })
-        {
-            builder.LoadAAbsolute(source);
-            builder.StoreAAbsolute(checked((ushort)(destination + offset)));
-        }
+        var copyTag = builder.CreateLabel("nes_packed_pending_copy_tag");
+        builder.LoadXImmediate(0);
+        builder.Label(copyTag);
+        builder.LoadAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.StoreAAbsoluteX(checked((ushort)(destination + NesPackedCameraRuntime.AxisOffset)));
+        builder.IncrementX();
+        builder.CompareXImmediate(NesPackedCameraRuntime.PayloadLengthOffset);
+        builder.JumpIf(0xD0, copyTag);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+        builder.StoreAAbsolute(checked((ushort)(destination + NesPackedCameraRuntime.TargetStartOffset)));
 
         if (axis == NesPackedCameraRuntime.Column)
         {

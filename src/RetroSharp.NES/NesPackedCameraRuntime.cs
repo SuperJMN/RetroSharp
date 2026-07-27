@@ -33,6 +33,7 @@ internal static class NesPackedCameraRuntime
     internal const byte Negative = 1;
     internal const byte Positive = 2;
     internal const byte NoSlot = 0xFF;
+    internal const byte RetryAfterApply = 0x40;
 
     internal static ushort SlotMetadata(int slot) => slot switch
     {

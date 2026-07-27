@@ -127,6 +127,7 @@ internal sealed partial class NesSdkOperationLowerer
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileColumn);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileRow);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
         }
 
         if (useFourScreenNametables)
@@ -156,6 +157,19 @@ internal sealed partial class NesSdkOperationLowerer
     internal void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
     {
         var config = EnsureCameraConfigured("camera_set_position");
+        var hasVerticalTarget = operation.Axes.HasFlag(ScrollAxes.Vertical);
+        var verticalFitsByte =
+            Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) <= byte.MaxValue;
+        if (hasVerticalTarget)
+        {
+            EmitSdkWordExpressionToA(operation.Y, highByte: false);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.SetPositionTargetYLow);
+            if (!verticalFitsByte)
+            {
+                EmitSdkWordExpressionToA(operation.Y, highByte: true);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.SetPositionTargetYHigh);
+            }
+        }
 
         var horizontalFitsByte = Math.Max(0, (config.MapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) <= byte.MaxValue;
         if (config.CanStreamColumns)
@@ -166,7 +180,7 @@ internal sealed partial class NesSdkOperationLowerer
                     operation.X,
                     NesRuntimeMemoryLayout.Camera.X,
                     NesRuntimeMemoryLayout.Camera.NewX,
-                    () => EmitStreamColumnForCameraPosition(config),
+                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: hasVerticalTarget),
                     "nes_camera_x");
             }
             else
@@ -177,7 +191,7 @@ internal sealed partial class NesSdkOperationLowerer
                     NesRuntimeMemoryLayout.Camera.XHigh,
                     NesRuntimeMemoryLayout.Camera.NewX,
                     NesRuntimeMemoryLayout.Camera.XHigh,
-                    () => EmitStreamColumnForCameraPosition(config),
+                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: hasVerticalTarget),
                     "nes_camera_x");
             }
         }
@@ -225,7 +239,7 @@ internal sealed partial class NesSdkOperationLowerer
             }
         }
 
-        if (operation.Axes.HasFlag(ScrollAxes.Vertical))
+        if (hasVerticalTarget)
         {
             if (!config.UseFourScreenNametables)
             {
@@ -234,11 +248,10 @@ internal sealed partial class NesSdkOperationLowerer
 
             if (config.MapHeight > 30)
             {
-                var verticalFitsByte = Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) <= byte.MaxValue;
                 if (verticalFitsByte)
                 {
                     EmitWalkByteCameraAxisToTarget(
-                        operation.Y,
+                        NesRuntimeMemoryLayout.Camera.SetPositionTargetYLow,
                         NesRuntimeMemoryLayout.Camera.Y,
                         NesRuntimeMemoryLayout.Camera.NewY,
                         () => EmitTrackCameraYPosition(config),
@@ -247,7 +260,8 @@ internal sealed partial class NesSdkOperationLowerer
                 else
                 {
                     EmitWalkCameraAxisToTarget(
-                        operation.Y,
+                        NesRuntimeMemoryLayout.Camera.SetPositionTargetYLow,
+                        NesRuntimeMemoryLayout.Camera.SetPositionTargetYHigh,
                         NesRuntimeMemoryLayout.Camera.Y,
                         NesRuntimeMemoryLayout.Camera.YHigh,
                         NesRuntimeMemoryLayout.Camera.NewY,
@@ -259,7 +273,7 @@ internal sealed partial class NesSdkOperationLowerer
             else
             {
                 EmitWalkByteCameraAxisToTarget(
-                    operation.Y,
+                    NesRuntimeMemoryLayout.Camera.SetPositionTargetYLow,
                     NesRuntimeMemoryLayout.Camera.Y,
                     NesRuntimeMemoryLayout.Camera.NewY,
                     EmitTrackShortCameraYPosition,
@@ -281,6 +295,23 @@ internal sealed partial class NesSdkOperationLowerer
         Action emitTrackStep,
         string labelPrefix)
     {
+        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
+        EmitWalkByteCameraAxisToTarget(
+            NesRuntimeMemoryLayout.Camera.WalkTarget,
+            currentAddress,
+            stepTargetAddress,
+            emitTrackStep,
+            labelPrefix);
+    }
+
+    private void EmitWalkByteCameraAxisToTarget(
+        ushort targetAddress,
+        byte currentAddress,
+        byte stepTargetAddress,
+        Action emitTrackStep,
+        string labelPrefix)
+    {
         var loopLabel = builder.CreateLabel(labelPrefix + "_walk");
         var budgetOkLabel = builder.CreateLabel(labelPrefix + "_walk_budget_ok");
         var reachedCheckLabel = builder.CreateLabel(labelPrefix + "_walk_moving");
@@ -288,8 +319,6 @@ internal sealed partial class NesSdkOperationLowerer
         var doStepLabel = builder.CreateLabel(labelPrefix + "_walk_step");
         var endLabel = builder.CreateLabel(labelPrefix + "_walk_end");
 
-        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
         frameScheduler.EmitMaximumCameraWalkStepsToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
@@ -303,7 +332,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.SubtractImmediate(1);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
+        builder.LoadAAbsolute(targetAddress);
         builder.SetCarry();
         builder.SubtractZeroPage(currentAddress);
         builder.BranchRelative(0xD0, reachedCheckLabel);
@@ -341,6 +370,31 @@ internal sealed partial class NesSdkOperationLowerer
         Action emitTrackStep,
         string labelPrefix)
     {
+        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
+        EmitSdkWordExpressionToA(requestedPosition, highByte: true);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTargetHigh);
+        EmitWalkCameraAxisToTarget(
+            NesRuntimeMemoryLayout.Camera.WalkTarget,
+            NesRuntimeMemoryLayout.Camera.WalkTargetHigh,
+            currentLowAddress,
+            currentHighAddress,
+            stepTargetLowAddress,
+            stepTargetHighAddress,
+            emitTrackStep,
+            labelPrefix);
+    }
+
+    private void EmitWalkCameraAxisToTarget(
+        ushort targetLowAddress,
+        ushort targetHighAddress,
+        byte currentLowAddress,
+        ushort currentHighAddress,
+        byte stepTargetLowAddress,
+        ushort stepTargetHighAddress,
+        Action emitTrackStep,
+        string labelPrefix)
+    {
         var loopLabel = builder.CreateLabel(labelPrefix + "_walk");
         var budgetOkLabel = builder.CreateLabel(labelPrefix + "_walk_budget_ok");
         var stepForwardLabel = builder.CreateLabel(labelPrefix + "_walk_forward");
@@ -350,10 +404,6 @@ internal sealed partial class NesSdkOperationLowerer
         var stepBackwardLabel = builder.CreateLabel(labelPrefix + "_walk_backward");
         var lowDiffersLabel = builder.CreateLabel(labelPrefix + "_walk_low_differs");
 
-        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
-        EmitSdkWordExpressionToA(requestedPosition, highByte: true);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTargetHigh);
         frameScheduler.EmitMaximumCameraWalkStepsToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
@@ -368,11 +418,11 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
         builder.LoadAAbsolute(currentHighAddress);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.Camera.WalkTargetHigh);
+        builder.CompareAbsolute(targetHighAddress);
         builder.BranchRelative(0x90, stepForwardLabel); // BCC: current high < target high
         builder.BranchRelative(0xD0, stepBackwardLabel); // BNE: current high > target high
         builder.LoadAZeroPage(currentLowAddress);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
+        builder.CompareAbsolute(targetLowAddress);
         builder.BranchRelative(0xD0, lowDiffersLabel); // BNE: low bytes differ
         builder.JumpAbsolute(endLabel); // reached target
         builder.Label(lowDiffersLabel);

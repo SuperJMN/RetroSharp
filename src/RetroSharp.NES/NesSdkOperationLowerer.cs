@@ -12,6 +12,9 @@ internal sealed partial class NesSdkOperationLowerer
     private const string PackedCollisionAtScratchSubroutineLabel = "nes_packed_collision_at_scratch";
     private const string PackedCollisionFlagsSubroutineLabel = "nes_packed_collision_flags";
     private const string PackedWideSourceColumnSubroutineLabel = "nes_packed_wide_source_column";
+    private const string PackedColumnRequestSubroutineLabel = "nes_packed_column_request";
+    private const string PackedColumnPrefetchSubroutineLabel = "nes_packed_column_prefetch";
+    private const string PackedRowRequestSubroutineLabel = "nes_packed_row_request";
 
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
@@ -23,7 +26,11 @@ internal sealed partial class NesSdkOperationLowerer
     private bool packedCollisionAtScratchSubroutineReferenced;
     private bool packedCollisionFlagsSubroutineReferenced;
     private bool packedWideSourceColumnSubroutineReferenced;
+    private bool packedColumnRequestSubroutineReferenced;
+    private bool packedColumnPrefetchSubroutineReferenced;
+    private bool packedRowRequestSubroutineReferenced;
     private int packedWideSourceColumnMapWidth;
+    private NesCameraConfig? packedColumnRuntimeConfig;
     private NesCameraConfig? cameraConfig;
     private RuntimeIndexedFieldCursor? activeRuntimeIndexedFieldCursor;
 
