@@ -180,7 +180,8 @@ internal sealed partial class GameBoySdkOperationLowerer
         ushort secondSlotAddress,
         GameBoyCameraConfig config)
     {
-        var admitVBlank = axis == GameBoyPackedCameraRuntime.Column && config.MapWidth > byte.MaxValue
+        var admitVBlank = (axis == GameBoyPackedCameraRuntime.Row && ProgramQueuesDiagonalStreaming())
+            || (axis == GameBoyPackedCameraRuntime.Column && config.MapWidth > byte.MaxValue)
             ? builder.CreateLabel("packed_camera_commit_admit_vblank")
             : null;
         var validateSlot0 = builder.CreateLabel("packed_camera_commit_validate_slot_0");
