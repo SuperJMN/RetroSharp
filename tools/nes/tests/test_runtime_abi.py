@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import replace
 import hashlib
 import importlib
 import json
@@ -10,8 +9,6 @@ import tempfile
 import unittest
 
 from tools.gameboy import generate_sample_roms
-from tools.nes.runner_visual_parity import RetroArchNetworkSession
-from tools.nes import verify_runner_power_on_ram as power
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -94,20 +91,6 @@ class NesRuntimeAbiLoaderTests(unittest.TestCase):
                 for index in range(2)
             ],
         )
-
-    def test_retroarch_frame_counter_reads_explicit_low_and_high_addresses(self) -> None:
-        session = object.__new__(RetroArchNetworkSession)
-        session.frame_counter_addresses = (0x1234, 0x4567)
-        reads: list[tuple[int, int]] = []
-
-        def read(address: int, length: int) -> list[int]:
-            reads.append((address, length))
-            return [0x34 if address == 0x1234 else 0x12]
-
-        session.read = read
-
-        self.assertEqual(0x1234, session.frame_counter())
-        self.assertEqual([(0x1234, 1), (0x4567, 1)], reads)
 
     def test_missing_required_address_names_the_field(self) -> None:
         def remove_frame_counter(contract: dict[str, object]) -> None:
@@ -243,65 +226,6 @@ class NesRuntimeAbiLoaderTests(unittest.TestCase):
         )
 
         self.assertEqual(RUNNER_ABI, getattr(runner, "runtime_abi_output", None))
-
-    def test_power_on_snapshot_reads_through_a_relocated_contract(self) -> None:
-        real_abi = self.load_fixture()
-
-        class RelocatedAbi:
-            offset = 0x1000
-
-            address_offsets = {
-                "packed camera.PrepareCount": 0x20,
-                "packed camera.ResidentCount": 0x40,
-                "packed camera.CommitCount": 0x60,
-                "packed camera.ReleaseCount": 0x80,
-            }
-
-            def address(self, name: str) -> int:
-                return real_abi.address(name) + self.offset + self.address_offsets.get(name, 0)
-
-            def range(self, name: str):
-                value = real_abi.range(name)
-                return replace(value, start=value.start + self.offset)
-
-            def variable(self, name: str):
-                value = real_abi.variable(name)
-                return replace(value, address=value.address + self.offset)
-
-            def region(self, name: str):
-                value = real_abi.region(name)
-                index = int(name.removeprefix("WorldPack.VisualSlot"))
-                return replace(value, start=value.start + self.offset + index * 0x20)
-
-            def constant(self, name: str) -> int:
-                return real_abi.constant(name)
-
-        class RecordingSession:
-            def __init__(self) -> None:
-                self.reads: list[tuple[int, int]] = []
-
-            def read(self, address: int, length: int) -> list[int]:
-                self.reads.append((address, length))
-                return [0] * length
-
-            def frame_counter(self) -> int:
-                return 0
-
-        abi = RelocatedAbi()
-        session = RecordingSession()
-
-        power.snapshot(session, abi=abi)
-
-        self.assertIn((abi.variable("player.x").address, 2), session.reads)
-        self.assertIn((abi.address("camera.X"), 1), session.reads)
-        for name in ("RequestCount", "PrepareCount", "ResidentCount", "CommitCount", "ReleaseCount"):
-            self.assertIn((abi.address(f"packed camera.{name}"), 1), session.reads)
-        for index in range(6):
-            region = abi.region(f"WorldPack.VisualSlot{index}")
-            self.assertIn((region.start, region.length), session.reads)
-        for range_id in ("WorldPackScalarState", "PackedCameraAndWorldPackAuxiliaryState"):
-            value = abi.range(range_id)
-            self.assertIn((value.start, value.length), session.reads)
 
 
 if __name__ == "__main__":

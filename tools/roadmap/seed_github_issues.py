@@ -18,9 +18,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROADMAP = ROOT / "docs" / "ArchitectureRoadmap.md"
-sys.path.insert(0, str(ROOT / "tools" / "agent"))
-from issue_contract import render_exemption
-from issue_gateway import STATE_LABELS
 
 LABELS: dict[str, tuple[str, str]] = {
     "roadmap": ("6f42c1", "Architecture roadmap work"),
@@ -35,8 +32,8 @@ LABELS: dict[str, tuple[str, str]] = {
     "layer:validation": ("5319e7", "Validation, acceptance, or test infrastructure"),
     "target:gb": ("8dd6f9", "Game Boy target"),
     "target:nes": ("fef2c0", "NES target"),
+    "agent:blocked": ("d73a4a", "Roadmap issue blocked on dependencies"),
 }
-LABELS.update(STATE_LABELS)
 
 PARALLEL_SAFE = {
     "AR-1.2",
@@ -229,13 +226,9 @@ def labels_for(task: RoadmapTask) -> list[str]:
 def issue_body(task: RoadmapTask) -> str:
     dependencies = DEPENDENCIES.get(task.task_id, [])
     dependency_text = "\n".join(f"- {dependency}" for dependency in dependencies) if dependencies else "- None"
-    return render_exemption(
-        source=f"docs/ArchitectureRoadmap.md line {task.line}",
-        reason=("Legacy roadmap card: enrich it with the AEX-1 issue form before dispatch. "
-                "The seeder intentionally never creates a claimable contract from inferred fields."),
-    ) + f"""
+    return f"""## Source
 
-## Roadmap task
+docs/ArchitectureRoadmap.md line {task.line}
 
 ## Dependencies
 
