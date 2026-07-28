@@ -9,7 +9,7 @@ using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedC
 public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
 {
     private const int FrozenObservationOffset = 10;
-    private const int RetainedPoseRegressionOffset = 24;
+    private const int RetainedPoseRegressionOffset = 40;
     private const int FreshnessSampleLimit = 8;
     private const int MaximumSourceToVisibleCameraDelta = 2;
     // Broad experience floors for a 360-frame RIGHT+B run and one authored jump.

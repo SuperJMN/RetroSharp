@@ -295,6 +295,116 @@ public sealed class NesRunnerLandingTests
     }
 
     [Fact]
+    public void Shared_runner_accelerates_and_skids_before_reversing_like_smb3()
+    {
+        var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var speed = variables["view.speed"].Address;
+        var direction = variables["view.direction"].Address;
+        var playerX = variables["player.x"].Address;
+        var cpu = new NesTestCpu(build.Rom);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
+        AdvanceGameplayTick(cpu);
+        AdvanceGameplayTick(cpu);
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        var acceleration = new List<int>(32);
+        for (var tick = 0; tick < 40 && acceleration.Count < 32; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            if (cpu.Ram(speed) != 0)
+            {
+                acceleration.Add(cpu.Ram(speed));
+            }
+        }
+
+        Assert.Equal(Enumerable.Range(1, 32), acceleration);
+        var xAtRunSpeed = RamWord(cpu, playerX);
+
+        cpu.Held.Remove("right");
+        cpu.Held.Add("left");
+        var skid = new List<int>(15);
+        int? turnSpeed = null;
+        for (var tick = 0; tick < 24 && turnSpeed is null; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            if (cpu.Ram(direction) == 1 && cpu.Ram(speed) < 32)
+            {
+                skid.Add(cpu.Ram(speed));
+            }
+            else if (cpu.Ram(direction) == 2)
+            {
+                turnSpeed = cpu.Ram(speed);
+            }
+        }
+
+        Assert.Equal(Enumerable.Range(1, 15).Reverse().Select(value => value * 2), skid);
+        Assert.Equal(0, turnSpeed);
+        Assert.True(RamWord(cpu, playerX) > xAtRunSpeed, "Mario must keep moving right while skidding to a stop.");
+
+        var xAtTurn = RamWord(cpu, playerX);
+        for (var tick = 0; tick < 8; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+
+        Assert.Equal(8, cpu.Ram(speed));
+        Assert.True(RamWord(cpu, playerX) < xAtTurn, "Mario must accelerate left after the skid completes.");
+    }
+
+    [Fact]
+    public void Shared_runner_walk_animation_tracks_physical_speed_without_idle_flicker()
+    {
+        var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var speed = variables["view.speed"].Address;
+        var playerX = variables["player.x"].Address;
+        var displayFrame = variables["player.displayFrame"].Address;
+        var cpu = new NesTestCpu(build.Rom);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
+        AdvanceGameplayTick(cpu);
+        AdvanceGameplayTick(cpu);
+
+        cpu.Held.Add("right");
+        var previousX = RamWord(cpu, playerX);
+        var observedMotion = false;
+        var idleTicksAfterMotion = new List<int>();
+        var walkFrames = new List<int>(16);
+        for (var tick = 0; tick < 50 && walkFrames.Count < 16; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            var currentX = RamWord(cpu, playerX);
+            observedMotion |= currentX != previousX;
+            if (observedMotion && cpu.Ram(displayFrame) == 0)
+            {
+                idleTicksAfterMotion.Add(tick);
+            }
+
+            if (cpu.Ram(speed) == 20)
+            {
+                walkFrames.Add(cpu.Ram(displayFrame));
+            }
+
+            previousX = currentX;
+        }
+
+        var walkFrameTransitions = walkFrames
+            .Zip(walkFrames.Skip(1), (previous, current) => previous != current)
+            .Count(changed => changed);
+        Assert.True(
+            idleTicksAfterMotion.Count == 0 && walkFrames.Count == 16 && walkFrameTransitions <= 4,
+            $"Walk animation outran physical movement: idleTicks=[{string.Join(",", idleTicksAfterMotion)}], "
+            + $"walkFrames=[{string.Join(",", walkFrames)}], transitions={walkFrameTransitions}.");
+    }
+
+    [Fact]
     public void Shared_runner_uses_smb3_4_4_jump_arcs_for_tap_stand_run_and_p_speed()
     {
         var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
@@ -302,8 +412,8 @@ public sealed class NesRunnerLandingTests
         {
             new JumpProfile("tap", RunUpTicks: 0, HeldInputTicks: 1, ExpectedRiseSixteenths: 330),
             new JumpProfile("stand", RunUpTicks: 0, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_131),
-            new JumpProfile("run", RunUpTicks: 3, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
-            new JumpProfile("p-speed", RunUpTicks: 4, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
+            new JumpProfile("run", RunUpTicks: 21, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
+            new JumpProfile("p-speed", RunUpTicks: 32, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
         };
 
         foreach (var profile in profiles)

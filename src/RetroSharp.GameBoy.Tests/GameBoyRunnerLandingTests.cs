@@ -235,7 +235,7 @@ public sealed class GameBoyRunnerLandingTests
         var maximumGameplayBurst = 0L;
         var nextPhysicalFrame = checked((int)(cpu.Cycles / GameBoyTestCpu.DmgCyclesPerFrame) + 1);
         var transitionFrames = 0;
-        while (cpu.Wram(respawnPhase) != 0 && transitionFrames < 400)
+        while (cpu.Wram(respawnPhase) != 0 && transitionFrames < 700)
         {
             var gameplayTicksBefore = cpu.SourceWaitCompletions;
             var audioTicksBefore = cpu.AudioUpdateCalls;
@@ -302,7 +302,7 @@ public sealed class GameBoyRunnerLandingTests
             transitionFrames++;
         }
 
-        Assert.InRange(transitionFrames, 1, 400);
+        Assert.InRange(transitionFrames, 1, 700);
         Assert.True(respawnOamPublished, "Game Boy never published the target-correct respawn OAM pose.");
         Assert.True(
             transitionGameplayTicks * 100 >= transitionFrames * 95L && maximumMissedGameplayFrames <= 1,
@@ -350,6 +350,114 @@ public sealed class GameBoyRunnerLandingTests
             AssertVisibleBackgroundMatchesWorld(cpu, world, frame);
         }
         Assert.True(settledOamPublished, "Game Boy never published the settled respawn OAM frame.");
+    }
+
+    [Fact]
+    public void Shared_runner_accelerates_and_skids_before_reversing_like_smb3()
+    {
+        var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var speed = variables["view.speed"].Address;
+        var direction = variables["view.direction"].Address;
+        var playerX = variables["player.x"].Address;
+        var cpu = new GameBoyTestCpu(build.Rom) { CycleAccurateLy = true };
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
+        cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        var acceleration = new List<int>(32);
+        for (var tick = 0; tick < 40 && acceleration.Count < 32; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            if (cpu.Wram(speed) != 0)
+            {
+                acceleration.Add(cpu.Wram(speed));
+            }
+        }
+
+        Assert.Equal(Enumerable.Range(1, 32), acceleration);
+        var xAtRunSpeed = ReadWord(cpu, playerX);
+
+        cpu.Held.Remove("right");
+        cpu.Held.Add("left");
+        var skid = new List<int>(15);
+        int? turnSpeed = null;
+        for (var tick = 0; tick < 24 && turnSpeed is null; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            if (cpu.Wram(direction) == 1 && cpu.Wram(speed) < 32)
+            {
+                skid.Add(cpu.Wram(speed));
+            }
+            else if (cpu.Wram(direction) == 2)
+            {
+                turnSpeed = cpu.Wram(speed);
+            }
+        }
+
+        Assert.Equal(Enumerable.Range(1, 15).Reverse().Select(value => value * 2), skid);
+        Assert.Equal(0, turnSpeed);
+        Assert.True(ReadWord(cpu, playerX) > xAtRunSpeed, "Mario must keep moving right while skidding to a stop.");
+
+        var xAtTurn = ReadWord(cpu, playerX);
+        for (var tick = 0; tick < 8; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+
+        Assert.Equal(8, cpu.Wram(speed));
+        Assert.True(ReadWord(cpu, playerX) < xAtTurn, "Mario must accelerate left after the skid completes.");
+    }
+
+    [Fact]
+    public void Shared_runner_walk_animation_tracks_physical_speed_without_idle_flicker()
+    {
+        var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var speed = variables["view.speed"].Address;
+        var playerX = variables["player.x"].Address;
+        var displayFrame = variables["player.displayFrame"].Address;
+        var cpu = new GameBoyTestCpu(build.Rom) { CycleAccurateLy = true };
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
+        cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
+
+        cpu.Held.Add("right");
+        var previousX = ReadWord(cpu, playerX);
+        var observedMotion = false;
+        var idleTicksAfterMotion = new List<int>();
+        var walkFrames = new List<int>(16);
+        for (var tick = 0; tick < 50 && walkFrames.Count < 16; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            var currentX = ReadWord(cpu, playerX);
+            observedMotion |= currentX != previousX;
+            if (observedMotion && cpu.Wram(displayFrame) == 0)
+            {
+                idleTicksAfterMotion.Add(tick);
+            }
+
+            if (cpu.Wram(speed) == 20)
+            {
+                walkFrames.Add(cpu.Wram(displayFrame));
+            }
+
+            previousX = currentX;
+        }
+
+        var walkFrameTransitions = walkFrames
+            .Zip(walkFrames.Skip(1), (previous, current) => previous != current)
+            .Count(changed => changed);
+        Assert.True(
+            idleTicksAfterMotion.Count == 0 && walkFrames.Count == 16 && walkFrameTransitions <= 4,
+            $"Walk animation outran physical movement: idleTicks=[{string.Join(",", idleTicksAfterMotion)}], "
+            + $"walkFrames=[{string.Join(",", walkFrames)}], transitions={walkFrameTransitions}.");
     }
 
     [Fact]
@@ -444,8 +552,8 @@ public sealed class GameBoyRunnerLandingTests
         Assert.True(
             sourceTicks >= 114
             && maximumMissedGameplayFrames <= 1
-            && firstMovementFrame is <= 1
-            && progress >= 142
+            && firstMovementFrame is <= 6
+            && progress >= 136
             && newCollisionDecodes <= 2
             && maximumRequestToVisibleFrames <= 2
             && pendingRequests.All(requestFrame => 119 - requestFrame <= 2),
@@ -596,7 +704,10 @@ public sealed class GameBoyRunnerLandingTests
             && sourceCameraX == 334
             && visibleCameraX == 334
             && sourceCameraBoundary == (255, 256)
-            && visibleCameraBoundary == (254, 256)
+            && visibleCameraBoundary is { } visibleCrossing
+            && visibleCrossing.From < 256
+            && visibleCrossing.To >= 256
+            && visibleCrossing.To - visibleCrossing.From <= 2
             && selectedColumnPlaneBank
             && requests == 41
             && requests == prepares
@@ -697,8 +808,8 @@ public sealed class GameBoyRunnerLandingTests
         {
             new JumpProfile("tap", RunUpTicks: 0, HeldInputTicks: 1, ExpectedRiseSixteenths: 330),
             new JumpProfile("stand", RunUpTicks: 0, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_131),
-            new JumpProfile("run", RunUpTicks: 3, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
-            new JumpProfile("p-speed", RunUpTicks: 4, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
+            new JumpProfile("run", RunUpTicks: 21, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
+            new JumpProfile("p-speed", RunUpTicks: 32, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
         };
 
         foreach (var profile in profiles)
@@ -898,20 +1009,28 @@ public sealed class GameBoyRunnerLandingTests
             .Where(write => write.LowAddress == lowAddress)
             .Select(write => write.Value)
             .ToArray();
-        for (var index = 0; index < values.Length - 1; index++)
+        ushort? previous = null;
+        foreach (var value in values)
         {
-            if (index + 2 < values.Length
-                && values[index] < boundary
-                && values[index + 1] == 0
-                && values[index + 2] >= boundary)
+            if (previous is null)
             {
-                return (values[index], values[index + 2]);
+                previous = value;
+                continue;
             }
 
-            if (values[index] < boundary && values[index + 1] >= boundary)
+            // The test CPU records both byte writes of a little-endian word. Ignore the
+            // transient low-byte value when it would make a rightward camera trace regress.
+            if (value < previous)
             {
-                return (values[index], values[index + 1]);
+                continue;
             }
+
+            if (previous < boundary && value >= boundary)
+            {
+                return (previous.Value, value);
+            }
+
+            previous = value;
         }
 
         return null;

@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "fab54d2a6f6dd63b08414a32371d615ca68ab7e5e8591d48a0d57350cd6b3016",
-  "romSha256": "e316d9e7a25be0e212ce1555699d0e68d294ae6648b5f1beb879f241b6afc94c",
+  "abiFingerprint": "92f7c3be3d8a4333fa8e4a427d2ba9537ee94b2bc474a927129e5f332b587655",
+  "romSha256": "e6c6c421c5260dcbb54b0fa24d4f4fec8c4848f43f5eab0daee6328082ec6ba9",
   "ranges": [
     {
       "id": "UserLocals",
@@ -1839,165 +1839,171 @@
       "size": 2
     },
     {
+      "name": "player.animationAdvance",
+      "type": "bool",
+      "address": 14,
+      "size": 1
+    },
+    {
       "name": "view.x",
       "type": "i16",
-      "address": 14,
+      "address": 15,
       "size": 2
     },
     {
       "name": "view.y",
       "type": "i16",
-      "address": 16,
+      "address": 17,
       "size": 2
     },
     {
       "name": "view.moving",
       "type": "bool",
-      "address": 18,
+      "address": 19,
       "size": 1
     },
     {
       "name": "view.speed",
       "type": "u8",
-      "address": 19,
+      "address": 20,
       "size": 1
     },
     {
       "name": "view.direction",
       "type": "u8",
-      "address": 20,
+      "address": 21,
       "size": 1
     },
     {
       "name": "view.movementRemainder",
       "type": "u8",
-      "address": 21,
+      "address": 22,
       "size": 1
     },
     {
       "name": "frame.respawnPhase",
       "type": "u8",
-      "address": 22,
+      "address": 23,
       "size": 1
     },
     {
       "name": "__retrosharp_inline_12_screenX",
       "type": "i16",
-      "address": 23,
+      "address": 24,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_12_screenY",
       "type": "i16",
-      "address": 25,
+      "address": 26,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_17_spawnY",
       "type": "i16",
-      "address": 27,
+      "address": 28,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_previousFootWorldY",
       "type": "i16",
-      "address": 29,
+      "address": 30,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_19_verticalMotion",
       "type": "i16",
-      "address": 31,
+      "address": 32,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_footWorldY",
       "type": "i16",
-      "address": 33,
+      "address": 34,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_screenX",
       "type": "i16",
-      "address": 35,
+      "address": 36,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_20_footTile",
       "type": "i16",
-      "address": 37,
+      "address": 38,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_22_headProbeY",
       "type": "i16",
-      "address": 39,
+      "address": 40,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_24_screenY",
       "type": "i16",
-      "address": 41,
+      "address": 42,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_24_maxScrollY",
       "type": "i16",
-      "address": 43,
+      "address": 44,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_movementFootWorldY",
       "type": "i16",
-      "address": 45,
+      "address": 46,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_28_wallProbeY",
       "type": "i16",
-      "address": 47,
+      "address": 48,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_28_desiredDirection",
       "type": "u8",
-      "address": 49,
-      "size": 1
-    },
-    {
-      "name": "__retrosharp_inline_40_collisionCameraX",
-      "type": "i16",
       "address": 50,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_40_steps",
-      "type": "u8",
-      "address": 52,
       "size": 1
     },
     {
-      "name": "__retrosharp_inline_42_screenX",
+      "name": "__retrosharp_inline_34_collisionCameraX",
       "type": "i16",
+      "address": 51,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_34_steps",
+      "type": "u8",
       "address": 53,
+      "size": 1
+    },
+    {
+      "name": "__retrosharp_inline_36_screenX",
+      "type": "i16",
+      "address": 54,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_42_rightProbeX",
+      "name": "__retrosharp_inline_36_rightProbeX",
       "type": "i16",
-      "address": 55,
+      "address": 56,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_44_screenX",
+      "name": "__retrosharp_inline_38_screenX",
       "type": "i16",
-      "address": 57,
+      "address": 58,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_44_leftProbeX",
+      "name": "__retrosharp_inline_38_leftProbeX",
       "type": "i16",
-      "address": 59,
+      "address": 60,
       "size": 2
     }
   ]

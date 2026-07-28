@@ -43,11 +43,11 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             "runner",
             FunctionalTarget.Nes,
             WarmUpFrames: 500,
-            ObservationFrames: 240,
+            ObservationFrames: 270,
             Inputs:
             [
                 new FunctionalInputSpan("right", 501, 110, ["RIGHT"]),
-                new FunctionalInputSpan("left", 611, 120, ["LEFT"]),
+                new FunctionalInputSpan("left", 611, 150, ["LEFT"]),
             ],
             Checkpoints:
             [
