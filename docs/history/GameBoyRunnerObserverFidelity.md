@@ -1,5 +1,15 @@
 # Game Boy runner observer fidelity
 
+Status: **historical/background only.** This is the RPH-6.2/6.2a/6.3 record of
+the runner joint-load cadence observer. Its multi-replay SameBoy differential
+and deferred-bisect harness were forensic tooling that has since been removed
+(see "Retired cross-backend physical replay" below), and its runner-cadence
+result was `NOT_REPRODUCED`. For live runner debugging use
+[`../GameBoyRunnerDebugging.md`](../GameBoyRunnerDebugging.md); for the product
+acceptance rule — a confirmed perceptual report is fixed against the physical
+observer, never closed as `NOT_REPRODUCED` — see the Acceptance Policy in
+[`../../AGENTS.md`](../../AGENTS.md).
+
 The Game Boy runner joint-load cadence guard is the in-process behavioral test
 `GameBoyRunnerJointLoadCadenceTests.Shared_runner_joint_load_cadence_gate` in
 `src/RetroSharp.GameBoy.Tests`. `GameBoyTestCpu` runs the freshly compiled
@@ -53,8 +63,8 @@ certified the runner timeline as `NOT_REPRODUCED` on both backends and never
 became a product gate. Per the acceptance policy, independent-emulator and
 multi-emulator differential runs are forensic diagnostics, not closeout gates,
 so that Python harness was removed. The deterministic conclusion is preserved in
-[`validation/gameboy/runner-joint-load-comparison.json`](../validation/gameboy/runner-joint-load-comparison.json)
+[`validation/gameboy/runner-joint-load-comparison.json`](../../validation/gameboy/runner-joint-load-comparison.json)
 and
-[`validation/gameboy/runner-joint-load-phase-matrix.json`](../validation/gameboy/runner-joint-load-phase-matrix.json).
+[`validation/gameboy/runner-joint-load-phase-matrix.json`](../../validation/gameboy/runner-joint-load-phase-matrix.json).
 If a future runner cadence stutter is physically reported, reproduce it with the
 in-process gate above or the SameBoy `gameboy` MCP, not a bespoke replay script.

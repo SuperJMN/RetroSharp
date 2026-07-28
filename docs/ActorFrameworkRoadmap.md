@@ -549,5 +549,6 @@ tools/gameboy/generate_sample_roms.py
 ```
 
 For docs-only closeout work, use `git diff --check` and the full test command
-above; leave tracked ROMs byte-identical. Regenerate sample ROMs only when sample
-source/assets change.
+above; do not regenerate tracked ROMs when only docs change. Regenerate sample
+ROMs when sample source/assets change; their exact bytes are a diagnostic
+baseline, not a gate (see the Acceptance Policy in `AGENTS.md`).

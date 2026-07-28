@@ -52,9 +52,16 @@ every fresh implementation and review handoff:
 - terminal verdict and remaining review/correction budget.
 
 The capsule is immutable during the run unless the user or integrator changes
-it. Perceived gameplay is the product authority. A deterministic test is the
-preferred regression guard only when it measures the same presentation fault;
-an uncorrelated internal metric cannot override a fluid physical result.
+it. The full acceptance rule lives in `AGENTS.md`; this capsule is only the
+per-task summary. Perceived gameplay is the product authority. A deterministic
+test is the preferred regression guard only when it measures the same
+presentation fault; an uncorrelated internal metric cannot override a fluid
+physical result. A **confirmed report** — the user, the integrator, or a
+playtest named the defect, for example the runner's stuttering scroll — makes
+the physical observer the acceptance authority: diagnose it with
+`GameBoyRunnerDebugging.md` and land the fix. A quiet deterministic harness
+never closes a confirmed report as `NOT_REPRODUCED`; reserve "reproduce first or
+hand back" for an unconfirmed suspicion nobody can observe.
 
 ## Route By Task
 
@@ -70,8 +77,7 @@ instead of keeping a second copy. Load only the one route that owns the task.
 | Where is a deep module or production/test seam? | `AiNavigableArchitecture.md` |
 | How do frontend preparation, Actor lowering, and SDK lowering fit together? | `SdkArchitecture.md` |
 | What does a target support now? | `GameBoyTarget.md` or `NesTarget.md` |
-| How should runner behavior be reproduced? | `GameBoyRunnerDebugging.md` |
-| What owns Game Boy runner physical-frame cadence? | `GameBoyRunnerObserverFidelity.md` |
+| How is a runner gameplay, scroll, or cadence defect reproduced and fixed? | `GameBoyRunnerDebugging.md` (concrete symptom→layer map; forensic cadence record in `history/GameBoyRunnerObserverFidelity.md`) |
 | Is a sample portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md`; per-scenario acceptance records are under `history/` |
 | What is the generated-code CPU-work contract? | `GeneratedCodeCpuWorkContract.md` |
@@ -195,7 +201,8 @@ Classify a regression by its primary observable:
 | Fixing hardware/emulator symptoms only in sample code | Inspect target runtime behavior first |
 | Debugging the complete runner without isolation | Use `tools/gameboy/runner_diagnostics.py` and locate the first failing step |
 | Editing before naming the perceptual reproduction | Name the player action, scene, observer, visible/audible defect, safety constraints, and terminal verdict first |
-| Perfecting a proxy that no longer matches the player report | Spend at most two isolation attempts; then use the named runner/physical scenario or return a bounded investigation |
+| Perfecting a proxy that no longer matches the player report | Spend at most two isolation attempts; for a confirmed report then fix against the named runner/physical scenario (`GameBoyRunnerDebugging.md`), do not hand it back; return a bounded investigation only for an unconfirmed symptom |
+| Closing a user-reported defect as `NOT_REPRODUCED` because the deterministic harness is quiet | A confirmed report is fixed against the physical observer; the harness is a bonus guard, not a precondition for the fix |
 | Treating a logical cadence or pose-age difference as visible stutter | Correlate it with physical scroll, OAM, corruption, input, or audio before making it a gate |
 | Alternating proxies while fixing a bug | Keep one perceptual observable and one correlated deterministic guard; physical playback remains the final experience verdict |
 | Continuing after the perceptual terminal | Checkpoint; precision, architecture cleanup, and unrelated diagnostics become follow-ups |

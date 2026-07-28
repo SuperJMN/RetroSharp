@@ -5,6 +5,12 @@ complete through Large Worlds v1, while IRQ HUD remains separate.** This is the 
 artifact-free scrolling in **both** axes simultaneously (8-direction / diagonal),
 the kind Super Mario Land 2 does on Game Boy and games like Gauntlet do on NES.
 
+Acceptance policy: acceptance is judged by observable gameplay fluidity, not
+byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact
+CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic
+baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the
+Acceptance Policy in `AGENTS.md`.
+
 It is written so an autonomous agent (Codex) can pick up a task and know exactly
 what to change, where, and how to verify it. Read `AGENTS.md`,
 `docs/AgentContext.md`, `docs/NesTarget.md`, and
@@ -133,8 +139,9 @@ through an in-process `NesTestCpu` once ADNES is vendored into the test project
 - Capability-check before lowering; keep clear diagnostics. Do not silently lower
   an unsupported scroll mode.
 - Keep horizontal scroll and the existing single-axis path working with no
-  regression and byte-identical tracked ROMs unless a task deliberately changes a
-  tracked sample.
+  behavioral regression. Tracked ROMs are regeneratable artifacts; regenerate
+  them deliberately when a sample changes. Their exact bytes are a diagnostic
+  baseline, not a gate (see the Acceptance Policy in `AGENTS.md`).
 - Respect the **240 coarse-Y wrap** (nametable is 30 rows; `$2005` Y of 240..255
   is invalid and corrupts attribute fetches).
 - Do not add a genre-specific operation if `SetCameraPosition` / `StreamMapColumn`
@@ -412,7 +419,7 @@ stable IRQ HUD remains a distinct follow-up:
 | 240 coarse-Y wrap corrupts attribute fetch. | Map world Y → (nametable Y bit, 0..239); never write 240..255 to `$2005` Y. |
 | VBlank budget overrun (column + row + attributes + OAM DMA). | Camera movement queues streams and `Camera.Apply()` drains at most one edge or 8-tile row phase per VBlank; row attributes are a separate phase, and runtime rows only reset `$2006` at nametable boundaries. Larger mapper-backed worlds remain NF-10. |
 | Real-hardware four-screen needs cart SRAM. | Emulator-first demo; document the hardware caveat; mapper path in NF-10. |
-| Tracked NES ROMs change unexpectedly. | Gate four-screen behind explicit free-scroll request; keep horizontal path byte-identical. |
+| Tracked NES ROMs change unexpectedly. | Gate four-screen behind explicit free-scroll request so the horizontal path does not change behavior; regenerate tracked ROMs deliberately (exact bytes are diagnostic, not a gate). |
 
 ## Suggested order
 

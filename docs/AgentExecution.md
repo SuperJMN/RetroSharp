@@ -144,7 +144,10 @@ rephrased version of the same hypothesis does not reset the count. Neither does
 dispatching a fresh agent or reviewer. After the original observable is
 perceptually green, a new proxy has material information gain only if it
 demonstrates a player-visible/audible regression, corruption or unsafe writes,
-or contradictory deterministic evidence.
+or contradictory deterministic evidence. For a confirmed report, progress toward
+landing the fix against the physical observer is itself material gain; a
+deterministic harness that stays quiet on a defect the reporter can still see is
+not a no-gain step and never triggers this stop.
 
 Two matching deterministic runs are sufficient confirmation. A third is
 allowed only when the first two disagree or the live issue names the concrete
@@ -174,25 +177,36 @@ the deterministic test is its repeatable guard, not a substitute objective.
    on that final candidate.
 3. Spend at most two focused attempts reducing or correcting the observer. If a
    smaller deterministic test still cannot represent the defect, stop refining
-   the proxy. Use the named runner/physical scenario as acceptance when it is
-   reproducible, or return an `investigation` with the reproduction attempt,
-   ranked owner seam, and first falsifiable hypothesis when nobody can reproduce
-   it.
+   the proxy and branch on provenance (see the Acceptance Policy in
+   `AGENTS.md`). For a **confirmed report** — the user, the integrator, or a
+   playtest named the defect — the named runner/physical scenario becomes the
+   acceptance path: diagnose it with the target debugging map and land the fix.
+   A quiet deterministic harness is not permission to hand a confirmed defect
+   back. Only for an **unconfirmed** symptom that nobody, including the reporter,
+   can reproduce do you return an `investigation` with the reproduction attempt,
+   ranked owner seam, and first falsifiable hypothesis.
 
 Returning a reproducing RED plus a ranked owner seam without a landed fix is a
-first-class, low-stigma outcome. "Fixed but not solved" churn — repeated edits
-that never flip a named test — is the failure this gate exists to prevent.
-Prefer handing off a clean RED over another unfalsifiable edit. Equally, do not
-turn a perceptually good ROM into an internal-model perfection project.
+first-class, low-stigma outcome **for an unconfirmed suspicion**. It does not
+apply to a confirmed report: a silent harness never converts a defect the
+reporter can still see into a closed investigation. "Fixed but not solved"
+churn — repeated edits that never flip a named test — is the failure this gate
+exists to prevent for unconfirmed work; prefer handing off a clean RED over
+another unfalsifiable edit there. Equally, do not turn a perceptually good ROM
+into an internal-model perfection project.
 
 ## Perceptual Terminal And Review Budget
 
-The perceptual terminal is a hard stop for the current gameplay slice:
+This section operationalizes the Acceptance Policy in `AGENTS.md`; that file is
+the single source of truth if the two ever diverge. The perceptual terminal is a
+hard stop for the current gameplay slice:
 
 - the acceptance capsule's player action no longer produces its named visible
   or audible defect on the named observer;
 - corruption and unsafe PPU/OAM writes are zero where applicable;
-- the correlated deterministic guard is GREEN in two matching runs; and
+- the correlated deterministic guard — or the named physical/perceptual
+  scenario when no deterministic test can capture the defect — is GREEN in two
+  matching runs; and
 - no in-scope build or public-contract failure prevents exercising the result.
 
 After the first perceptually good candidate, allow at most one review round and
@@ -417,9 +431,10 @@ Stop and return to the integrator if:
 - A target cannot support the requested behavior within declared capabilities.
 - The runner cannot be kept working without broad unrelated rewrites.
 - Two consecutive experiments produce no material information gain.
-- Two focused observer-minimization attempts cannot preserve the reported
-  perceptual defect; use the named runner/physical scenario or return a bounded
-  investigation carrying the reproduction attempt.
+- Two focused observer-minimization attempts cannot preserve the perceptual
+  defect. For an unconfirmed suspicion, return a bounded investigation carrying
+  the reproduction attempt. For a confirmed report, do not stop here: switch to
+  the named runner/physical scenario as the acceptance path and land the fix.
 - Gameplay work started without a named acceptance capsule; stop and define the
   player action, observer, symptom, safety constraints, non-goals, and terminal
   verdict before editing.
