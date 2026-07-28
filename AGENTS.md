@@ -60,18 +60,37 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 
 The goal is a good in-game experience: smooth scrolling and movement, responsive controls, and music without stuttering. Acceptance is judged by that observable gameplay fluidity, not by byte-for-byte output. Aim to do it well, not perfectly. A ROM that plays well is correct even if its bytes move between builds.
 
-- A bug fix is *solved* when its named reproduction — the smallest deterministic
-  in-process behavioral test that fails because of the defect — flips from RED to
-  GREEN and stays green across two matching runs. It is not solved because the
-  ROM subjectively feels fluid. Write that reproduction before editing, prefer a
-  compiled-snippet `GameBoyTestCpu`/`NesTestCpu` test in the style of
-  `GameBoyRunnerLandingTests`, and iterate the fix against that single test.
-  Fluidity is the end-of-loop guard, run once on the final candidate, not the
-  target the fix loop iterates against. If the defect cannot be expressed as a
-  failing deterministic test within the reproduction budget, stop and hand it
-  back as an investigation carrying that reproduction attempt; do not keep
-  editing against the subjective fluidity signal.
-- The product gate is in-process behavioral simulation (`NesTestCpu` and `GameBoyTestCpu`): movement, jumps, landing, camera follow, collisions, audio cadence, deterministic execution, and absence of sustained backlog. Validate behavior on the freshly compiled ROM, not on a committed golden.
+- For gameplay-performance work, the named player-visible or audible symptom is
+  the primary product authority. A physical playtest on the affected target or
+  emulator is the closest observer when available. In-process simulation
+  (`NesTestCpu` and `GameBoyTestCpu`) protects that experience with repeatable
+  evidence; it is not a more precise experience to optimize instead.
+- Every dispatched gameplay fix must carry an immutable acceptance capsule:
+  the player action and scene, target and observer, unwanted visible or audible
+  symptom, safety constraints, explicit non-goals, and the terminal verdict.
+  Only the user or integrator may change it. A fresh implementer or reviewer
+  must not widen it, redefine smoothness, or add a new gate.
+- Before editing, prefer the smallest deterministic reproduction that observes
+  the same presentation fault. A compiled-snippet `GameBoyTestCpu`/`NesTestCpu`
+  test is suitable only when its observation maps directly to what the player
+  sees or hears. After at most two focused attempts to isolate the symptom, stop
+  refining the observer: use the named runner/physical scenario as the
+  acceptance path, or hand back a bounded investigation if nobody can reproduce
+  it. Do not invent a proxy merely because it is easier to assert.
+- A new metric becomes a gameplay gate only when its physical meaning is named
+  and a known-bad candidate fails while a perceptually good candidate passes.
+  Logical tick age, queue depth, frame-source choice, exact OAM pose, and similar
+  internal differences remain diagnostic until correlated with visible stutter,
+  corruption, input lag, unsafe hardware writes, or audible dropout. An
+  incidental nonzero or off-by-one value is not itself a regression.
+- A gameplay-performance fix reaches its **perceptual terminal** when the named
+  visible or audible defect is absent in its acceptance scenario, corruption
+  and unsafe PPU/OAM writes are zero where applicable, and the focused
+  deterministic evidence is GREEN in two matching runs. Once there, precision
+  work, cleaner metrics, additional observers, architecture refinements, and
+  unrelated failures become follow-ups. They do not reopen the fix. Only new
+  evidence of the named perceptual defect, corruption or unsafe writes, or
+  contradictory deterministic runs may reopen it.
 - Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
 - ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
 - Tracked sample ROMs are regeneratable artifacts. Regenerate them when the sample source changes. Their exact bytes are not a product requirement, so do not block work to preserve a specific hash.
@@ -85,11 +104,21 @@ The goal is a good in-game experience: smooth scrolling and movement, responsive
   verdict that its result can change and use the cheapest discriminating
   evidence. Two consecutive experiments that change none of those require an
   immediate checkpoint and handoff; do not reset the count by adding metrics or
-  rephrasing the same hypothesis.
+  rephrasing the same hypothesis. Replacing the agent or reviewer does not reset
+  the count either.
 - Two matching deterministic runs are sufficient confirmation. Run a third
   only when the first two disagree or the live issue justifies the extra run
   with a concrete risk. Run broad/full validation once on the final candidate,
-  not after every refinement step.
+  not after every refinement step. After the first perceptually good candidate,
+  allow at most one review round and one correction round before checkpointing.
+  Review findings block this slice only when they demonstrate the named
+  perceptual regression, corruption or unsafe writes, a build failure, or a
+  broken public contract in scope; other findings become follow-ups.
+- A broad validation failure must be reported and classified. It authorizes an
+  edit in the current slice only when causally tied to its acceptance capsule.
+  An inherited, unrelated, exactness-only, or stale-golden failure may block
+  publication under its own policy, but it must not silently expand a completed
+  gameplay fix.
 
 ## Reliable Commands
 

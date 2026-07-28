@@ -13,7 +13,8 @@ LAYERS = {"language", "sdk-2d", "target-intrinsic", "documentation", "validation
 TARGETS = {"none", "gb", "nes", "gb+nes"}
 POLICY = (
     "90-minute checkpoint / 120-minute hard stop / "
-    "two consecutive no-gain experiments stop"
+    "two consecutive no-gain experiments stop / "
+    "gameplay perceptual terminal stops refinement"
 )
 REQUIRED = (
     "Kind",

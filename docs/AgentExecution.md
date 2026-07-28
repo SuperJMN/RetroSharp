@@ -1,7 +1,7 @@
 # Autonomous Agent Execution
 
 Status: operational guide.
-Last updated: 2026-07-26.
+Last updated: 2026-07-28.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
 
@@ -97,23 +97,28 @@ seam, then links exactly one implementation child. One invocation handles one
 implementation child; after that child is complete, control returns to the
 integrator instead of chaining into the next rung.
 
-An implementation issue must name its owner seam, single observable, exact RED
+An implementation issue must name its owner seam, single observable, named RED
 reproduction, verification commands, and handoff destination before dispatch.
-If diagnosis discovers a second target, owner seam, or independently reviewable
-observable, split it instead of expanding the issue.
+A gameplay-performance issue must also carry the immutable acceptance capsule
+from `AgentContext.md`, including its perceptual terminal and remaining
+review/correction budget. If diagnosis discovers a second target, owner seam, or
+independently reviewable observable, split it instead of expanding the issue.
 
 ## Active-Time Checkpoints
 
 The default active engineering budget is 90/120 minutes:
 
-1. At 90 active minutes, checkpoint the exact RED command, cartridge hash when
-   applicable, first failing frame/cycle, current owner seam, and next falsifiable
+1. At 90 active minutes, checkpoint the named RED command or exact physical
+   reproduction, cartridge hash when applicable, first player-visible failure or
+   correlated failing frame/cycle, current owner seam, and next falsifiable
    hypothesis.
 2. At 120 active minutes, stop forming new hypotheses and stop making new edits
    unless the focused acceptance is already green. Preserve the worktree and
    hand off or split the remaining work.
 3. When the focused acceptance is green before the hard stop, only the issue's
-   predetermined full validation or CI may continue past it.
+   predetermined review/correction budget, full validation, or CI may continue
+   past it. Reaching the perceptual terminal ends gameplay refinement even when
+   time remains.
 
 Active time is diagnosis, editing, and focused local verification. External
 agent waits, queued CI, and infrastructure waits are recorded separately and do
@@ -135,7 +140,11 @@ information gain only when it does at least one of these:
 Two consecutive completed steps with no material information gain stop the
 investigation immediately. Checkpoint the best evidence and return to the
 integrator; adding another metric, phase, emulator, confirmation run, or
-rephrased version of the same hypothesis does not reset the count.
+rephrased version of the same hypothesis does not reset the count. Neither does
+dispatching a fresh agent or reviewer. After the original observable is
+perceptually green, a new proxy has material information gain only if it
+demonstrates a player-visible/audible regression, corruption or unsafe writes,
+or contradictory deterministic evidence.
 
 Two matching deterministic runs are sufficient confirmation. A third is
 allowed only when the first two disagree or the live issue names the concrete
@@ -146,28 +155,60 @@ cheapest already-named discriminator or hand off.
 
 ## Reproduce Before Repairing
 
-An implementation issue already declares its exact RED reproduction. Treat that
-RED as an executable, not prose: the fix loop is gated on a single cheap
-deterministic test, not on a subjective read of the whole ROM.
+An implementation issue already declares its named RED reproduction. For
+gameplay work, that RED describes the player-visible or audible defect first;
+the deterministic test is its repeatable guard, not a substitute objective.
 
-1. Before editing, express the defect as the smallest deterministic in-process
-   behavioral test that fails because of it. Prefer a compiled-snippet
+1. Before editing, name the player action, scene, observer, presentation defect,
+   safety constraints, and non-goals. Then express the defect as the smallest
+   deterministic in-process observation that still measures that same fault.
+   Prefer a compiled-snippet
    `GameBoyTestCpu`/`NesTestCpu` test in the style of `GameBoyRunnerLandingTests`
    over authoring a full `FunctionalAcceptance` scenario; the heavyweight
-   scenario tier is for durable acceptance rungs, not first reproduction.
-2. Iterate the fix against that one test. It is *solved* only when the named RED
-   flips to GREEN and stays green across two matching runs. Run the broad gate
-   and the fluidity guard once on that final candidate, never as the per-edit
-   target.
-3. If the defect cannot be reduced to a failing deterministic test within the
-   reproduction budget, do not start editing against the fluidity signal. Return
-   the work as an `investigation` carrying the reproduction attempt, the ranked
-   owner seam, and the first falsifiable hypothesis.
+   scenario tier is for durable acceptance rungs, not first reproduction. Do not
+   keep a smaller test when minimization removes the perceptual correlation.
+2. Iterate against one perceptual observable and one correlated deterministic
+   guard. A gameplay fix reaches its perceptual terminal when the named symptom
+   is absent, applicable corruption and unsafe PPU/OAM writes are zero, and the
+   focused guard stays GREEN across two matching runs. Run the broad gate once
+   on that final candidate.
+3. Spend at most two focused attempts reducing or correcting the observer. If a
+   smaller deterministic test still cannot represent the defect, stop refining
+   the proxy. Use the named runner/physical scenario as acceptance when it is
+   reproducible, or return an `investigation` with the reproduction attempt,
+   ranked owner seam, and first falsifiable hypothesis when nobody can reproduce
+   it.
 
 Returning a reproducing RED plus a ranked owner seam without a landed fix is a
 first-class, low-stigma outcome. "Fixed but not solved" churn — repeated edits
 that never flip a named test — is the failure this gate exists to prevent.
-Prefer handing off a clean RED over another unfalsifiable edit.
+Prefer handing off a clean RED over another unfalsifiable edit. Equally, do not
+turn a perceptually good ROM into an internal-model perfection project.
+
+## Perceptual Terminal And Review Budget
+
+The perceptual terminal is a hard stop for the current gameplay slice:
+
+- the acceptance capsule's player action no longer produces its named visible
+  or audible defect on the named observer;
+- corruption and unsafe PPU/OAM writes are zero where applicable;
+- the correlated deterministic guard is GREEN in two matching runs; and
+- no in-scope build or public-contract failure prevents exercising the result.
+
+After the first perceptually good candidate, allow at most one review round and
+one correction round. A reviewer may block the slice only with direct evidence
+of the named perceptual defect, corruption or unsafe writes, contradictory
+deterministic runs, an in-scope build failure, or an in-scope public-contract
+break. Precision improvements, alternative frame models, cleaner metrics,
+architecture expansion, and unrelated findings are follow-up work. A new
+reviewer does not reopen or reset the budget.
+
+If reviewers disagree, the integrator adjudicates once against the acceptance
+capsule and the product authority order in `AGENTS.md`; do not launch a third
+investigation without new blocking evidence. Run global validation once. If it
+fails, report and classify the failure before any edit. Only a causally related
+failure expands this slice; publication policy may separately hold a candidate
+without turning that hold into gameplay refinement.
 
 ## Machine-checkable issue gateway
 
@@ -266,6 +307,9 @@ Responsibilities:
 
 - Seed issues and milestones.
 - Assign or dispatch agents only to tasks whose dependencies are satisfied.
+- Copy the immutable gameplay acceptance capsule into every fresh
+  implementation and review dispatch.
+- Enforce the perceptual terminal and the single review/correction budget.
 - Keep `docs/ArchitectureRoadmap.md` current when task scope changes.
 - Check that portable SDK APIs do not expose target hardware details.
 - Merge PRs in dependency order.
@@ -294,6 +338,10 @@ Responsibilities:
 - Confirm capability checks exist before portable lowering.
 - Confirm runner compatibility when the runner is affected.
 - Confirm diagnostics are deterministic and target-specific.
+- Do not redefine the acceptance capsule or promote an uncorrelated precision
+  metric to a gameplay gate.
+- Classify non-blocking precision, architecture, and unrelated findings as
+  follow-ups instead of reopening a perceptually complete slice.
 
 ## Execution Waves
 
@@ -448,7 +496,11 @@ Stop and return to the integrator if:
 - A target cannot support the requested behavior within declared capabilities.
 - The runner cannot be kept working without broad unrelated rewrites.
 - Two consecutive experiments produce no material information gain.
-- The defect cannot be reduced to a failing deterministic test within the
-  reproduction budget; return it as an investigation carrying the RED attempt.
-- A fix has been edited without a named RED test that it flips from red to
-  green; stop and reproduce first instead of tuning against the fluidity signal.
+- Two focused observer-minimization attempts cannot preserve the reported
+  perceptual defect; use the named runner/physical scenario or return a bounded
+  investigation carrying the reproduction attempt.
+- Gameplay work started without a named acceptance capsule; stop and define the
+  player action, observer, symptom, safety constraints, non-goals, and terminal
+  verdict before editing.
+- The perceptual terminal and allotted review/correction round are complete;
+  checkpoint instead of opening another precision or architecture refinement.
