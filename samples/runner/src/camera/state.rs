@@ -47,49 +47,38 @@ class CameraState
         }
     }
 
-    inline void StartDirection(u8 desiredDirection)
-    {
-        direction = desiredDirection;
-        speed = MotionSpeed.Walk;
-        movementRemainder = 0;
-    }
-
-    inline void AccelerateRun()
-    {
-        if (speed < MotionSpeed.RunMax)
-        {
-            speed += MotionSpeed.RunAcceleration;
-            if (speed > MotionSpeed.RunMax)
-            {
-                speed = MotionSpeed.RunMax;
-            }
-        }
-    }
-
-    inline void DecelerateToWalk()
-    {
-        if (speed > MotionSpeed.Walk)
-        {
-            speed -= MotionSpeed.Friction;
-            if (speed < MotionSpeed.Walk)
-            {
-                speed = MotionSpeed.Walk;
-            }
-        }
-    }
-
-    inline void HoldDirection(bool grounded)
+    inline void Accelerate(bool grounded)
     {
         if (grounded)
         {
             if (Input.IsDown(Button.B))
             {
-                AccelerateRun();
+                if (speed < MotionSpeed.RunMax)
+                {
+                    speed += MotionSpeed.Acceleration;
+                }
             }
-            else
+            else if (speed < MotionSpeed.Walk)
             {
-                DecelerateToWalk();
+                speed += MotionSpeed.Acceleration;
             }
+            else if (speed > MotionSpeed.Walk)
+            {
+                speed -= MotionSpeed.Friction;
+            }
+        }
+    }
+
+    inline void ApplySkid(u8 desiredDirection)
+    {
+        if (speed <= MotionSpeed.SkidAcceleration)
+        {
+            speed = MotionSpeed.SkidAcceleration - speed;
+            direction = desiredDirection;
+        }
+        else
+        {
+            speed -= MotionSpeed.SkidAcceleration;
         }
     }
 
@@ -98,7 +87,6 @@ class CameraState
         if (speed <= MotionSpeed.Friction)
         {
             speed = 0;
-            movementRemainder = 0;
             direction = Direction.None;
         }
         else
@@ -116,37 +104,38 @@ class CameraState
                 ApplyFriction();
             }
         }
-        if (desiredDirection == Direction.Right)
+        else
         {
-            if (direction == Direction.Right)
+            if (direction == Direction.None)
             {
-                HoldDirection(grounded);
+                direction = desiredDirection;
+                if (!grounded)
+                {
+                    speed = MotionSpeed.Walk;
+                }
+            }
+
+            if (direction == desiredDirection)
+            {
+                Accelerate(grounded);
             }
             else
             {
-                StartDirection(Direction.Right);
-            }
-        }
-        if (desiredDirection == Direction.Left)
-        {
-            if (direction == Direction.Left)
-            {
-                HoldDirection(grounded);
-            }
-            else
-            {
-                StartDirection(Direction.Left);
+                if (grounded)
+                {
+                    ApplySkid(desiredDirection);
+                }
             }
         }
     }
 
-    inline void UpdateFacing(PlayerState player)
+    inline void UpdateFacing(PlayerState player, u8 desiredDirection)
     {
-        if (direction == Direction.Right)
+        if (desiredDirection == Direction.Right)
         {
             player.displayFlipX = false;
         }
-        else if (direction == Direction.Left)
+        else if (desiredDirection == Direction.Left)
         {
             player.displayFlipX = true;
         }
@@ -241,7 +230,7 @@ class CameraState
         }
 
         UpdateIntent(desiredDirection, player.grounded);
-        UpdateFacing(player);
+        UpdateFacing(player, desiredDirection);
         ApplyMotion(player, wallProbeY);
     }
 }

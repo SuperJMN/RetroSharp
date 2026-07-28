@@ -3357,7 +3357,9 @@ public partial class GameBoyRomCompilerTests
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
-        Assert.Contains("if (view.moving)", source);
+        Assert.Contains("if (view.speed != 0)", source);
+        Assert.Contains("animationAdvance = !animationAdvance;", source);
+        Assert.Contains("if (animationAdvance)", source);
         Assert.Contains("animTick += view.speed;", source);
         Assert.Contains("Animation.Frame(run, animTick)", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
@@ -4698,16 +4700,17 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void GameBoy_runner_uses_horizontal_speed_model_with_instant_turn()
+    public void GameBoy_runner_uses_4_4_horizontal_acceleration_and_skid_model()
     {
         var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("enum Direction", source);
-        Assert.Contains("Walk = 10", source);
-        Assert.Contains("RunMax = 16", source);
-        Assert.Contains("Subpixel = 8", source);
-        Assert.Contains("RunAcceleration = 2", source);
-        Assert.Contains("Friction = 3", source);
+        Assert.Contains("Walk = 20", source);
+        Assert.Contains("RunMax = 32", source);
+        Assert.Contains("Subpixel = 16", source);
+        Assert.Contains("Acceleration = 1", source);
+        Assert.Contains("Friction = 1", source);
+        Assert.Contains("SkidAcceleration = 2", source);
         Assert.Contains("MaxSteps = 2", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
@@ -4720,34 +4723,29 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("u8 direction;", cameraBlock);
         Assert.Contains("u8 movementRemainder;", cameraBlock);
         Assert.Contains("inline void UpdateIntent(u8 desiredDirection, bool grounded)", cameraBlock);
-        Assert.Contains("if (direction == Direction.Right)", cameraBlock);
-        Assert.Contains("if (direction == Direction.Left)", cameraBlock);
-        Assert.Contains("StartDirection(Direction.Right);", cameraBlock);
-        Assert.Contains("StartDirection(Direction.Left);", cameraBlock);
-        Assert.Contains("speed = MotionSpeed.Walk;", cameraBlock);
+        Assert.Contains("inline void ApplySkid(u8 desiredDirection)", cameraBlock);
+        Assert.Contains("speed -= MotionSpeed.SkidAcceleration;", cameraBlock);
+        Assert.Contains("direction = desiredDirection;", cameraBlock);
+        Assert.Contains("UpdateFacing(player, desiredDirection);", cameraBlock);
         Assert.Contains("movementRemainder += speed;", cameraBlock);
         Assert.Contains("void ApplyMotionStep(PlayerState player, Pixel wallProbeY, Pixel collisionCameraX)", cameraBlock);
         Assert.Contains("movementRemainder -= MotionSpeed.Subpixel;", cameraBlock);
         Assert.Contains("MoveRightOnePixel(player, wallProbeY, collisionCameraX);", cameraBlock);
         Assert.Contains("MoveLeftOnePixel(player, wallProbeY, collisionCameraX);", cameraBlock);
 
-        // The corrected model turns instantly: no skid/turn-friction that would let the actor walk backward.
-        Assert.DoesNotContain("ApplyHorizontalIntent", cameraBlock);
-        Assert.DoesNotContain("ApplyTurnFriction", cameraBlock);
-        Assert.DoesNotContain("ApplyRightIntent", cameraBlock);
-        Assert.DoesNotContain("ApplyLeftIntent", cameraBlock);
+        Assert.DoesNotContain("StartDirection", cameraBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
-    public void GameBoy_runner_builds_run_speed_from_b_only_while_grounded()
+    public void GameBoy_runner_accelerates_toward_the_input_speed_target()
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("RunMax = 16", source);
-        Assert.Contains("RunAcceleration = 2", source);
+        Assert.Contains("RunMax = 32", source);
+        Assert.Contains("Acceleration = 1", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
         var frameStart = source.IndexOf("class FrameState", StringComparison.Ordinal);
@@ -4755,23 +4753,20 @@ public partial class GameBoyRomCompilerTests
         Assert.True(frameStart > cameraStart);
         var cameraBlock = source[cameraStart..frameStart];
 
-        Assert.Contains("inline void HoldDirection(bool grounded)", cameraBlock);
-        Assert.Contains("inline void AccelerateRun()", cameraBlock);
-        Assert.Contains("inline void DecelerateToWalk()", cameraBlock);
+        Assert.Contains("inline void Accelerate(bool grounded)", cameraBlock);
         Assert.Contains("inline void ApplyFriction()", cameraBlock);
+        Assert.Contains("if (grounded)", cameraBlock);
         Assert.Contains("if (Input.IsDown(Button.B))", cameraBlock);
-        Assert.Contains("AccelerateRun();", cameraBlock);
-        Assert.Contains("DecelerateToWalk();", cameraBlock);
-        Assert.Contains("speed += MotionSpeed.RunAcceleration;", cameraBlock);
+        Assert.Contains("if (speed < MotionSpeed.RunMax)", cameraBlock);
+        Assert.Contains("speed += MotionSpeed.Acceleration;", cameraBlock);
+        Assert.Contains("else if (speed < MotionSpeed.Walk)", cameraBlock);
+        Assert.Contains("else if (speed > MotionSpeed.Walk)", cameraBlock);
         Assert.Contains("speed -= MotionSpeed.Friction;", cameraBlock);
         Assert.Contains("direction = Direction.None;", cameraBlock);
 
-        // Run speed only builds while Mario has traction: acceleration and ground friction are gated by
-        // grounded, so holding B in the air preserves momentum instead of building extra speed.
-        Assert.Contains("HoldDirection(grounded);", cameraBlock);
+        // Traction owns acceleration and friction; airborne movement keeps takeoff momentum.
+        Assert.Contains("Accelerate(grounded);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
-        Assert.Contains("if (grounded)\n        {\n            if (Input.IsDown(Button.B))\n            {", cameraBlock);
-        Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);
         Assert.True(motionStart >= 0);

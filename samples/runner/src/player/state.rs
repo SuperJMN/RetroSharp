@@ -11,6 +11,7 @@ class PlayerState
     Pixel animTick;
     bool jumping;
     Pixel verticalSubpixel;
+    bool animationAdvance;
 
     inline void ApplyGravity()
     {
@@ -110,19 +111,24 @@ class PlayerState
 
     inline void UpdateRunAnimation(CameraState view)
     {
-        if (view.moving)
+        if (view.speed != 0)
         {
-            animTick += view.speed;
-            if (animTick >= RunAnimation.CycleTicks)
+            animationAdvance = !animationAdvance;
+            if (animationAdvance)
             {
-                animTick -= RunAnimation.CycleTicks;
+                animTick += view.speed;
+                if (animTick >= RunAnimation.CycleTicks)
+                {
+                    animTick -= RunAnimation.CycleTicks;
+                }
             }
         }
         else
         {
             animTick = 0;
+            animationAdvance = false;
         }
 
-        SelectDisplayFrame(view.moving);
+        SelectDisplayFrame(view.speed != 0);
     }
 }
