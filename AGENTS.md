@@ -65,18 +65,34 @@ The goal is a good in-game experience: smooth scrolling and movement, responsive
   emulator is the closest observer when available. In-process simulation
   (`NesTestCpu` and `GameBoyTestCpu`) protects that experience with repeatable
   evidence; it is not a more precise experience to optimize instead.
+- Classify the symptom by provenance before choosing a stop rule. A **confirmed
+  report** — the user, the integrator, or a playtest names a visible or audible
+  defect (for example the runner's stuttering scroll) — makes the
+  physical/perceptual observer the acceptance authority for that defect. A
+  deterministic in-process reproduction is then a helpful guard, never a
+  precondition: its absence does not mean "no defect" and never authorizes
+  closing the work as `NOT_REPRODUCED`. Diagnose the confirmed symptom from the
+  physical scene using the target debugging map (`docs/GameBoyRunnerDebugging.md`
+  and `docs/NesTarget.md`) and fix the responsible layer. Reserve
+  "reproduce first or hand back" for an **unconfirmed suspicion** that no human
+  has observed, where that discipline prevents a goose chase.
 - Every dispatched gameplay fix must carry an immutable acceptance capsule:
   the player action and scene, target and observer, unwanted visible or audible
   symptom, safety constraints, explicit non-goals, and the terminal verdict.
   Only the user or integrator may change it. A fresh implementer or reviewer
   must not widen it, redefine smoothness, or add a new gate.
-- Before editing, prefer the smallest deterministic reproduction that observes
-  the same presentation fault. A compiled-snippet `GameBoyTestCpu`/`NesTestCpu`
-  test is suitable only when its observation maps directly to what the player
-  sees or hears. After at most two focused attempts to isolate the symptom, stop
-  refining the observer: use the named runner/physical scenario as the
-  acceptance path, or hand back a bounded investigation if nobody can reproduce
-  it. Do not invent a proxy merely because it is easier to assert.
+- For any symptom, still try the smallest deterministic reproduction that
+  observes the same presentation fault, because a GREEN/RED test is the cheapest
+  regression guard. A compiled-snippet `GameBoyTestCpu`/`NesTestCpu` test is
+  suitable only when its observation maps directly to what the player sees or
+  hears. Spend at most two focused attempts building that observer. When it
+  cannot capture the defect, the next step depends on provenance: for a
+  **confirmed report**, do not hand it back — proceed to fix against the named
+  runner/physical scenario and record the perceptual before/after as the
+  evidence; only an **unconfirmed** symptom that nobody, including the reporter,
+  can reproduce may be returned as a bounded investigation. Do not invent a
+  proxy merely because it is easier to assert, and do not treat a quiet
+  deterministic harness as proof that a reported defect is absent.
 - A new metric becomes a gameplay gate only when its physical meaning is named
   and a known-bad candidate fails while a perceptually good candidate passes.
   Logical tick age, queue depth, frame-source choice, exact OAM pose, and similar
@@ -86,7 +102,8 @@ The goal is a good in-game experience: smooth scrolling and movement, responsive
 - A gameplay-performance fix reaches its **perceptual terminal** when the named
   visible or audible defect is absent in its acceptance scenario, corruption
   and unsafe PPU/OAM writes are zero where applicable, and the focused
-  deterministic evidence is GREEN in two matching runs. Once there, precision
+  deterministic guard — or, when no deterministic test can capture the defect,
+  the named physical/perceptual scenario — is GREEN in two matching runs. Once there, precision
   work, cleaner metrics, additional observers, architecture refinements, and
   unrelated failures become follow-ups. They do not reopen the fix. Only new
   evidence of the named perceptual defect, corruption or unsafe writes, or

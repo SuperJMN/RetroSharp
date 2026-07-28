@@ -6,6 +6,12 @@ Camera2D Vertical Scroll** (`docs/ArchitectureRoadmap.md`, AR-5.1..AR-5.3). It i
 written so an autonomous agent (Codex) can pick up a task and know exactly what
 to change, where, and how to verify it.
 
+Acceptance policy: acceptance is judged by observable gameplay fluidity, not
+byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact
+CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic
+baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the
+Acceptance Policy in `AGENTS.md`.
+
 Read `AGENTS.md` and `docs/AgentContext.md` first for repo discipline and
 validation commands. Read `docs/GameBoyTarget.md` and `docs/NesTarget.md` for the
 current supported subset per target.
@@ -108,8 +114,11 @@ NES — bounded four-screen free scroll:
 - Byte-backed values wrap at 256; vertical world/camera math must clamp or use
   explicit split-byte fields (`CameraYLow/High` already does 16-bit). Watch the
   240 vs 256 difference on NES (coarse-Y wraps at 240).
-- Keep tracked ROMs byte-identical unless a task deliberately regenerates them
-  with `tools/gameboy/generate_sample_roms.py`.
+- Do not regress the existing horizontal/single-axis behavior. Tracked ROMs are
+  regeneratable artifacts: regenerate them deliberately with
+  `tools/gameboy/generate_sample_roms.py` when the sample changes. Their exact
+  bytes are a diagnostic baseline, not a gate (see the Acceptance Policy in
+  `AGENTS.md`).
 - Keep transitional APIs working; do not remove horizontal behavior.
 
 ## Reliable commands

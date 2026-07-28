@@ -1,5 +1,15 @@
 # Game Boy runner observer fidelity
 
+Status: **historical/background only.** This is the RPH-6.2/6.2a/6.3 forensic
+record of how the runner joint-load cadence observer was hardened. It is not
+active dispatch and not a closeout gate: its multi-replay SameBoy differential
+and deferred-bisect harness are forensic tooling, and its runner-cadence result
+was `NOT_REPRODUCED`. For live runner debugging use
+[`../GameBoyRunnerDebugging.md`](../GameBoyRunnerDebugging.md); for the product
+acceptance rule (a confirmed perceptual report is fixed against the physical
+observer, never closed as `NOT_REPRODUCED`) see the Acceptance Policy in
+[`../../AGENTS.md`](../../AGENTS.md).
+
 RPH-6.2 compares the joint-load detector's **ROM-visible** observations before
 considering its host instrumentation. RPH-6.2a then selects SameBoy's
 `GB_run_frame` boundary as the one physical-frame authority consumed by
@@ -171,9 +181,9 @@ classification and the independent SameBoy comparison were also
 `NOT_REPRODUCED`.
 
 The deterministic artifacts are
-[`validation/gameboy/runner-joint-load-comparison.json`](../validation/gameboy/runner-joint-load-comparison.json)
+[`validation/gameboy/runner-joint-load-comparison.json`](../../validation/gameboy/runner-joint-load-comparison.json)
 and
-[`validation/gameboy/runner-joint-load-phase-matrix.json`](../validation/gameboy/runner-joint-load-phase-matrix.json).
+[`validation/gameboy/runner-joint-load-phase-matrix.json`](../../validation/gameboy/runner-joint-load-phase-matrix.json).
 The comparison is bound to the exact ROM and base timeline hashes. Every
 physical case is independently bound to its mutated timeline, ROM, SameBoy
 library, observer schema, three replay digests, canary proofs, and enforced

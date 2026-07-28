@@ -1,6 +1,6 @@
 # Historical documents
 
-Status: background only. Last updated: 2026-07-26.
+Status: background only. Last updated: 2026-07-28.
 
 These documents are completed execution records, closed-issue narratives, and
 per-issue acceptance snapshots. They are preserved for design history and
@@ -34,6 +34,7 @@ target and SDK documents under `../`.
 - [`NesRunnerCadenceAcceptance.md`](NesRunnerCadenceAcceptance.md): issue #321 NES runner cadence evidence.
 - [`NesRunnerPowerOnRamAcceptance.md`](NesRunnerPowerOnRamAcceptance.md): issue #326 NES power-on RAM evidence.
 - [`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md): closed issue #327 NES visual-parity forensic capture.
+- [`GameBoyRunnerObserverFidelity.md`](GameBoyRunnerObserverFidelity.md): RPH-6.2/6.2a/6.3 runner joint-load observer-fidelity forensic record (`NOT_REPRODUCED`).
 
 ## Retired subsystem
 
