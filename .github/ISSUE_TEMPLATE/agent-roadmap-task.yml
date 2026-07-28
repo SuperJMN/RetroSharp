@@ -11,6 +11,9 @@ body:
         **90-minute checkpoint / 120-minute hard stop / two consecutive
         no-gain experiments stop**. Two matching deterministic runs suffice;
         require a third only when they disagree or a concrete risk justifies it.
+        For gameplay-performance work, perceived fluidity is the product
+        authority. Reaching the acceptance capsule's perceptual terminal ends
+        refinement; a fresh metric or reviewer does not reopen it.
   - type: dropdown
     id: schema
     attributes: {label: Schema, options: [aex-1]}
@@ -48,15 +51,35 @@ body:
     validations: {required: true}
   - type: textarea
     id: observable
-    attributes: {label: Single observable, description: One externally observable completion condition.}
+    attributes:
+      label: Single observable
+      description: |
+        One externally observable completion condition. For gameplay, complete
+        the immutable acceptance capsule below; tests must guard this experience,
+        not replace it with a precision target.
+      placeholder: |
+        Player action and scene:
+        Target and physical observer/emulator:
+        Unwanted visible or audible symptom:
+        Safety constraints:
+        Perceptual terminal:
+        Review budget: one review round and one correction round
     validations: {required: true}
   - type: textarea
     id: no_goals
-    attributes: {label: No-goals, description: Explicitly list work that must not expand this dispatch.}
+    attributes:
+      label: No-goals
+      description: Explicitly list work that must not expand this dispatch, including byte/raster/cycle/pose-age precision when irrelevant.
     validations: {required: true}
   - type: textarea
     id: red
-    attributes: {label: Exact RED, description: Exact command, expected exit code, and first failure signature.}
+    attributes:
+      label: Exact RED
+      description: |
+        Exact command, expected exit code, and first failure signature for the
+        correlated guard. When only physical playback preserves a gameplay
+        defect, give the exact player actions, observer, and visible/audible
+        failure instead of inventing an uncorrelated proxy.
     validations: {required: true}
   - type: textarea
     id: verification
@@ -65,7 +88,9 @@ body:
       description: |
         Smallest commands that can decide the observable. Run broad validation
         once on the final candidate when production or shared .NET behavior
-        changed; never after every diagnostic/refinement step.
+        changed; never after every diagnostic/refinement step. Require two
+        matching focused GREEN runs. Classify a broad failure before editing and
+        do not expand the slice for unrelated or exactness-only failures.
       placeholder: |
         dotnet test <focused-owner-project> -m:1 --filter <observable>
         dotnet test RetroSharp.sln -m:1  # final candidate, when applicable

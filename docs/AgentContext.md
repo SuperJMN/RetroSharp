@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: current navigation and execution context.
-Last updated: 2026-07-26.
+Last updated: 2026-07-28.
 
 Read this after `AGENTS.md`. It is deliberately short and current. Historical
 issue closeouts, commit hashes, ROM hashes, and one-off acceptance measurements
@@ -38,6 +38,23 @@ Boy and NES cartridges directly.
 
 The shared runner is the main playable acceptance app. Its presence in both
 targets does not make every call in it a portable API contract.
+
+## Gameplay Acceptance Capsule
+
+For a gameplay-performance task, copy this capsule from the live issue into
+every fresh implementation and review handoff:
+
+- player action and scene;
+- target and physical observer or emulator;
+- unwanted visible or audible symptom;
+- safety constraints such as zero corruption and zero unsafe PPU/OAM writes;
+- explicit non-goals, especially byte, raster, cycle, and pose-age precision;
+- terminal verdict and remaining review/correction budget.
+
+The capsule is immutable during the run unless the user or integrator changes
+it. Perceived gameplay is the product authority. A deterministic test is the
+preferred regression guard only when it measures the same presentation fault;
+an uncorrelated internal metric cannot override a fluid physical result.
 
 ## Route By Task
 
@@ -94,11 +111,13 @@ can make an old constraint look current.
 - Game Boy runner cadence investigations use SameBoy's `GB_run_frame` timeline
   as physical-frame authority. `GameBoyTestCpu` remains a behavioral simulator,
   not a physical-frame clock.
-- A bug fix iterates against one authority: the in-process behavioral simulator
-  (`GameBoyTestCpu`/`NesTestCpu`) that owns its named RED test. Physical
-  emulators and MCP transports are diagnostic confirmation only; do not alternate
-  oracles mid-fix, because a fix that greens one observer while another stays red
-  is not solved.
+- A gameplay fix iterates against one named perceptual observable and one
+  correlated deterministic guard. Do not alternate proxies mid-fix. Physical
+  playback owns the final experience verdict; `GameBoyTestCpu`/`NesTestCpu`
+  owns repeatability and safety evidence, not an abstract precision contest.
+- Once the acceptance capsule reaches its perceptual terminal, only direct
+  evidence of the named symptom, corruption or unsafe writes, or contradictory
+  deterministic runs may reopen it. Record other improvements as follow-ups.
 - Transitional public forms remain supported until an explicit removal slice
   changes their contract.
 
@@ -175,8 +194,12 @@ Classify a regression by its primary observable:
 | Applying broad formatting to inherited debt | Format touched files only and run `git diff --check` |
 | Fixing hardware/emulator symptoms only in sample code | Inspect target runtime behavior first |
 | Debugging the complete runner without isolation | Use `tools/gameboy/runner_diagnostics.py` and locate the first failing step |
-| Editing a bug fix before a named RED test fails for it | Reproduce as the cheapest deterministic `*TestCpu` test first; iterate the fix until that test greens twice |
-| Alternating oracles while fixing a bug | Iterate against one in-process `*TestCpu` RED; keep physical emulators and MCP transports diagnostic and never swap them in mid-fix |
+| Editing before naming the perceptual reproduction | Name the player action, scene, observer, visible/audible defect, safety constraints, and terminal verdict first |
+| Perfecting a proxy that no longer matches the player report | Spend at most two isolation attempts; then use the named runner/physical scenario or return a bounded investigation |
+| Treating a logical cadence or pose-age difference as visible stutter | Correlate it with physical scroll, OAM, corruption, input, or audio before making it a gate |
+| Alternating proxies while fixing a bug | Keep one perceptual observable and one correlated deterministic guard; physical playback remains the final experience verdict |
+| Continuing after the perceptual terminal | Checkpoint; precision, architecture cleanup, and unrelated diagnostics become follow-ups |
+| Repeating review with fresh agents | One review round and one correction round; changing reviewer does not reset the budget |
 | Calling local validation “published” | Prove upstream alignment separately, as required by `AGENTS.md` |
 
 In a new worktree, restore before using `--no-restore`. Do not run concurrent
@@ -197,5 +220,9 @@ evidence relevant to the changed owner:
   examples, generated artifacts, or enforced navigation contracts changed.
 - External-emulator runs are opt-in diagnostics. Multi-emulator comparison is
   historical forensic evidence and must never be a handoff or closeout gate.
+- Run the broad gate once on the final candidate. Classify any failure before
+  editing: only a failure tied to the acceptance capsule expands the current
+  slice; unrelated, inherited, exactness-only, and stale-golden failures are
+  reported separately.
 
 Keep local validation, commit state, push state, and merge state distinct.
