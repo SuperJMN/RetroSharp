@@ -86,29 +86,17 @@ flatpak run --command=retroarch org.libretro.RetroArch \
 
 Use original DMG hardware reports as backend evidence, not as sample quirks. Input bugs that reproduce only on hardware can still be target-runtime bugs, especially around `JOYP` row settling.
 
-### Optional NES physical smoke check
+### NES physical isolation
 
-When the shared runner fails only on NES, reproduce it first with the
-in-process behavioral simulation on a freshly compiled ROM. If independent
-emulator evidence would help isolate physical PPU/OAM timing, run the optional
-AprNes-only smoke check:
-
-```bash
-python3 tools/nes/verify_runner_visual_parity.py --mode physical
-```
-
-`physical` is also the default. It does not require FCEUmm, Nestopia, or
-persistent RetroArch configuration. It replays five focal commits and reports
-retained OAM, sensitive `$2000-$2007` writes, PPU address/data order, and
-selected-slot lifecycle transitions. This is diagnostic evidence; it is not a
-sample closeout gate and does not replace in-process gameplay acceptance.
-
-The old three-emulator differential remains reproducible only through the
-explicit `--mode historical-differential` option. It preserves evidence from
-closed issue #327 and must not be copied into an issue, PR, or validation
-checklist. See
-[`NesRunnerVisualParityAcceptance.md`](history/NesRunnerVisualParityAcceptance.md) for
-that historical capture.
+When the shared runner fails only on NES, reproduce it first with the in-process
+behavioral simulation (`NesTestCpu`) on a freshly compiled ROM. If independent
+emulator evidence would help isolate physical PPU/OAM timing, drive the ROM
+through the `nes_debug` MCP and inspect retained OAM, sensitive `$2000-$2007`
+writes, PPU address/data order, and nametable state. Independent-emulator
+evidence is a forensic diagnostic; it is not a sample closeout gate and does not
+replace in-process gameplay acceptance. The closed multi-emulator #327
+differential is preserved in
+[`NesRunnerVisualParityAcceptance.md`](history/NesRunnerVisualParityAcceptance.md).
 
 ## Diagnostic Ladder
 
