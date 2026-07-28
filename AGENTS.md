@@ -111,11 +111,10 @@ The goal is a good in-game experience: smooth scrolling and movement, responsive
 - Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
 - ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
 - Tracked sample ROMs are regeneratable artifacts. Regenerate them when the sample source changes. Their exact bytes are not a product requirement, so do not block work to preserve a specific hash.
-- `tools/nes/verify_runner_visual_parity.py` defaults to an optional AprNes-only
-  physical smoke check. Its historical multi-emulator differential is an
-  explicit forensic replay, not a product gate, and must not appear in issue,
-  PR, or sample closeout requirements. Do not block work on FCEUmm, Nestopia,
-  RetroArch, byte parity, or raster parity.
+- Independent-emulator or multi-emulator differential runs are optional forensic
+  diagnostics, never a product gate, and must not appear in issue, PR, or sample
+  closeout requirements. Do not block work on FCEUmm, Nestopia, RetroArch, byte
+  parity, or raster parity.
 - Validation must change a decision. Before another diagnostic, minimization,
   or confirmation run, name the hypothesis, owner decision, or acceptance
   verdict that its result can change and use the cheapest discriminating
