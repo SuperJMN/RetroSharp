@@ -73,3 +73,8 @@ alone determines the result. The Game Boy `active-pool-8` row improves from
 77/100 with a one-frame longest miss to 100/100 with no miss; the wide-spawn
 128 row remains 100/100. NES rows remain the independent target snapshot from
 GCP-2.3.
+
+The 2026-07-30 #470 refresh records the NES ROM-byte and modeled cycle-phase
+changes from amortized packed-column preparation and fixed-bank helper dedup.
+All 13 NES rows retain 100/100 logical waits with no missed physical frame, the
+40,976-byte ROM container, and the same declared hardware limits.

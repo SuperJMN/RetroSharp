@@ -711,6 +711,26 @@ internal sealed partial class NesSdkOperationLowerer
         {
             EmitPackedCollisionFlagsSubroutine();
         }
+
+        if (cameraIncrementTileSubroutineReferenced)
+        {
+            EmitIncrementCameraTileSubroutine();
+        }
+
+        if (cameraDecrementTileSubroutineReferenced)
+        {
+            EmitDecrementCameraTileSubroutine();
+        }
+
+        if (publishVisibleCameraXSubroutineReferenced)
+        {
+            EmitPublishVisibleCameraXSubroutine();
+        }
+
+        if (publishVisibleCameraYSubroutineReferenced)
+        {
+            EmitPublishVisibleCameraYSubroutine();
+        }
     }
 
 }

@@ -15,6 +15,10 @@ internal sealed partial class NesSdkOperationLowerer
     private const string PackedColumnRequestSubroutineLabel = "nes_packed_column_request";
     private const string PackedColumnPrefetchSubroutineLabel = "nes_packed_column_prefetch";
     private const string PackedRowRequestSubroutineLabel = "nes_packed_row_request";
+    private const string CameraIncrementTileSubroutineLabel = "nes_camera_increment_tile";
+    private const string CameraDecrementTileSubroutineLabel = "nes_camera_decrement_tile";
+    private const string PublishVisibleCameraXSubroutineLabel = "nes_publish_visible_camera_x";
+    private const string PublishVisibleCameraYSubroutineLabel = "nes_publish_visible_camera_y";
 
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
@@ -29,7 +33,12 @@ internal sealed partial class NesSdkOperationLowerer
     private bool packedColumnRequestSubroutineReferenced;
     private bool packedColumnPrefetchSubroutineReferenced;
     private bool packedRowRequestSubroutineReferenced;
+    private bool cameraIncrementTileSubroutineReferenced;
+    private bool cameraDecrementTileSubroutineReferenced;
+    private bool publishVisibleCameraXSubroutineReferenced;
+    private bool publishVisibleCameraYSubroutineReferenced;
     private int packedWideSourceColumnMapWidth;
+    private int cameraTileMapWidth;
     private NesCameraConfig? packedColumnRuntimeConfig;
     private NesCameraConfig? cameraConfig;
     private RuntimeIndexedFieldCursor? activeRuntimeIndexedFieldCursor;

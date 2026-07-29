@@ -120,6 +120,8 @@ internal sealed partial class NesSdkOperationLowerer
         EmitStorePackedPendingDescriptor(
             NesRuntimeMemoryLayout.PackedCamera.PendingColumn,
             NesPackedCameraRuntime.Column);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
         builder.LoadAImmediate((byte)NesWorldPackResult.Success);
         builder.Label(done);
         builder.Return();

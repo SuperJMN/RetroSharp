@@ -180,7 +180,7 @@ internal sealed partial class NesSdkOperationLowerer
                     operation.X,
                     NesRuntimeMemoryLayout.Camera.X,
                     NesRuntimeMemoryLayout.Camera.NewX,
-                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: hasVerticalTarget),
+                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: true),
                     "nes_camera_x");
             }
             else
@@ -191,7 +191,7 @@ internal sealed partial class NesSdkOperationLowerer
                     NesRuntimeMemoryLayout.Camera.XHigh,
                     NesRuntimeMemoryLayout.Camera.NewX,
                     NesRuntimeMemoryLayout.Camera.XHigh,
-                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: hasVerticalTarget),
+                    () => EmitStreamColumnForCameraPosition(config, prefetchDiagonalColumn: true),
                     "nes_camera_x");
             }
         }
