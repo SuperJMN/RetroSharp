@@ -801,6 +801,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private int lastFrame;
         private int processedPpuWrites;
         private int processedOamWrites;
+        private (int X, int Y)? previousStableVisibleCamera;
         private (int X, int Y)? previousRequestedCamera;
         private readonly Dictionary<(int X, int Y), long> requestSequenceByPosition = [];
         private long cameraRequestSequence;
@@ -836,9 +837,16 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         private FunctionalFrameObservation Observe(int frame)
         {
-            var visibleCamera = (
+            var logicalCamera = (
+                X: Word(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh),
+                Y: Word(NesRuntimeMemoryLayout.Camera.Y, NesRuntimeMemoryLayout.Camera.YHigh));
+            var rawVisibleCamera = (
                 X: Word(VisibleCameraXLow, VisibleCameraXHigh),
                 Y: Word(VisibleCameraYLow, VisibleCameraYHigh));
+            var visibleCamera = (
+                X: StableVisibleAxis(rawVisibleCamera.X, logicalCamera.X, previousStableVisibleCamera?.X),
+                Y: StableVisibleAxis(rawVisibleCamera.Y, logicalCamera.Y, previousStableVisibleCamera?.Y));
+            previousStableVisibleCamera = visibleCamera;
             visibleCameraByFrame[frame] = visibleCamera;
             var rawPpuWrites = cpu.PpuWrites
                 .Skip(processedPpuWrites)
@@ -889,10 +897,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
                 cpu.CurrentR6Bank == cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
                 "nes-prg-r6");
-            var camera = CameraObservation(
-                (Word(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh),
-                    Word(NesRuntimeMemoryLayout.Camera.Y, NesRuntimeMemoryLayout.Camera.YHigh)),
-                visibleCamera);
+            var camera = CameraObservation(logicalCamera, visibleCamera);
 
             return new FunctionalFrameObservation(
                 frame,
@@ -907,6 +912,13 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 VideoWrites: videoWrites,
                 OamWrites: oamWrites);
         }
+
+        // A CPU step can yield between the low/high stores of the published word.
+        // Keep the prior complete value when that test-only snapshot catches the torn write.
+        private static int StableVisibleAxis(int raw, int logical, int? previous) =>
+            previous is not null && Math.Abs(raw - logical) >= byte.MaxValue
+                ? previous.Value
+                : raw;
 
         private void AddPlatformerState(IDictionary<string, long> state)
         {

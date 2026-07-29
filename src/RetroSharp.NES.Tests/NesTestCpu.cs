@@ -27,6 +27,8 @@ internal readonly record struct NesApuWrite(ushort Register, byte Value, long Cy
 
 internal readonly record struct NesRamByteWrite(ushort Address, byte Value, long Cycle);
 
+internal readonly record struct NesCpuStep(ushort ProgramCounter, long Cycle, byte StackPointer);
+
 internal sealed class NesTestCpu
 {
     private const long PpuCyclesPerFrame = 341 * 262;
@@ -114,6 +116,8 @@ internal sealed class NesTestCpu
     public long VBlankWaitCompletions { get; private set; }
 
     public long Cycles => cycles;
+
+    public Action<NesCpuStep>? OnStep { get; set; }
 
     public byte PpuControl => ppuControl;
 
@@ -288,6 +292,7 @@ internal sealed class NesTestCpu
             ResetCount++;
         }
 
+        OnStep?.Invoke(new NesCpuStep(pc, cycles, stackPointer));
         var opcode = Read(pc++);
         switch (opcode)
         {

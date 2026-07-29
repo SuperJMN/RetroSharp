@@ -123,14 +123,13 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitOrthogonalLow, 0);
         cpu.SetRam(CommitOrthogonalHigh, 0);
         cpu.SetRam(CommitPayloadLength, 32);
-        var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
-            maxInstructions: 5_000_000);
+        var prepareSlices = RunResumableColumnPrepare(
+            cpu,
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
-        Assert.True(
-            prepare.Cycles <= 2 * 29_780,
-            $"A valid edge must become resident within two NTSC CPU frames; measured {prepare.Cycles} cycles and {cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount)} visual decodes.");
+        Assert.All(
+            prepareSlices,
+            slice => Assert.InRange(slice.Cycles, 1, 29_780));
         Assert.Equal(1, cpu.Ram(RequestCount));
         Assert.Equal(1, cpu.Ram(PrepareCount));
         Assert.Equal(1, cpu.Ram(ResidentCount));
@@ -160,7 +159,7 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
-    public void Complete_stage1_resident_column_prepare_fits_one_ntsc_frame()
+    public void Complete_stage1_resident_column_prepare_amortizes_each_slice_below_one_ntsc_frame()
     {
         var directory = RepositoryDirectory("samples/runner");
         var packed = NesTiledWorldImporter.CompileWorldPack(
@@ -188,14 +187,13 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitOrthogonalHigh, 0);
         cpu.SetRam(CommitPayloadLength, 32);
 
-        var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
-            maxInstructions: 5_000_000);
+        var prepareSlices = RunResumableColumnPrepare(
+            cpu,
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
-        Assert.True(
-            prepare.Cycles <= 13_000,
-            $"A resident complete-stage column must finish within one NTSC frame; measured {prepare.Cycles} cycles.");
+        Assert.All(
+            prepareSlices,
+            slice => Assert.InRange(slice.Cycles, 1, 29_780));
         Assert.Equal(1, cpu.Ram(RequestCount));
         Assert.Equal(1, cpu.Ram(PrepareCount));
         Assert.Equal(6, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
@@ -238,11 +236,9 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitOrthogonalLow, 0);
         cpu.SetRam(CommitPayloadLength, 30);
 
-        var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
-            maxInstructions: 5_000_000);
-
-        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
+        _ = RunResumableColumnPrepare(
+            cpu,
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
         var edge = runtime.Layout.EdgeSlots[0];
         var metatileCells = packed.Pack.Descriptor.MetatileWidth * packed.Pack.Descriptor.MetatileHeight;
         var tileMismatches = new List<string>();
@@ -390,10 +386,9 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitWorldEdgeLow, 5);
         cpu.SetRam(CommitTarget, 21);
         cpu.SetRam(CommitPayloadLength, 32);
-        var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
-            maxInstructions: 5_000_000);
-        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
+        _ = RunResumableColumnPrepare(
+            cpu,
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
         var bankWritesBeforeCommit = cpu.R6BankWrites.Count;
         var commitStartCycles = cpu.Cycles;
 
@@ -487,7 +482,7 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
-    public void Packed_stale_then_fresh_frame_publishes_and_releases_one_edge_without_another_camera_request()
+    public void Packed_stale_then_fresh_frame_commits_and_releases_one_prepared_edge_without_another_camera_request()
     {
         var directory = RepositoryDirectory("samples/runner");
         var packed = NesTiledWorldImporter.CompileWorldPack(
@@ -526,7 +521,7 @@ public sealed class NesLargeWorldCameraTests
         Assert.Equal(
             (byte)NesCameraPublicationState.SuppressedForCurrentTick,
             cpu.Ram(NesRuntimeMemoryLayout.Camera.ScrollApplied));
-        Assert.Equal(7, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow));
+        Assert.Equal(8, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow));
         Assert.Equal(0, cpu.Ram(CommitCount));
         Assert.Equal(0, cpu.Ram(ReleaseCount));
         Assert.Equal(Column, cpu.Ram(PendingAxes));
@@ -838,10 +833,9 @@ public sealed class NesLargeWorldCameraTests
             cpu.RunFrames(cpu.PhysicalFrames + 1);
         }
 
-        var latchWrite = Assert.Single(
-            cpu.RamByteWrites,
+        var latchWrite = cpu.RamByteWrites.First(
             write => write.Address == NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection
-                     && write.Value == Positive);
+                     && (write.Value & 0x03) == Positive);
         var fineXAtPrefetch = cpu.RamByteWrites
             .Where(write => write.Address == NesRuntimeMemoryLayout.Camera.X && write.Cycle <= latchWrite.Cycle)
             .Last();
@@ -1164,6 +1158,23 @@ public sealed class NesLargeWorldCameraTests
     }
 
     private static byte[] Prg(byte[] rom) => rom.Skip(16).Take(32 * 1024).ToArray();
+
+    private static NesRoutineResult[] RunResumableColumnPrepare(NesTestCpu cpu, ushort prepareEntry)
+    {
+        var slices = Enumerable.Range(0, 4)
+            .Select(_ => cpu.RunRoutine(prepareEntry, maxInstructions: 5_000_000))
+            .ToArray();
+        Assert.Equal(
+            new byte[]
+            {
+                NesPackedCameraRuntime.PreparePending,
+                NesPackedCameraRuntime.PreparePending,
+                NesPackedCameraRuntime.PreparePending,
+                (byte)NesWorldPackResult.Success,
+            },
+            slices.Select(slice => slice.A).ToArray());
+        return slices;
+    }
 
     private static bool ContainsSequence(byte[] bytes, byte[] sequence)
     {

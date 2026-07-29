@@ -31,9 +31,20 @@ public sealed class NesRunnerJumpScrollCadenceTests
             reproduction.MaximumPlayerY < reproduction.InitialPlayerY
             && reproduction.MaximumRequestedCameraY != reproduction.InitialRequestedCameraY,
             $"The jump did not activate vertical camera follow: {reproduction.Summary}.");
+        Assert.NotEmpty(reference.StableCadence);
+        Assert.All(
+            reference.StableCadence,
+            observation => Assert.Equal(2, observation.HardwareScrollDelta));
         Assert.True(
-            reproduction.HorizontalStalls <= reference.HorizontalStalls,
-            $"Jump scrolling added horizontal stalls: reference={reference.Summary}; jump={reproduction.Summary}.");
+            reference.StableSuppressionCount == 0,
+            $"Grounded steady scrolling suppressed camera publication: {reference.Summary}.");
+        Assert.NotEmpty(reproduction.StableCadence);
+        Assert.All(
+            reproduction.StableCadence,
+            observation => Assert.Equal(2, observation.HardwareScrollDelta));
+        Assert.True(
+            reproduction.StableSuppressionCount == 0,
+            $"Airborne steady scrolling suppressed camera publication: {reproduction.Summary}.");
         Assert.True(
             reproduction.MaximumGameplayGap <= reference.MaximumGameplayGap,
             $"Jump scrolling added a gameplay gap: reference={reference.Summary}; jump={reproduction.Summary}.");
@@ -42,7 +53,7 @@ public sealed class NesRunnerJumpScrollCadenceTests
             $"Jump scrolling added an audio gap: reference={reference.Summary}; jump={reproduction.Summary}.");
         Assert.InRange(reproduction.MaximumRequestedVisibleLag, 0, 3);
         Assert.InRange(reproduction.MaximumBacklogRun, 0, 1);
-        Assert.True(reproduction.LifecycleDrained, $"Jump lifecycle did not drain: {reproduction.Summary}.");
+        Assert.True(reproduction.LifecycleAccounted, $"Jump lifecycle was not fully accounted: {reproduction.Summary}.");
         Assert.Equal(0, reproduction.ForbiddenVideoWork);
     }
 
@@ -63,6 +74,7 @@ public sealed class NesRunnerJumpScrollCadenceTests
         var initialResidents = cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.ResidentCount);
         var initialCommits = cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.CommitCount);
         var initialReleases = cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.ReleaseCount);
+        var initialActiveSlots = ActivePackedCameraSlots(cpu);
         var frames = new List<FrameObservation>(ObservationFrames);
         var previousGameplayTicks = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
         var previousAudioTicks = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.AudioTickCount);
@@ -125,13 +137,34 @@ public sealed class NesRunnerJumpScrollCadenceTests
                 pair.current.RequestedCameraX > pair.previous.RequestedCameraX
                 && pair.current.RequestedCameraX > pair.current.LogicalCameraX
                 && pair.current.LogicalCameraX == pair.previous.LogicalCameraX);
+        var stableCadence = frames
+            .Zip(frames.Skip(1), (previous, current) => (previous, current))
+            .Where(pair =>
+                pair.current.RequestedCameraX - pair.previous.RequestedCameraX == 2
+                && (jump
+                    ? pair.current.Frame < JumpHeldFrames
+                      && pair.current.VisibleCameraY == 80
+                      && pair.current.PlayerY < initialPlayerY
+                    : pair.previous.PlayerY == initialPlayerY
+                      && pair.current.PlayerY == initialPlayerY))
+            .Select(pair => new StableCadenceObservation(
+                pair.current.Frame,
+                pair.previous.HardwareScrollX,
+                pair.current.HardwareScrollX,
+                (pair.current.HardwareScrollX - pair.previous.HardwareScrollX + 512) % 512,
+                pair.current.ScrollApplied))
+            .ToArray();
+        var stableSuppressionCount = stableCadence.Count(observation =>
+            observation.ScrollApplied == (byte)NesCameraPublicationState.SuppressedForCurrentTick);
         var stableFrames = frames
             .Where(frame => frame.ScrollApplied == (byte)NesCameraPublicationState.SuppressedForCurrentTick)
             .ToArray();
-        var maximumRequestedVisibleLag = stableFrames.Max(frame =>
-            Math.Max(
-                Math.Abs(frame.RequestedCameraX - frame.VisibleCameraX),
-                Math.Abs(frame.RequestedCameraY - frame.VisibleCameraY)));
+        var maximumRequestedVisibleLag = stableFrames.Length == 0
+            ? 0
+            : stableFrames.Max(frame =>
+                Math.Max(
+                    Math.Abs(frame.RequestedCameraX - frame.VisibleCameraX),
+                    Math.Abs(frame.RequestedCameraY - frame.VisibleCameraY)));
         var backlogRun = 0;
         var maximumBacklogRun = 0;
         foreach (var frame in stableFrames)
@@ -147,6 +180,14 @@ public sealed class NesRunnerJumpScrollCadenceTests
         var residents = Difference(cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.ResidentCount), initialResidents);
         var commits = Difference(cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.CommitCount), initialCommits);
         var releases = Difference(cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.ReleaseCount), initialReleases);
+        var activeSlots = ActivePackedCameraSlots(cpu);
+        var lifecycleAccounted =
+            requests == prepares
+            && prepares - residents is >= 0 and <= 1
+            && residents - commits is >= 0 and <= 1
+            && commits == releases
+            && requests - releases == activeSlots - initialActiveSlots
+            && activeSlots is >= 0 and <= 2;
         var forbiddenVideoWork = new[]
         {
             NesRuntimeMemoryLayout.PackedCamera.BankWorkInCommit,
@@ -159,12 +200,16 @@ public sealed class NesRunnerJumpScrollCadenceTests
             initialRequestedCameraY,
             frames.Min(frame => frame.PlayerY),
             frames.Min(frame => frame.RequestedCameraY),
+            stableCadence,
+            stableSuppressionCount,
             horizontalStalls,
             maximumGameplayGap,
             maximumAudioGap,
             maximumRequestedVisibleLag,
             maximumBacklogRun,
-            requests == prepares && prepares == residents && residents == commits && commits == releases,
+            lifecycleAccounted,
+            initialActiveSlots,
+            activeSlots,
             forbiddenVideoWork,
             requests,
             prepares,
@@ -189,6 +234,13 @@ public sealed class NesRunnerJumpScrollCadenceTests
     }
 
     private static int Difference(byte current, byte initial) => unchecked((byte)(current - initial));
+
+    private static int ActivePackedCameraSlots(NesTestCpu cpu) =>
+        new[]
+        {
+            cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset),
+            cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.StateOffset),
+        }.Count(state => state is >= NesPackedCameraRuntime.Requested and <= NesPackedCameraRuntime.Committing);
 
     private static void ReachElevatedCheckpoint(NesTestCpu cpu, RunnerAddresses addresses)
     {
@@ -267,17 +319,28 @@ public sealed class NesRunnerJumpScrollCadenceTests
         int PendingAxes,
         int ScrollApplied);
 
+    private sealed record StableCadenceObservation(
+        int Frame,
+        int PreviousHardwareScrollX,
+        int HardwareScrollX,
+        int HardwareScrollDelta,
+        int ScrollApplied);
+
     private sealed record ScenarioResult(
         int InitialPlayerY,
         int InitialRequestedCameraY,
         int MaximumPlayerY,
         int MaximumRequestedCameraY,
+        IReadOnlyList<StableCadenceObservation> StableCadence,
+        int StableSuppressionCount,
         int HorizontalStalls,
         int MaximumGameplayGap,
         int MaximumAudioGap,
         int MaximumRequestedVisibleLag,
         int MaximumBacklogRun,
-        bool LifecycleDrained,
+        bool LifecycleAccounted,
+        int InitialActiveSlots,
+        int ActiveSlots,
         int ForbiddenVideoWork,
         int Requests,
         int Prepares,
@@ -287,10 +350,14 @@ public sealed class NesRunnerJumpScrollCadenceTests
         string StallFrames)
     {
         public string Summary =>
-            $"stalls={HorizontalStalls}, gameplayGap={MaximumGameplayGap}, audioGap={MaximumAudioGap}, "
+            $"stableDeltas=[{string.Join(",", StableCadence.Select(observation => observation.HardwareScrollDelta))}], "
+            + $"stableSuppressions={StableSuppressionCount}, stalls={HorizontalStalls}, "
+            + $"gameplayGap={MaximumGameplayGap}, audioGap={MaximumAudioGap}, "
             + $"lag={MaximumRequestedVisibleLag}, backlogRun={MaximumBacklogRun}, playerY={InitialPlayerY}->{MaximumPlayerY}, "
             + $"cameraY={InitialRequestedCameraY}->{MaximumRequestedCameraY}, "
-            + $"lifecycle={Requests}/{Prepares}/{Residents}/{Commits}/{Releases}, forbidden={ForbiddenVideoWork}, "
+            + $"lifecycle={Requests}/{Prepares}/{Residents}/{Commits}/{Releases}, "
+            + $"activeSlots={InitialActiveSlots}->{ActiveSlots}, "
+            + $"forbidden={ForbiddenVideoWork}, "
             + $"stallFrames=[{StallFrames}]";
     }
 }

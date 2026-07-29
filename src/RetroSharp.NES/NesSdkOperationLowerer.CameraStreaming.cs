@@ -133,6 +133,7 @@ internal sealed partial class NesSdkOperationLowerer
         var storeAndStreamLeftLabel = builder.CreateLabel("nes_camera_store_stream_left");
         var storeOnlyRightLabel = builder.CreateLabel("nes_camera_store_only_right");
         var storeOnlyLeftLabel = builder.CreateLabel("nes_camera_store_only_left");
+        var publishCachedReversalLabel = builder.CreateLabel("nes_packed_camera_publish_cached_reversal");
         var publishPackedLabel = builder.CreateLabel("nes_packed_camera_publish_x");
         var endLabel = builder.CreateLabel("nes_camera_stream_end");
 
@@ -195,13 +196,15 @@ internal sealed partial class NesSdkOperationLowerer
                 var reactive = builder.CreateLabel("nes_packed_camera_right_reactive");
                 var prefetchedPending = builder.CreateLabel("nes_packed_camera_right_prefetched_pending");
                 builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+                builder.AndImmediate(0x03);
                 builder.CompareImmediate(NesPackedCameraRuntime.Positive);
                 builder.JumpIf(0xD0, reactive);
                 builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
                 builder.AndImmediate(NesPackedCameraRuntime.Column);
                 builder.JumpIf(0xD0, prefetchedPending);
-                builder.LoadAImmediate(0);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+                builder.LoadAImmediate(NesPackedCameraRuntime.Positive);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+                EmitPrefetchPackedCameraColumn(config);
                 EmitPublishVisibleCameraX();
                 builder.JumpAbsolute(endLabel);
                 builder.Label(prefetchedPending);
@@ -211,6 +214,8 @@ internal sealed partial class NesSdkOperationLowerer
                 EmitDecrementCameraPixel(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(reactive);
+                builder.CompareImmediate(0);
+                builder.JumpIf(0xD0, publishCachedReversalLabel);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
             }
@@ -250,13 +255,15 @@ internal sealed partial class NesSdkOperationLowerer
                 var reactive = builder.CreateLabel("nes_packed_camera_left_reactive");
                 var prefetchedPending = builder.CreateLabel("nes_packed_camera_left_prefetched_pending");
                 builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+                builder.AndImmediate(0x03);
                 builder.CompareImmediate(NesPackedCameraRuntime.Negative);
                 builder.JumpIf(0xD0, reactive);
                 builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
                 builder.AndImmediate(NesPackedCameraRuntime.Column);
                 builder.JumpIf(0xD0, prefetchedPending);
-                builder.LoadAImmediate(0);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+                builder.LoadAImmediate(NesPackedCameraRuntime.Negative);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+                EmitPrefetchPackedCameraColumn(config);
                 EmitPublishVisibleCameraX();
                 builder.JumpAbsolute(endLabel);
                 builder.Label(prefetchedPending);
@@ -266,6 +273,8 @@ internal sealed partial class NesSdkOperationLowerer
                 EmitIncrementCameraPixel(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(reactive);
+                builder.CompareImmediate(0);
+                builder.JumpIf(0xD0, publishCachedReversalLabel);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
             }
@@ -295,6 +304,12 @@ internal sealed partial class NesSdkOperationLowerer
             builder.JumpAbsolute(endLabel);
         }
 
+        if (usePackedCamera)
+        {
+            builder.Label(publishCachedReversalLabel);
+            builder.JumpAbsolute(publishPackedLabel);
+        }
+
         builder.Label(storeOnlyRightLabel);
         if (usePackedCamera && prefetchDiagonalColumn)
         {
@@ -322,24 +337,10 @@ internal sealed partial class NesSdkOperationLowerer
 
         if (usePackedCamera && prefetchDiagonalColumn)
         {
-            var callPrefetchLabel = builder.CreateLabel("nes_packed_camera_call_column_prefetch");
             builder.Label(storeAndPrefetchLabel);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
             builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
             builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.X);
-            var verticalFitsByte =
-                Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) <= byte.MaxValue;
-            if (!verticalFitsByte)
-            {
-                builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SetPositionTargetYHigh);
-                builder.CompareAbsolute(NesRuntimeMemoryLayout.Camera.YHigh);
-                builder.JumpIf(0xD0, callPrefetchLabel);
-            }
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.SetPositionTargetYLow);
-            builder.CompareZeroPage(NesRuntimeMemoryLayout.Camera.Y);
-            builder.JumpIf(0xD0, callPrefetchLabel);
-            builder.JumpAbsolute(publishPackedLabel);
-            builder.Label(callPrefetchLabel);
             EmitPrefetchPackedCameraColumn(config);
             builder.JumpAbsolute(publishPackedLabel);
         }
@@ -536,6 +537,20 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitIncrementCameraTile(int mapWidth)
     {
+        RegisterCameraTileMapWidth(mapWidth);
+        cameraIncrementTileSubroutineReferenced = true;
+        builder.CallSubroutine(CameraIncrementTileSubroutineLabel);
+    }
+
+    private void EmitIncrementCameraTileSubroutine()
+    {
+        builder.Label(CameraIncrementTileSubroutineLabel);
+        EmitIncrementCameraTileBody(cameraTileMapWidth);
+        builder.Return();
+    }
+
+    private void EmitIncrementCameraTileBody(int mapWidth)
+    {
         if (mapWidth <= byte.MaxValue)
         {
             var noWrapLabel = builder.CreateLabel("nes_camera_tile_inc_no_wrap");
@@ -554,6 +569,20 @@ internal sealed partial class NesSdkOperationLowerer
     }
 
     private void EmitDecrementCameraTile(int mapWidth)
+    {
+        RegisterCameraTileMapWidth(mapWidth);
+        cameraDecrementTileSubroutineReferenced = true;
+        builder.CallSubroutine(CameraDecrementTileSubroutineLabel);
+    }
+
+    private void EmitDecrementCameraTileSubroutine()
+    {
+        builder.Label(CameraDecrementTileSubroutineLabel);
+        EmitDecrementCameraTileBody(cameraTileMapWidth);
+        builder.Return();
+    }
+
+    private void EmitDecrementCameraTileBody(int mapWidth)
     {
         if (mapWidth <= byte.MaxValue)
         {
@@ -575,6 +604,18 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         EmitDecrementLogicalCell(NesRuntimeMemoryLayout.Camera.TileColumn, NesRuntimeMemoryLayout.Camera.TileColumnHigh, mapWidth, "nes_camera_tile");
+    }
+
+    private void RegisterCameraTileMapWidth(int mapWidth)
+    {
+        if ((cameraIncrementTileSubroutineReferenced || cameraDecrementTileSubroutineReferenced)
+            && cameraTileMapWidth != mapWidth)
+        {
+            throw new InvalidOperationException(
+                $"NES camera cannot share tile movement lowering for map widths {cameraTileMapWidth} and {mapWidth}.");
+        }
+
+        cameraTileMapWidth = mapWidth;
     }
 
     private void EmitIncrementCameraRow(int mapHeight)
@@ -718,6 +759,8 @@ internal sealed partial class NesSdkOperationLowerer
         var selectDirection = builder.CreateLabel("nes_packed_column_prefetch_select_direction");
         var prepareRight = builder.CreateLabel("nes_packed_column_prefetch_right");
         var request = builder.CreateLabel("nes_packed_column_prefetch_request");
+        var checkStartPhase = builder.CreateLabel("nes_packed_column_prefetch_check_start_phase");
+        var resume = builder.CreateLabel("nes_packed_column_prefetch_resume");
         var failed = builder.CreateLabel("nes_packed_column_prefetch_failed");
         var done = builder.CreateLabel("nes_packed_column_prefetch_done");
 
@@ -725,16 +768,33 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
         builder.AndImmediate(NesPackedCameraRuntime.RetryAfterApply);
         builder.JumpIf(0xD0, selectDirection);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+        builder.AndImmediate(0x03);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.JumpIf(0xD0, checkStartPhase);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
+        builder.AndImmediate(NesPackedCameraRuntime.Column);
+        builder.JumpIf(0xD0, done);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
+        builder.AndImmediate(0x01);
+        builder.JumpIf(0xD0, done);
+        builder.JumpAbsolute(resume);
+
+        builder.Label(checkStartPhase);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.AndImmediate(0x01);
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.XorZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
         builder.AndImmediate(0x07);
         builder.CompareImmediate(2);
         builder.JumpIf(0xD0, done);
 
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
-        builder.AndImmediate(0x03);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
-        builder.JumpIf(0xF0, done);
         builder.Label(selectDirection);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.OrImmediate(NesPackedCameraRuntime.RetryAfterApply);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
+        builder.Label(resume);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
         builder.CompareImmediate(NesPackedCameraRuntime.Positive);
         builder.JumpIf(0xF0, prepareRight);
@@ -756,10 +816,10 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAImmediate(2);
         builder.Label(budgetReady);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
         EmitCallPackedColumnRequest(config);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.BranchRelative(0xF0, done);
+        builder.CompareImmediate(NesPackedCameraRuntime.PreparePending);
         builder.BranchRelative(0xF0, done);
 
         builder.Label(failed);
@@ -1050,6 +1110,23 @@ internal sealed partial class NesSdkOperationLowerer
                 (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
             builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
         }
+        publishVisibleCameraXSubroutineReferenced = true;
+        builder.CallSubroutine(PublishVisibleCameraXSubroutineLabel);
+        if (guardSuppressedTick)
+        {
+            builder.Label(doneLabel);
+        }
+    }
+
+    private void EmitPublishVisibleCameraXSubroutine()
+    {
+        builder.Label(PublishVisibleCameraXSubroutineLabel);
+        EmitPublishVisibleCameraXBody();
+        builder.Return();
+    }
+
+    private void EmitPublishVisibleCameraXBody()
+    {
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.X);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow);
         if (cameraConfig is { MapWidth: <= byte.MaxValue })
@@ -1067,10 +1144,6 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileColumn);
-        if (guardSuppressedTick)
-        {
-            builder.Label(doneLabel);
-        }
     }
 
     private void EmitPublishVisibleCameraY(bool guardSuppressedTick = true)
@@ -1084,6 +1157,17 @@ internal sealed partial class NesSdkOperationLowerer
                 (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
             builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
         }
+        publishVisibleCameraYSubroutineReferenced = true;
+        builder.CallSubroutine(PublishVisibleCameraYSubroutineLabel);
+        if (guardSuppressedTick)
+        {
+            builder.Label(doneLabel);
+        }
+    }
+
+    private void EmitPublishVisibleCameraYSubroutine()
+    {
+        builder.Label(PublishVisibleCameraYSubroutineLabel);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.Y);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow);
         if (cameraConfig is { MapHeight: <= byte.MaxValue })
@@ -1101,20 +1185,22 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileRow);
-        if (guardSuppressedTick)
-        {
-            builder.Label(doneLabel);
-        }
+        builder.Return();
     }
 
     private void EmitPublishCommittedPackedCameraAxis(byte axis)
     {
         var doneLabel = builder.CreateLabel("nes_packed_camera_publish_done");
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(axis);
+        builder.LoadAImmediate(axis);
+        builder.Emit(
+            0x2C,
+            (byte)(NesRuntimeMemoryLayout.Camera.PendingStreamFlags & 0xFF),
+            (byte)(NesRuntimeMemoryLayout.Camera.PendingStreamFlags >> 8)); // BIT pending stream flags
         builder.BranchRelative(0xF0, doneLabel); // BEQ doneLabel: axis was not pending
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
-        builder.AndImmediate(axis);
+        builder.Emit(
+            0x2C,
+            (byte)(NesRuntimeMemoryLayout.PackedCamera.PendingAxes & 0xFF),
+            (byte)(NesRuntimeMemoryLayout.PackedCamera.PendingAxes >> 8)); // BIT pending axes
         builder.BranchRelative(0xD0, doneLabel); // BNE doneLabel: commit is incomplete
         // Preparation can yield across frames and the bounded walk can advance farther inside the
         // newly resident tile before the pending camera commit drains it. Publish that latest safe fine-scroll
@@ -1171,7 +1257,6 @@ internal sealed partial class NesSdkOperationLowerer
             builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         }
         builder.AndImmediate(0x20);
-        builder.CompareImmediate(0);
         builder.BranchRelative(0xD0, rightNameTableLabel); // BNE rightNameTableLabel
         builder.LoadAImmediate(0);
         builder.JumpAbsolute(storeControlLabel);
@@ -1214,8 +1299,6 @@ internal sealed partial class NesSdkOperationLowerer
     {
         var noRightNameTableLabel = builder.CreateLabel("nes_camera_apply_no_right_nt");
         var noBottomNameTableLabel = builder.CreateLabel("nes_camera_apply_no_bottom_nt");
-        var topRowLabel = builder.CreateLabel("nes_camera_apply_top_row");
-        var storeYScrollLabel = builder.CreateLabel("nes_camera_apply_store_y_scroll");
 
         builder.LoadAAbsolute(0x2002);              // reset PPU scroll latch
         builder.LoadAImmediate(0);
@@ -1241,7 +1324,6 @@ internal sealed partial class NesSdkOperationLowerer
             builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         }
         builder.AndImmediate(0x20);
-        builder.CompareImmediate(0);
         builder.BranchRelative(0xF0, noRightNameTableLabel); // BEQ noRightNameTableLabel
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
         builder.OrImmediate(0x01);
@@ -1251,6 +1333,8 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
         builder.CompareImmediate(30);
         builder.BranchRelative(0x90, noBottomNameTableLabel); // BCC noBottomNameTableLabel
+        builder.SubtractImmediate(30);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
         builder.OrImmediate(0x02);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
@@ -1273,14 +1357,6 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(0x2005);
 
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
-        builder.CompareImmediate(30);
-        builder.BranchRelative(0x90, topRowLabel); // BCC topRowLabel
-        builder.SetCarry();
-        builder.SubtractImmediate(30);
-        builder.JumpAbsolute(storeYScrollLabel);
-        builder.Label(topRowLabel);
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
-        builder.Label(storeYScrollLabel);
         builder.ShiftLeftA();
         builder.ShiftLeftA();
         builder.ShiftLeftA();
