@@ -69,11 +69,18 @@ class CameraState
         }
     }
 
-    inline void ApplySkid(u8 desiredDirection)
+    inline void ApplySkid(u8 desiredDirection, bool grounded)
     {
         if (speed <= MotionSpeed.SkidAcceleration)
         {
-            speed = MotionSpeed.SkidAcceleration - speed;
+            if (grounded)
+            {
+                speed = MotionSpeed.SkidAcceleration - speed;
+            }
+            else
+            {
+                speed = MotionSpeed.SkidAcceleration;
+            }
             direction = desiredDirection;
         }
         else
@@ -121,23 +128,23 @@ class CameraState
             }
             else
             {
-                if (grounded)
-                {
-                    ApplySkid(desiredDirection);
-                }
+                ApplySkid(desiredDirection, grounded);
             }
         }
     }
 
     inline void UpdateFacing(PlayerState player, u8 desiredDirection)
     {
-        if (desiredDirection == Direction.Right)
+        if (player.grounded)
         {
-            player.displayFlipX = false;
-        }
-        else if (desiredDirection == Direction.Left)
-        {
-            player.displayFlipX = true;
+            if (desiredDirection == Direction.Right)
+            {
+                player.displayFlipX = false;
+            }
+            else if (desiredDirection == Direction.Left)
+            {
+                player.displayFlipX = true;
+            }
         }
     }
 

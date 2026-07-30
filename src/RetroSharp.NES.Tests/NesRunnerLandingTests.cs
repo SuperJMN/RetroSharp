@@ -357,6 +357,73 @@ public sealed class NesRunnerLandingTests
     }
 
     [Fact]
+    public void Shared_runner_reverses_horizontal_momentum_without_changing_facing_while_airborne_like_smb3()
+    {
+        var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var speed = variables["view.speed"].Address;
+        var direction = variables["view.direction"].Address;
+        var playerX = variables["player.x"].Address;
+        var playerGrounded = variables["player.grounded"].Address;
+        var playerDisplayFlipX = variables["player.displayFlipX"].Address;
+        var cpu = new NesTestCpu(build.Rom);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
+        AdvanceGameplayTick(cpu);
+        AdvanceGameplayTick(cpu);
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        for (var tick = 0; tick < 32; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+
+        Assert.Equal(32, cpu.Ram(speed));
+        Assert.Equal(1, cpu.Ram(direction));
+        cpu.Held.Add("a");
+        AdvanceGameplayTick(cpu);
+        Assert.Equal(0, cpu.Ram(playerGrounded));
+        Assert.Equal(32, cpu.Ram(speed));
+        Assert.Equal(0, cpu.Ram(playerDisplayFlipX));
+        var xAtTakeoff = RamWord(cpu, playerX);
+        cpu.Held.Remove("right");
+        cpu.Held.Remove("b");
+        cpu.Held.Add("left");
+        var previousSpeed = 32;
+        var observedProgressiveSkid = false;
+        for (var tick = 0; tick < 24 && cpu.Ram(direction) == 1; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            var currentSpeed = cpu.Ram(speed);
+            Assert.True(currentSpeed <= previousSpeed, $"Air steering increased speed from {previousSpeed} to {currentSpeed}.");
+            observedProgressiveSkid |= currentSpeed is > 0 and < 32;
+            previousSpeed = currentSpeed;
+        }
+
+        Assert.True(observedProgressiveSkid, "Air steering must trim momentum progressively instead of stopping instantly.");
+        Assert.Equal(2, cpu.Ram(direction));
+        Assert.Equal(2, cpu.Ram(speed));
+        Assert.Equal(0, cpu.Ram(playerGrounded));
+        Assert.Equal(0, cpu.Ram(playerDisplayFlipX));
+        Assert.True(RamWord(cpu, playerX) > xAtTakeoff, "Mario must keep moving right while air input trims his momentum.");
+
+        var xAtReverse = RamWord(cpu, playerX);
+        for (var tick = 0; tick < 8; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+
+        Assert.Equal(2, cpu.Ram(speed));
+        Assert.Equal(2, cpu.Ram(direction));
+        Assert.Equal(0, cpu.Ram(playerGrounded));
+        Assert.Equal(0, cpu.Ram(playerDisplayFlipX));
+        Assert.True(RamWord(cpu, playerX) < xAtReverse, "Mario must begin moving left without turning visually before landing.");
+    }
+
+    [Fact]
     public void Shared_runner_walk_animation_tracks_physical_speed_without_idle_flicker()
     {
         var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
