@@ -52,16 +52,9 @@ every fresh implementation and review handoff:
 - terminal verdict and remaining review/correction budget.
 
 The capsule is immutable during the run unless the user or integrator changes
-it. The full acceptance rule lives in `AGENTS.md`; this capsule is only the
-per-task summary. Perceived gameplay is the product authority. A deterministic
-test is the preferred regression guard only when it measures the same
-presentation fault; an uncorrelated internal metric cannot override a fluid
-physical result. A **confirmed report** — the user, the integrator, or a
-playtest named the defect, for example the runner's stuttering scroll — makes
-the physical observer the acceptance authority: diagnose it with
-`GameBoyRunnerDebugging.md` and land the fix. A quiet deterministic harness
-never closes a confirmed report as `NOT_REPRODUCED`; reserve "reproduce first or
-hand back" for an unconfirmed suspicion nobody can observe.
+it. It is only the per-task summary; the full Acceptance Policy — provenance,
+the confirmed-vs-unconfirmed stop rule, and the perceptual terminal — lives in
+`AGENTS.md` and governs when this task is done.
 
 ## Route By Task
 
@@ -92,14 +85,11 @@ can make an old constraint look current.
 
 ## Decisions To Preserve
 
-- Choose the layer first: language, portable SDK, or target intrinsic.
-- The language remains target-neutral. Cameras, sprites, controllers, tilemaps,
-  PPU registers, and LCD details do not belong there.
-- Portable calls cross an explicit capability check before target lowering.
-- Hardware policy and byte mechanics stay target-owned.
-- High-level syntax must lower to fixed storage, direct calls and branches, or
-  constants. RetroSharp does not gain heap allocation, GC, boxing, delegates,
-  closures, RTTI, virtual dispatch, or hidden identity.
+`AGENTS.md` owns the invariant architecture rules (layer-first, target-neutral
+language, capability-checked portable calls, target-owned hardware, zero-cost
+lowering, transitional-API support) and the Acceptance Policy. The decisions
+below are the navigation-specific ones this router adds on top:
+
 - Source-package dot calls such as `Video.Init()` and `Camera.SetPosition(...)`
   are static grouping syntax, not object dispatch.
 - `TargetFrontendPreparation.Prepare(...)` is the single owner of the ordered
@@ -116,16 +106,8 @@ can make an old constraint look current.
   through `NesPhysicalFrameScheduler`.
 - Game Boy runner cadence investigations use SameBoy's `GB_run_frame` timeline
   as physical-frame authority. `GameBoyTestCpu` remains a behavioral simulator,
-  not a physical-frame clock.
-- A gameplay fix iterates against one named perceptual observable and one
-  correlated deterministic guard. Do not alternate proxies mid-fix. Physical
-  playback owns the final experience verdict; `GameBoyTestCpu`/`NesTestCpu`
-  owns repeatability and safety evidence, not an abstract precision contest.
-- Once the acceptance capsule reaches its perceptual terminal, only direct
-  evidence of the named symptom, corruption or unsafe writes, or contradictory
-  deterministic runs may reopen it. Record other improvements as follow-ups.
-- Transitional public forms remain supported until an explicit removal slice
-  changes their contract.
+  not a physical-frame clock; `GameBoyTestCpu`/`NesTestCpu` own repeatability and
+  safety evidence, not an abstract precision contest.
 
 ## High-Leverage Code Anchors
 
@@ -162,6 +144,8 @@ Classify a regression by its primary observable:
 
 - Build the runner from `samples/runner/runner.retrosharp.json`; it includes its
   game-owned helper and state files.
+- NES and Game Boy both use per-target VGM/VGZ runner music via
+  `assets/music/runner.vgz`; NES audio calls are not no-ops.
 - The runner uses the complete `samples/runner/assets/maps/stage1.tmj` and
   `stage1.tsx`. `stage1.playable.tmj` is a smaller historical fixture.
 - `World.Load(...)` first produces target-neutral logical map and collision
@@ -179,7 +163,9 @@ Classify a regression by its primary observable:
   facts in ROM.
 - `Input.Poll()` is the tick boundary. Public gameplay uses `Input.IsDown`,
   `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` with
-  `Button.*`, plus `Sprite.Width`.
+  `Button.*`, plus `Sprite.Width`. The direct `button_pressed` read, snake_case
+  `button_*`/`sprite_width` calls, and bare lowercase button identifiers are not
+  public source APIs.
 - Original DMG input needs settled `JOYP` row reads. D-pad/A-B bleed is a
   backend/runtime problem before it is sample logic.
 - Byte-backed target state can wrap. Clamp vertical runner state before
@@ -200,13 +186,8 @@ Classify a regression by its primary observable:
 | Applying broad formatting to inherited debt | Format touched files only and run `git diff --check` |
 | Fixing hardware/emulator symptoms only in sample code | Inspect target runtime behavior first |
 | Debugging the complete runner without isolation | Use `tools/gameboy/runner_diagnostics.py` and locate the first failing step |
-| Editing before naming the perceptual reproduction | Name the player action, scene, observer, visible/audible defect, safety constraints, and terminal verdict first |
-| Perfecting a proxy that no longer matches the player report | Spend at most two isolation attempts; for a confirmed report then fix against the named runner/physical scenario (`GameBoyRunnerDebugging.md`), do not hand it back; return a bounded investigation only for an unconfirmed symptom |
-| Closing a user-reported defect as `NOT_REPRODUCED` because the deterministic harness is quiet | A confirmed report is fixed against the physical observer; the harness is a bonus guard, not a precondition for the fix |
+| Editing before naming the perceptual reproduction | Name the capsule fields (action, scene, observer, visible/audible defect, safety constraints, verdict) first; the full stop rule — attempts budget, proxies, `NOT_REPRODUCED`, perceptual terminal, review budget — is the Acceptance Policy in `AGENTS.md` |
 | Treating a logical cadence or pose-age difference as visible stutter | Correlate it with physical scroll, OAM, corruption, input, or audio before making it a gate |
-| Alternating proxies while fixing a bug | Keep one perceptual observable and one correlated deterministic guard; physical playback remains the final experience verdict |
-| Continuing after the perceptual terminal | Checkpoint; precision, architecture cleanup, and unrelated diagnostics become follow-ups |
-| Repeating review with fresh agents | One review round and one correction round; changing reviewer does not reset the budget |
 | Calling local validation “published” | Prove upstream alignment separately, as required by `AGENTS.md` |
 
 In a new worktree, restore before using `--no-restore`. Do not run concurrent
