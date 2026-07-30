@@ -1,4 +1,4 @@
-# Domain Context
+# Domain Glossary
 
 This glossary names the execution and frame-planning concepts used by
 RetroSharp. It describes stable domain meaning, not a particular implementation.
