@@ -1,0 +1,9 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/oneway-platform.gb",
+    "nes": "bin/oneway-platform.nes"
+  },
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": ["src/main.rs"]
+}

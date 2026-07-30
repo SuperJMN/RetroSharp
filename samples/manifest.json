@@ -141,6 +141,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "oneway-platform",
+      "path": "samples/oneway-platform/oneway-platform.retrosharp.json",
+      "readme": "samples/oneway-platform/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "runner-projectile",
       "path": "samples/runner-projectile/runner-projectile.retrosharp.json",
       "readme": "samples/runner-projectile/README.md",
