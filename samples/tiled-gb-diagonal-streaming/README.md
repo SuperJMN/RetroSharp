@@ -1,4 +1,4 @@
-# Game Boy Tiled Diagonal Streaming Sample
+# Tiled Diagonal Streaming Sample
 
 Sample Layer: `target-acceptance`
 
