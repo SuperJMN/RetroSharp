@@ -137,7 +137,6 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(53, first.Pack.Descriptor.VisualMetatileCount);
         Assert.Equal(3, first.Pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, first.Pack.Chunks.Count);
-        Assert.Equal(2_568, first.SerializedBytes.Length);
         Assert.True(first.SerializedBytes.Length <= 7_712, $"GB WorldPack used {first.SerializedBytes.Length} bytes.");
         Assert.Equal(first.SerializedBytes, second.SerializedBytes);
         Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);

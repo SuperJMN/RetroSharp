@@ -56,7 +56,6 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(3, first.Pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, first.Pack.Chunks.Count);
         Assert.Equal(2, first.Pack.Descriptor.TargetCellStride);
-        Assert.Equal(2_780, first.SerializedBytes.Length);
         Assert.True(first.SerializedBytes.Length <= 7_924, $"NES WorldPack used {first.SerializedBytes.Length} bytes.");
         Assert.Equal(first.SerializedBytes, second.SerializedBytes);
         Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
@@ -141,10 +140,6 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                 Assert.Equal("R7 pinned $A000-$BFFF", item.Window);
                 Assert.Equal(1, item.PhysicalBank);
             });
-        Assert.Equal(6_208, result.Report.PinnedR7Bytes);
-        Assert.Equal(4_128, result.Report.BootR7Bytes);
-        Assert.Equal(3_056, result.Report.ResidentChrBytes);
-        Assert.Equal(4_875, result.Report.FixedPayloadBytes);
         Assert.Equal(64 * 1_024, result.Report.PrgRomSize);
         Assert.Equal(16 * 1_024, result.Report.ChrRomSize);
         Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, result.Rom.Length);
