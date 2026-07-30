@@ -121,10 +121,7 @@ class CameraState
             }
             else
             {
-                if (grounded)
-                {
-                    ApplySkid(desiredDirection);
-                }
+                ApplySkid(desiredDirection);
             }
         }
     }

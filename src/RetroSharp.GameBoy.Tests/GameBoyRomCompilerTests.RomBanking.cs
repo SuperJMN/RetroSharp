@@ -234,8 +234,9 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("speed -= MotionSpeed.Friction;", cameraBlock);
         Assert.Contains("direction = Direction.None;", cameraBlock);
 
-        // Traction owns acceleration and friction; airborne movement keeps takeoff momentum.
+        // Traction owns acceleration and friction; opposite air input only trims inherited momentum.
         Assert.Contains("Accelerate(grounded);", cameraBlock);
+        Assert.Contains("ApplySkid(desiredDirection);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);
