@@ -60,81 +60,18 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 
 The goal is a good in-game experience: smooth scrolling and movement, responsive controls, and music without stuttering. Acceptance is judged by that observable gameplay fluidity, not by byte-for-byte output. Aim to do it well, not perfectly. A ROM that plays well is correct even if its bytes move between builds.
 
-- For gameplay-performance work, the named player-visible or audible symptom is
-  the primary product authority. A physical playtest on the affected target or
-  emulator is the closest observer when available. In-process simulation
-  (`NesTestCpu` and `GameBoyTestCpu`) protects that experience with repeatable
-  evidence; it is not a more precise experience to optimize instead.
-- Classify the symptom by provenance before choosing a stop rule. A **confirmed
-  report** — the user, the integrator, or a playtest names a visible or audible
-  defect (for example the runner's stuttering scroll) — makes the
-  physical/perceptual observer the acceptance authority for that defect. A
-  deterministic in-process reproduction is then a helpful guard, never a
-  precondition: its absence does not mean "no defect" and never authorizes
-  closing the work as `NOT_REPRODUCED`. Diagnose the confirmed symptom from the
-  physical scene using the target debugging map (`docs/GameBoyRunnerDebugging.md`
-  and `docs/NesTarget.md`) and fix the responsible layer. Reserve
-  "reproduce first or hand back" for an **unconfirmed suspicion** that no human
-  has observed, where that discipline prevents a goose chase.
-- Every dispatched gameplay fix must carry an immutable acceptance capsule:
-  the player action and scene, target and observer, unwanted visible or audible
-  symptom, safety constraints, explicit non-goals, and the terminal verdict.
-  Only the user or integrator may change it. A fresh implementer or reviewer
-  must not widen it, redefine smoothness, or add a new gate.
-- For any symptom, still try the smallest deterministic reproduction that
-  observes the same presentation fault, because a GREEN/RED test is the cheapest
-  regression guard. A compiled-snippet `GameBoyTestCpu`/`NesTestCpu` test is
-  suitable only when its observation maps directly to what the player sees or
-  hears. Spend at most two focused attempts building that observer. When it
-  cannot capture the defect, the next step depends on provenance: for a
-  **confirmed report**, do not hand it back — proceed to fix against the named
-  runner/physical scenario and record the perceptual before/after as the
-  evidence; only an **unconfirmed** symptom that nobody, including the reporter,
-  can reproduce may be returned as a bounded investigation. Do not invent a
-  proxy merely because it is easier to assert, and do not treat a quiet
-  deterministic harness as proof that a reported defect is absent.
-- A new metric becomes a gameplay gate only when its physical meaning is named
-  and a known-bad candidate fails while a perceptually good candidate passes.
-  Logical tick age, queue depth, frame-source choice, exact OAM pose, and similar
-  internal differences remain diagnostic until correlated with visible stutter,
-  corruption, input lag, unsafe hardware writes, or audible dropout. An
-  incidental nonzero or off-by-one value is not itself a regression.
-- A gameplay-performance fix reaches its **perceptual terminal** when the named
-  visible or audible defect is absent in its acceptance scenario, corruption
-  and unsafe PPU/OAM writes are zero where applicable, and the focused
-  deterministic guard — or, when no deterministic test can capture the defect,
-  the named physical/perceptual scenario — is GREEN in two matching runs. Once there, precision
-  work, cleaner metrics, additional observers, architecture refinements, and
-  unrelated failures become follow-ups. They do not reopen the fix. Only new
-  evidence of the named perceptual defect, corruption or unsafe writes, or
-  contradictory deterministic runs may reopen it.
-- Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
-- ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
-- Tracked sample ROMs are regeneratable artifacts. Regenerate them when the sample source changes. Their exact bytes are not a product requirement, so do not block work to preserve a specific hash.
-- Independent-emulator or multi-emulator differential runs are optional forensic
-  diagnostics, never a product gate, and must not appear in issue, PR, or sample
-  closeout requirements. Do not block work on FCEUmm, Nestopia, RetroArch, byte
-  parity, or raster parity.
-- Validation must change a decision. Before another diagnostic, minimization,
-  or confirmation run, name the hypothesis, owner decision, or acceptance
-  verdict that its result can change and use the cheapest discriminating
-  evidence. Two consecutive experiments that change none of those require an
-  immediate checkpoint and handoff; do not reset the count by adding metrics or
-  rephrasing the same hypothesis. Replacing the agent or reviewer does not reset
-  the count either.
-- Two matching deterministic runs are sufficient confirmation. Run a third
-  only when the first two disagree or the live issue justifies the extra run
-  with a concrete risk. Run broad/full validation once on the final candidate,
-  not after every refinement step. After the first perceptually good candidate,
-  allow at most one review round and one correction round before checkpointing.
-  Review findings block this slice only when they demonstrate the named
-  perceptual regression, corruption or unsafe writes, a build failure, or a
-  broken public contract in scope; other findings become follow-ups.
-- A broad validation failure must be reported and classified. It authorizes an
-  edit in the current slice only when causally tied to its acceptance capsule.
-  An inherited, unrelated, exactness-only, or stale-golden failure may block
-  publication under its own policy, but it must not silently expand a completed
-  gameplay fix.
+- **Product authority is the named player-visible or audible symptom.** A physical playtest on the affected target/emulator is the closest observer; `NesTestCpu`/`GameBoyTestCpu` provide repeatable regression and safety evidence, not a more precise experience to optimize instead.
+- **Classify by provenance before choosing a stop rule.** A *confirmed report* (the user, integrator, or a playtest named a visible/audible defect, e.g. the runner's stuttering scroll) makes the physical observer the acceptance authority: diagnose from the physical scene via `docs/GameBoyRunnerDebugging.md` and `docs/NesTarget.md`, then fix the responsible layer. A deterministic reproduction is a helpful guard, never a precondition — its absence never authorizes closing the work as `NOT_REPRODUCED`. Reserve "reproduce first or hand back" for an *unconfirmed suspicion* nobody has observed.
+- **Spend at most two attempts** building the smallest deterministic observer that maps to what the player sees or hears. If it cannot capture the defect: for a confirmed report, fix against the named runner/physical scenario and record the perceptual before/after as evidence; only an unconfirmed symptom may be returned as a bounded investigation. Never invent an easier-to-assert proxy, and never treat a quiet harness as proof a reported defect is absent.
+- **Every dispatched gameplay fix carries an immutable acceptance capsule** (fields listed in `docs/AgentContext.md`). Only the user or integrator may change it; a fresh implementer or reviewer must not widen it, redefine smoothness, or add a gate.
+- **A metric becomes a gate only when** its physical meaning is named and a known-bad candidate fails while a perceptually good one passes. Logical tick age, queue depth, frame-source choice, exact OAM pose, and incidental off-by-one values stay diagnostic until correlated with visible stutter, corruption, input lag, unsafe hardware writes, or audible dropout.
+- **Perceptual terminal:** the named defect is absent in its scenario, corruption and unsafe PPU/OAM writes are zero where applicable, and the focused deterministic guard — or the named physical scenario when no test can capture the defect — is GREEN in two matching runs. After that, precision work, cleaner metrics, extra observers, architecture refinements, and unrelated failures are follow-ups; only new evidence of the named defect, corruption/unsafe writes, or contradictory runs reopens the fix.
+- **Prefer good over perfect.** Fix real, observable problems (stutter, input lag, torn or lagging scroll, audio dropout, sustained backlog). Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
+- **Exactness is diagnostic, never a gate.** ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are baselines only; do not pin them in tests, and express CPU-cost limits as upper-bound budgets. Tracked sample ROMs are regeneratable — regenerate them when the sample source changes and never block work to preserve a hash.
+- **Independent or multi-emulator differential runs are optional forensic diagnostics**, never a product gate, and must not appear in issue, PR, or sample closeout requirements (no FCEUmm/Nestopia/RetroArch/byte/raster parity gate).
+- **Validation must change a decision.** Before another diagnostic, minimization, or confirmation run, name the hypothesis, owner decision, or verdict its result can change, and use the cheapest discriminating evidence. Two consecutive experiments that change none require an immediate checkpoint and handoff; adding metrics, rephrasing the hypothesis, or swapping the agent/reviewer does not reset the count.
+- **Two matching deterministic runs confirm.** Run a third only on disagreement or a concrete live-issue risk, and run broad/full validation once on the final candidate. After the first perceptually good candidate, allow one review round and one correction round before checkpointing; review findings block the slice only when they show the named perceptual regression, corruption/unsafe writes, a build failure, or a broken in-scope public contract — otherwise they are follow-ups.
+- **Classify every broad-validation failure.** It authorizes an edit in the current slice only when causally tied to the acceptance capsule; an inherited, unrelated, exactness-only, or stale-golden failure is reported separately and must not silently expand a completed fix.
 
 ## Reliable Commands
 
@@ -173,16 +110,12 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 
 ## Runner Notes
 
-- `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES runner target-acceptance project, not proof that every API it uses is portable. It lists `src/main.rs` plus helper/state files under `samples/runner/src`; direct runner builds should use the project manifest instead of treating game-owned code as a local library.
-- NES and Game Boy both use per-target VGM/VGZ runner music variants via `assets/music/runner.vgz`; do not treat NES audio calls as no-ops.
-- Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
-- `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner uses `World.Load(...)` over complete `samples/runner/assets/maps/stage1.tmj` and `stage1.tsx`. The older `stage1.playable.tmj` crop is a historical/smaller fixture only; do not substitute it for joint runner acceptance.
-- Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
-- Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
-- `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` with `Button.*` enum members, plus `Sprite.Width`. The direct `button_pressed` read, snake_case `button_*`/`sprite_width` calls, and bare lowercase button identifiers are not public source APIs.
-- Original DMG hardware needs settled `JOYP` row reads. If d-pad input bleeds into A/B behavior, treat it as backend/runtime behavior first, not as sample logic.
-- Byte-backed target values can wrap. Clamp vertical runner state before collision/reset code when working near the top of the scene.
+Runner and Tiled facts — map composition, collision independence, the `Input.Poll()`
+tick boundary and public input API, per-target music, DMG `JOYP` reads, and vertical
+clamping — live once in `docs/AgentContext.md` under "Runner And Tiled Facts". Build
+the runner from `samples/runner/runner.retrosharp.json`, reproduce and isolate runner
+bugs with `docs/GameBoyRunnerDebugging.md`, and treat `docs/GameBoyTarget.md` as the
+source of truth for the current Game Boy subset and runner milestones.
 
 ## Branching and Publication Workflow
 
