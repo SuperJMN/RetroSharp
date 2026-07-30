@@ -674,6 +674,21 @@ The preferred `Sprite.Draw(...)` spelling is declared by the `RetroSharp.Portabl
 
 `Hud.SetTile(window, x, y, tile)` writes one static HUD tile into the Game Boy Window tilemap. The compiler validates the requested HUD mode through `GameBoyTarget.Capabilities`, copies the HUD tilemap to `$9C00`, sets the Window position to `WY=0` and `WX=7`, and enables the LCD Window layer only when a Window HUD tile is declared. The HUD tilemap is separate from the scrolling background/camera tilemap. Runtime HUD writes and configurable Window positions are not implemented yet. `split_scroll` is rejected through the target capability check.
 
+## Debug symbol projection
+
+Game Boy builds can add `--symbols-out <path>` to emit a deterministic UTF-8
+symbol file accepted by the Game Boy debug MCP. `GameBoySymbolFileProjection`
+derives range IDs and named addresses from `GameBoyRuntimeMemoryLayout` and
+adds the compilation's user variables. Entries use `AAAA name`, are ordered by
+address and canonical name, and include names such as `UserLocals`,
+`WorldPackStaging`, `camera.XLow`, `packed camera.CommitCount`, and
+`player.x`. Load the generated ROM with `load_rom`, the sidecar with
+`load_symbols`, and query it with `resolve_symbol` or `read_symbol`.
+
+This metadata adds no instrumentation and does not change cartridge bytes.
+This first version exports non-banked runtime/RAM symbols only; ROM code
+labels, fixed linker symbols, and banked segments remain out of scope.
+
 ## Milestones and progress history
 
 The completed short-term checklist, dated progress snapshots, and closed

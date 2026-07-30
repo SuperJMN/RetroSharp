@@ -38,6 +38,36 @@ For NES emulator diagnostics, `--runtime-abi-out <path>` writes a deterministic
 versioned JSON projection of the target runtime layout and compiled user-local
 symbols, bound to the emitted ROM SHA-256. It does not change ROM bytes.
 
+Both cartridge targets accept `--symbols-out <path>` for a deterministic UTF-8
+debugger symbol file. Each line has the MCP-compatible form `AAAA name` and
+names may contain spaces. The export includes the target's runtime-memory
+ranges and named addresses, compiled variables, and any ROM-specific runtime
+regions reported by that target. It intentionally excludes ROM code labels,
+fixed linker symbols, and banked segments in this first version. Because one
+symbol file describes one target build, the option requires a single target
+and cannot be combined with `--world-budget-report`.
+
+For example, compile the runner and export symbols for either debugger:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target gb \
+  --out /tmp/runner.gb \
+  --symbols-out /tmp/runner.gb.sym \
+  samples/runner/runner.retrosharp.json
+
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target nes \
+  --out /tmp/runner.nes \
+  --symbols-out /tmp/runner.nes.sym \
+  samples/runner/runner.retrosharp.json
+```
+
+In the matching Game Boy or NES debug MCP, call `load_rom` with the generated
+ROM, `load_symbols` with its `.sym` file, then `resolve_symbol` or `read_symbol`
+with a canonical name such as `camera.XLow`, `camera.X`,
+`packed camera.CommitCount`, `WorldPack.VisualSlot0`, or `player.x`.
+
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows
 fixed actor pools, declarative `Enemies.Def(...)` metadata, Tiled object-layer
 spawns, runtime camera-window activation, and Game Boy/NES lowering without heap

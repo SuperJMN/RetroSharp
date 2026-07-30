@@ -483,6 +483,7 @@ Where each piece lives:
 - Operation collection from source: `RetroSharp.Sdk.Frontend` (SDK-frontend assembly).
 - Portable operation records, validator, capabilities, world/Tiled model: `RetroSharp.Core.Sdk` and `RetroSharp.Core.Targeting`.
 - Per-target lowering: `GameBoySdkOperationLowerer` / `NesSdkOperationLowerer`; target runtime compilers own syntax/control-flow traversal and stream consumption, not migrated portable SDK emission.
+- Debugger symbol metadata: `GameBoySymbolFileProjection` / `NesSymbolFileProjection` consume their target-owned runtime-memory layouts and final build reports; the CLI only writes the requested sidecar.
 - Actor Framework lowering: enter through the single `ActorFrameworkLowerer` plan, then follow actor/spawn/projectile/effect domain state and generation symbols; generated program/name facts join through one ordered domain contribution catalog.
 - Ownership validation: `RetroSharp.Architecture.Tests` resolves compiled symbols and IL dependency edges; use exact source paths only for an intentionally physical module contract.
 

@@ -115,6 +115,108 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains($"Wrote NES runtime ABI: {abi}", result.StandardError, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("gb", "Game Boy", ".gb")]
+    [InlineData("gameboy", "Game Boy", ".gb")]
+    [InlineData("nes", "NES", ".nes")]
+    public void Cli_symbol_sidecar_is_utf8_creates_directories_and_keeps_rom_bytes(
+        string target,
+        string targetName,
+        string extension)
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var baselineRom = Path.Combine(workspace.Path, $"baseline{extension}");
+        var rom = Path.Combine(workspace.Path, $"with-symbols{extension}");
+        var symbols = Path.Combine(workspace.Path, "diagnostics", "probe.sym");
+        File.WriteAllText(source, "void Main() { i16 playerX = 0; }");
+
+        var baseline = RunCli("--target", target, "--out", baselineRom, source);
+        var result = RunCli(
+            "--target", target,
+            "--out", rom,
+            "--symbols-out", symbols,
+            source);
+
+        Assert.Equal(0, baseline.ExitCode);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(File.ReadAllBytes(baselineRom), File.ReadAllBytes(rom));
+        Assert.True(File.Exists(symbols), result.CombinedOutput);
+        var symbolBytes = File.ReadAllBytes(symbols);
+        Assert.False(symbolBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
+        var symbolText = File.ReadAllText(symbols);
+        Assert.EndsWith("\n", symbolText, StringComparison.Ordinal);
+        Assert.DoesNotContain('\r', symbolText);
+        Assert.Contains(
+            symbolText.Split('\n'),
+            line => line.EndsWith(" playerX", StringComparison.Ordinal));
+        Assert.Contains($"Wrote {targetName} symbols: {symbols}", result.StandardError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_symbols_out_requires_a_value()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        File.WriteAllText(source, "void Main() { }");
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            RunCli("--target", "gb", source, "--symbols-out"));
+
+        Assert.Equal("--symbols-out requires a value.", error.Message);
+    }
+
+    [Fact]
+    public void Cli_symbol_sidecar_rejects_multi_target_projects()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var project = Path.Combine(workspace.Path, "probe.retrosharp.json");
+        var symbols = Path.Combine(workspace.Path, "probe.sym");
+        File.WriteAllText(source, "void Main() { }");
+        File.WriteAllText(
+            project,
+            """
+            {
+              "targets": [ "gb", "nes" ],
+              "outputs": {
+                "gb": "probe.gb",
+                "nes": "probe.nes"
+              },
+              "sources": [ "probe.rs" ]
+            }
+            """);
+
+        var result = RunCli("--symbols-out", symbols, project);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "--symbols-out can only be used with a single target.",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.False(File.Exists(symbols));
+    }
+
+    [Fact]
+    public void Cli_symbol_sidecar_rejects_world_budget_reports()
+    {
+        using var workspace = TemporaryWorkspace();
+        var symbols = Path.Combine(workspace.Path, "probe.sym");
+
+        var result = RunCli(
+            "--target", "gb",
+            "--world-budget-report",
+            "--symbols-out", symbols,
+            RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj"));
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "--world-budget-report cannot be combined with --symbols-out.",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.False(File.Exists(symbols));
+    }
+
     [Fact]
     public void Cli_world_budget_report_is_explicit_deterministic_json_and_default_output_is_byte_compatible()
     {

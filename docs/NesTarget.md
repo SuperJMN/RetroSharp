@@ -350,6 +350,20 @@ The tracked runner pair is regenerated together by
 `tools/gameboy/generate_sample_roms.py`; its sidecar is
 `samples/runner/bin/runner.nes.runtime-abi.json`.
 
+NES builds can also add `--symbols-out <path>` to emit a deterministic UTF-8
+symbol file accepted directly by the NES debug MCP.
+`NesSymbolFileProjection` derives range IDs and named addresses from
+`NesRuntimeMemoryLayout`, then adds the build report's WorldPack runtime
+regions and compiled variables. Entries use `AAAA name`, are ordered by
+address and canonical name, and include names such as `UserLocals`,
+`camera.X`, `packed camera.CommitCount`, `WorldPack.VisualSlot0`, and
+`player.x`. Load the ROM with `load_rom`, the sidecar with `load_symbols`, and
+query it with `resolve_symbol` or `read_symbol`.
+
+Like the JSON ABI, the symbol file adds no instrumentation and does not change
+ROM bytes. This first version exports non-banked runtime/RAM symbols only; ROM
+code labels, fixed linker symbols, and banked segments remain out of scope.
+
 Runner fall recovery keeps the normal VBlank/audio/input loop alive while a
 shared staged phase returns the source camera by at most 4 px on one axis per
 tick and lets the packed camera publication settle. The final authored NES
