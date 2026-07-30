@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace RetroSharp.Cli;
@@ -14,11 +15,12 @@ public static class CliRunner
 
         void PrintError(string s) => stderr.WriteLine(s);
 
-        static (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) ParseCommandLine(string[] args)
+        static (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) ParseCommandLine(string[] args)
         {
             string? inputPath = null;
             string? outputPath = null;
             string? runtimeAbiOutputPath = null;
+            string? symbolsOutputPath = null;
             string? target = null;
             var libraryPaths = new List<string>();
             var plugins = new List<string>();
@@ -45,6 +47,10 @@ public static class CliRunner
                         if (i + 1 >= args.Length) throw new ArgumentException("--runtime-abi-out requires a value.");
                         runtimeAbiOutputPath = args[++i];
                         break;
+                    case "--symbols-out":
+                        if (i + 1 >= args.Length) throw new ArgumentException("--symbols-out requires a value.");
+                        symbolsOutputPath = args[++i];
+                        break;
                     case "--sdk-plugin":
                         if (i + 1 >= args.Length) throw new ArgumentException("--sdk-plugin requires a value.");
                         plugins.Add(args[++i]);
@@ -63,7 +69,7 @@ public static class CliRunner
                 }
             }
 
-            return (inputPath, outputPath, runtimeAbiOutputPath, target, libraryPaths, plugins, worldBudgetReport);
+            return (inputPath, outputPath, runtimeAbiOutputPath, symbolsOutputPath, target, libraryPaths, plugins, worldBudgetReport);
         }
 
         static RetroSharp.Core.Sdk.SdkPluginRegistry ResolveSdkPluginRegistry(IReadOnlyList<string> pluginIds)
@@ -95,7 +101,7 @@ public static class CliRunner
                 : RetroSharp.Sdk.SdkLibraryRegistry.FromDirectories(libraryPaths);
         }
 
-        static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
         {
             if (options.InputPath is null)
             {
@@ -107,7 +113,7 @@ public static class CliRunner
                 : [ResolveSourceBuildInput(options)];
         }
 
-        static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
         {
             var inputPath = options.InputPath ?? throw new ArgumentException("No source file has been specified");
             var fullPath = Path.GetFullPath(inputPath);
@@ -119,13 +125,14 @@ public static class CliRunner
                 target,
                 options.OutputPath,
                 options.RuntimeAbiOutputPath,
+                options.SymbolsOutputPath,
                 options.LibraryPaths,
                 [],
                 inputPath,
                 options.Plugins);
         }
 
-        static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
         {
             var projectPath = Path.GetFullPath(options.InputPath ?? throw new ArgumentException("No project file has been specified"));
             var projectDirectory = Path.GetDirectoryName(projectPath)
@@ -161,6 +168,10 @@ public static class CliRunner
             {
                 throw new InvalidOperationException("--runtime-abi-out can only be used with a single target.");
             }
+            if (options.SymbolsOutputPath is not null && targets.Length > 1)
+            {
+                throw new InvalidOperationException("--symbols-out can only be used with a single target.");
+            }
 
             return targets
                 .Select(target => new RetroSharpBuildInput(
@@ -169,6 +180,7 @@ public static class CliRunner
                     target,
                     options.OutputPath ?? ResolveProjectOutputPath(projectDirectory, ResolveProjectOutput(manifest, target)),
                     options.RuntimeAbiOutputPath,
+                    options.SymbolsOutputPath,
                     libraryPaths,
                     libraries,
                     projectPath,
@@ -192,7 +204,7 @@ public static class CliRunner
         }
 
         static string[] ResolveProjectTargets(
-            (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options,
+            (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options,
             RetroSharpProjectManifest manifest)
         {
             if (!string.IsNullOrWhiteSpace(options.Target))
@@ -369,7 +381,7 @@ public static class CliRunner
                 Directory.CreateDirectory(directory);
             }
 
-            File.WriteAllText(outputPath, text);
+            File.WriteAllText(outputPath, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
         static string DefaultOutputPath(RetroSharpBuildInput buildInput, string extension)
@@ -576,6 +588,13 @@ public static class CliRunner
                             RetroSharp.NES.NesRuntimeAbiProjection.Serialize(result));
                         stderr.WriteLine($"Wrote NES runtime ABI: {buildInput.RuntimeAbiOutputPath}");
                     }
+                    if (buildInput.SymbolsOutputPath is not null)
+                    {
+                        WriteOutputText(
+                            buildInput.SymbolsOutputPath,
+                            RetroSharp.NES.NesSymbolFileProjection.Serialize(result));
+                        stderr.WriteLine($"Wrote NES symbols: {buildInput.SymbolsOutputPath}");
+                    }
                     return 0;
                 }
                 catch (Exception ex)
@@ -590,15 +609,22 @@ public static class CliRunner
                 try
                 {
                     var sdkLibraryRegistry = ResolveSdkLibraryRegistry(buildInput.LibraryPaths);
-                    var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
+                    var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
                         buildInput.Source,
                         buildInput.BaseDirectory,
                         sdkLibraryRegistry: sdkLibraryRegistry,
                         sdkLibraryImports: buildInput.LibraryImports,
                         sdkPluginRegistry: ResolveSdkPluginRegistry(buildInput.Plugins));
                     var outputPath = buildInput.OutputPath ?? DefaultOutputPath(buildInput, ".gb");
-                    WriteOutputBytes(outputPath, rom);
+                    WriteOutputBytes(outputPath, result.Rom);
                     stderr.WriteLine($"Wrote Game Boy ROM: {outputPath}");
+                    if (buildInput.SymbolsOutputPath is not null)
+                    {
+                        WriteOutputText(
+                            buildInput.SymbolsOutputPath,
+                            RetroSharp.GameBoy.GameBoySymbolFileProjection.Serialize(result));
+                        stderr.WriteLine($"Wrote Game Boy symbols: {buildInput.SymbolsOutputPath}");
+                    }
                     return 0;
                 }
                 catch (Exception ex)
@@ -623,6 +649,10 @@ public static class CliRunner
         {
             try
             {
+                if (options.SymbolsOutputPath is not null)
+                {
+                    throw new ArgumentException("--world-budget-report cannot be combined with --symbols-out.");
+                }
                 if (options.OutputPath is not null)
                 {
                     throw new ArgumentException("--world-budget-report writes JSON to stdout and cannot be combined with --out.");
@@ -674,6 +704,7 @@ file sealed record RetroSharpBuildInput(
     string Target,
     string? OutputPath,
     string? RuntimeAbiOutputPath,
+    string? SymbolsOutputPath,
     IReadOnlyList<string> LibraryPaths,
     IReadOnlyList<string> LibraryImports,
     string PrimaryPath,
