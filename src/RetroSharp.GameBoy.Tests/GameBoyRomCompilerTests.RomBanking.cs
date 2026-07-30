@@ -193,7 +193,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("u8 direction;", cameraBlock);
         Assert.Contains("u8 movementRemainder;", cameraBlock);
         Assert.Contains("inline void UpdateIntent(u8 desiredDirection, bool grounded)", cameraBlock);
-        Assert.Contains("inline void ApplySkid(u8 desiredDirection)", cameraBlock);
+        Assert.Contains("inline void ApplySkid(u8 desiredDirection, bool grounded)", cameraBlock);
         Assert.Contains("speed -= MotionSpeed.SkidAcceleration;", cameraBlock);
         Assert.Contains("direction = desiredDirection;", cameraBlock);
         Assert.Contains("UpdateFacing(player, desiredDirection);", cameraBlock);
@@ -234,9 +234,10 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("speed -= MotionSpeed.Friction;", cameraBlock);
         Assert.Contains("direction = Direction.None;", cameraBlock);
 
-        // Traction owns acceleration and friction; opposite air input only trims inherited momentum.
+        // Air skid can cross zero, while facing remains locked until landing.
         Assert.Contains("Accelerate(grounded);", cameraBlock);
-        Assert.Contains("ApplySkid(desiredDirection);", cameraBlock);
+        Assert.Contains("ApplySkid(desiredDirection, grounded);", cameraBlock);
+        Assert.Contains("if (player.grounded)", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);

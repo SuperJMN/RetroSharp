@@ -414,7 +414,7 @@ public sealed class GameBoyRunnerLandingTests
     }
 
     [Fact]
-    public void Shared_runner_allows_horizontal_momentum_to_be_trimmed_while_airborne_like_smb3()
+    public void Shared_runner_reverses_horizontal_momentum_without_changing_facing_while_airborne_like_smb3()
     {
         var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             RunnerSample.CompiledSource(),
@@ -425,6 +425,7 @@ public sealed class GameBoyRunnerLandingTests
         var direction = variables["view.direction"].Address;
         var playerX = variables["player.x"].Address;
         var playerGrounded = variables["player.grounded"].Address;
+        var playerDisplayFlipX = variables["player.displayFlipX"].Address;
         var cpu = new GameBoyTestCpu(build.Rom) { CycleAccurateLy = true };
         RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
@@ -442,6 +443,7 @@ public sealed class GameBoyRunnerLandingTests
         AdvanceGameplayTick(cpu);
         Assert.Equal(0, cpu.Wram(playerGrounded));
         Assert.Equal(32, cpu.Wram(speed));
+        Assert.Equal(0, cpu.Wram(playerDisplayFlipX));
         var xAtTakeoff = ReadWord(cpu, playerX);
         cpu.Held.Remove("right");
         cpu.Held.Remove("b");
@@ -459,9 +461,22 @@ public sealed class GameBoyRunnerLandingTests
 
         Assert.True(observedProgressiveSkid, "Air steering must trim momentum progressively instead of stopping instantly.");
         Assert.Equal(2, cpu.Wram(direction));
-        Assert.Equal(0, cpu.Wram(speed));
+        Assert.Equal(2, cpu.Wram(speed));
         Assert.Equal(0, cpu.Wram(playerGrounded));
+        Assert.Equal(0, cpu.Wram(playerDisplayFlipX));
         Assert.True(ReadWord(cpu, playerX) > xAtTakeoff, "Mario must keep moving right while air input trims his momentum.");
+
+        var xAtReverse = ReadWord(cpu, playerX);
+        for (var tick = 0; tick < 8; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+
+        Assert.Equal(2, cpu.Wram(speed));
+        Assert.Equal(2, cpu.Wram(direction));
+        Assert.Equal(0, cpu.Wram(playerGrounded));
+        Assert.Equal(0, cpu.Wram(playerDisplayFlipX));
+        Assert.True(ReadWord(cpu, playerX) < xAtReverse, "Mario must begin moving left without turning visually before landing.");
     }
 
     [Fact]
