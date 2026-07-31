@@ -266,7 +266,7 @@ dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.cspro
   samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj
 ```
 
-The option accepts one importer-ready `.tmj`, requires `--target gb` or
+The option accepts one importer-ready `.tmx` or `.tmj`, requires `--target gb` or
 `--target nes`, cannot be combined with `--out`, writes one deterministic
 `retrosharp.world-budget/v1` JSON object to stdout, and writes nothing to
 stderr on success. Without this option, successful GB/NES stdout and stderr

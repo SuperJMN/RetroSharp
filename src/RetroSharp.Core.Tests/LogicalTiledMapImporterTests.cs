@@ -1,5 +1,6 @@
 namespace RetroSharp.Core.Tests;
 
+using System.Text.Json;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 using Xunit;
@@ -231,5 +232,258 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
 
         var error = Assert.Throws<InvalidOperationException>(() => LogicalTiledMapImporter.Load(path));
         Assert.Contains("requires a tile layer named 'world'", error.Message);
+    }
+
+    [Fact]
+    public void Load_produces_the_same_logical_map_from_tmj_and_csv_tmx()
+    {
+        File.WriteAllText(
+            Path.Combine(directory, "terrain.tsx"),
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <tileset version="1.10" tiledversion="1.12.2" name="terrain" tilewidth="16" tileheight="16" tilecount="2" columns="2">
+              <tile id="0">
+                <objectgroup><object id="1" x="0" y="0" width="16" height="16"/></objectgroup>
+              </tile>
+              <tile id="1">
+                <properties><property name="retrosharpCollision" value="platform"/></properties>
+              </tile>
+            </tileset>
+            """);
+
+        var tmjPath = Path.Combine(directory, "level.tmj");
+        File.WriteAllText(tmjPath, """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 2,
+          "height": 2,
+          "tilewidth": 16,
+          "tileheight": 16,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+          ],
+          "tilesets": [ { "firstgid": 1, "source": "terrain.tsx" } ],
+          "layers": [
+            {
+              "type": "group",
+              "name": "gameplay",
+              "layers": [
+                { "type": "tilelayer", "name": "background", "width": 2, "height": 2, "data": [0, 1, 0, 2] },
+                { "type": "tilelayer", "name": "world", "width": 2, "height": 2, "data": [1, 2, 0, 1] },
+                {
+                  "type": "objectgroup",
+                  "name": "actors",
+                  "objects": [
+                    {
+                      "id": 7,
+                      "class": "Goomba",
+                      "x": 16.5,
+                      "y": 31.5,
+                      "properties": [
+                        { "name": "active", "type": "bool", "value": true },
+                        { "name": "health", "type": "int", "value": 2 }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """);
+
+        var tmxPath = Path.Combine(directory, "level.tmx");
+        File.WriteAllText(tmxPath, """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <map version="1.10" tiledversion="1.12.2" orientation="orthogonal" width="2" height="2" tilewidth="16" tileheight="16" infinite="0">
+          <properties>
+            <property name="retrosharpStreamY" type="int" value="0"/>
+            <property name="retrosharpWorldY" type="int" value="0"/>
+            <property name="retrosharpWorldHeight" type="int" value="2"/>
+          </properties>
+          <tileset firstgid="1" source="terrain.tsx"/>
+          <group name="gameplay">
+            <layer name="background" width="2" height="2"><data encoding="csv">0,1,0,2</data></layer>
+            <layer name="world" width="2" height="2"><data encoding="csv">1,2,0,1</data></layer>
+            <objectgroup name="actors">
+              <object id="7" class="Goomba" x="16.5" y="31.5">
+                <properties>
+                  <property name="active" type="bool" value="true"/>
+                  <property name="health" type="int" value="2"/>
+                </properties>
+              </object>
+            </objectgroup>
+          </group>
+        </map>
+        """);
+
+        var fromJson = LogicalTiledMapImporter.Load(tmjPath);
+        var fromXml = LogicalTiledMapImporter.Load(tmxPath);
+
+        AssertEquivalent(fromJson, fromXml);
+        Assert.Equal(
+            new[]
+            {
+                WorldTileFlags.Solid, WorldTileFlags.Solid, WorldTileFlags.Platform, WorldTileFlags.Platform,
+                WorldTileFlags.Solid, WorldTileFlags.Solid, WorldTileFlags.Platform, WorldTileFlags.Platform,
+                WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Solid, WorldTileFlags.Solid,
+                WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Solid, WorldTileFlags.Solid,
+            },
+            fromXml.WorldFlags);
+    }
+
+    [Fact]
+    public void Load_rejects_non_csv_tmx_tile_data()
+    {
+        var path = Path.Combine(directory, "base64.tmx");
+        File.WriteAllText(path, """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <map orientation="orthogonal" width="1" height="1" tilewidth="8" tileheight="8" infinite="0">
+          <properties><property name="retrosharpStreamY" type="int" value="0"/></properties>
+          <layer name="world" width="1" height="1"><data encoding="base64">AAAAAA==</data></layer>
+        </map>
+        """);
+
+        var error = Assert.Throws<InvalidOperationException>(() => LogicalTiledMapImporter.Load(path));
+
+        Assert.Contains("must use CSV-encoded TMX tile data without compression", error.Message);
+    }
+
+    [Fact]
+    public void Load_imports_the_authored_runner_tmx()
+    {
+        var map = LogicalTiledMapImporter.Load(RepositoryFile("samples/runner/assets/maps/stage1.tmx"));
+
+        Assert.Equal(156, map.Geometry.SourceWidth);
+        Assert.Equal(20, map.Geometry.SourceHeight);
+        Assert.Equal(312, map.Geometry.Width);
+        Assert.Equal(40, map.Geometry.Height);
+        Assert.Equal(3120, map.WorldGids.Length);
+        Assert.NotEmpty(map.Tilesets);
+    }
+
+    [Fact]
+    public void Runner_tileset_declares_the_authored_collision_flags()
+    {
+        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(directory, "stage1.tsx"));
+        var expectedFlags = new Dictionary<int, WorldTileFlags>
+        {
+            [6] = WorldTileFlags.Solid,
+            [7] = WorldTileFlags.Solid,
+            [9] = WorldTileFlags.Solid,
+            [10] = WorldTileFlags.Solid,
+            [11] = WorldTileFlags.Platform,
+            [12] = WorldTileFlags.Platform,
+            [13] = WorldTileFlags.Platform,
+            [29] = WorldTileFlags.Platform,
+            [30] = WorldTileFlags.Platform,
+            [31] = WorldTileFlags.Platform,
+            [38] = WorldTileFlags.Solid,
+            [40] = WorldTileFlags.Solid,
+            [41] = WorldTileFlags.Solid,
+            [42] = WorldTileFlags.Solid,
+            [44] = WorldTileFlags.Solid,
+            [50] = WorldTileFlags.Platform,
+            [51] = WorldTileFlags.Platform,
+            [52] = WorldTileFlags.Platform,
+            [83] = WorldTileFlags.Solid,
+            [102] = WorldTileFlags.Solid,
+            [103] = WorldTileFlags.Solid,
+            [104] = WorldTileFlags.Solid,
+            [109] = WorldTileFlags.Solid,
+        };
+        var path = Path.Combine(directory, "collision-contract.tmx");
+        File.WriteAllText(path, $$"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <map orientation="orthogonal" width="{{expectedFlags.Count}}" height="1" tilewidth="16" tileheight="16" infinite="0">
+          <properties><property name="retrosharpStreamY" type="int" value="0"/></properties>
+          <tileset firstgid="1" source="stage1.tsx"/>
+          <layer name="world" width="{{expectedFlags.Count}}" height="1">
+            <data encoding="csv">{{string.Join(',', expectedFlags.Keys.Select(id => id + 1))}}</data>
+          </layer>
+        </map>
+        """);
+
+        var map = LogicalTiledMapImporter.Load(path);
+
+        foreach (var (entry, sourceX) in expectedFlags.Select((entry, index) => (entry, index)))
+        {
+            for (var hardwareY = 0; hardwareY < 2; hardwareY++)
+            {
+                for (var hardwareX = 0; hardwareX < 2; hardwareX++)
+                {
+                    Assert.Equal(entry.Value, map.WorldFlags[hardwareY * map.Geometry.Width + sourceX * 2 + hardwareX]);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Runner_tiled_project_defines_collision_flags_as_a_string_enum()
+    {
+        using var project = JsonDocument.Parse(
+            File.ReadAllBytes(RepositoryFile("samples/runner/assets/maps/runner.tiled-project")));
+        var collisionFlags = Assert.Single(
+            project.RootElement.GetProperty("propertyTypes").EnumerateArray(),
+            propertyType => propertyType.GetProperty("name").GetString() == "CollisionFlags");
+
+        Assert.Equal("enum", collisionFlags.GetProperty("type").GetString());
+        Assert.Equal("string", collisionFlags.GetProperty("storageType").GetString());
+        Assert.True(collisionFlags.GetProperty("valuesAsFlags").GetBoolean());
+        Assert.Equal(
+            new[] { "Solid", "Hazard", "Platform" },
+            collisionFlags.GetProperty("values").EnumerateArray().Select(value => value.GetString()));
+    }
+
+    private static void AssertEquivalent(LogicalTiledMap expected, LogicalTiledMap actual)
+    {
+        Assert.Equal(expected.Geometry.SourceWidth, actual.Geometry.SourceWidth);
+        Assert.Equal(expected.Geometry.SourceHeight, actual.Geometry.SourceHeight);
+        Assert.Equal(expected.Geometry.TileScaleX, actual.Geometry.TileScaleX);
+        Assert.Equal(expected.Geometry.TileScaleY, actual.Geometry.TileScaleY);
+        Assert.Equal(expected.Geometry.WorldY, actual.Geometry.WorldY);
+        Assert.Equal(expected.Geometry.WorldHeight, actual.Geometry.WorldHeight);
+        Assert.Equal(expected.Geometry.StreamY, actual.Geometry.StreamY);
+        Assert.Equal(expected.Geometry.Width, actual.Geometry.Width);
+        Assert.Equal(expected.Geometry.Height, actual.Geometry.Height);
+        Assert.Equal(expected.WorldGids, actual.WorldGids);
+        Assert.Equal(expected.BackgroundGids, actual.BackgroundGids);
+        Assert.Equal(expected.WorldFlags, actual.WorldFlags);
+
+        var expectedTileset = Assert.Single(expected.Tilesets);
+        var actualTileset = Assert.Single(actual.Tilesets);
+        Assert.Equal(expectedTileset.FirstGid, actualTileset.FirstGid);
+        Assert.Equal(expectedTileset.Name, actualTileset.Name);
+        Assert.Equal(expectedTileset.TileWidth, actualTileset.TileWidth);
+        Assert.Equal(expectedTileset.TileHeight, actualTileset.TileHeight);
+        Assert.Equal(expectedTileset.TileCount, actualTileset.TileCount);
+
+        var expectedSpawn = Assert.Single(Assert.Contains("actors", expected.ActorSpawnLayers));
+        var actualSpawn = Assert.Single(Assert.Contains("actors", actual.ActorSpawnLayers));
+        Assert.Equal(expectedSpawn.Kind, actualSpawn.Kind);
+        Assert.Equal(expectedSpawn.X, actualSpawn.X);
+        Assert.Equal(expectedSpawn.Y, actualSpawn.Y);
+        Assert.Equal(expectedSpawn.Fields, actualSpawn.Fields);
+    }
+
+    private static string RepositoryFile(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
     }
 }

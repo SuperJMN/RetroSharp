@@ -49,7 +49,7 @@
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
 - [samples/actor-framework/actors.rs](samples/actor-framework/actors.rs): Game Boy/NES target-acceptance actor framework sample with fixed pools, enemy definitions, Tiled spawns, runtime activation, and camera-relative helpers.
 - [samples/runner/runner.retrosharp.json](samples/runner/runner.retrosharp.json): shared Game Boy/NES target-acceptance runner project that lists [samples/runner/src/main.rs](samples/runner/src/main.rs) plus helper/state code under [samples/runner/src/](samples/runner/src/) and uses per-target VGM/VGZ background music.
-- [samples/runner/assets/maps/runner.tmj](samples/runner/assets/maps/runner.tmj): editable Tiled runner map.
+- [samples/runner/assets/maps/stage1.tmx](samples/runner/assets/maps/stage1.tmx): editable Tiled runner map and direct runtime input.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked sample ROM regeneration script.
 - [validation/scenarios/functional-scenario.schema.json](validation/scenarios/functional-scenario.schema.json): checked-in canonical functional scenario schema.
 

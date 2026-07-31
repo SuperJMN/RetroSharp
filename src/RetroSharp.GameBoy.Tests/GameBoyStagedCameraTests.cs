@@ -29,7 +29,7 @@ public sealed class GameBoyStagedCameraTests
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmj");
+                World.Load("assets/maps/stage1.tmx");
                 Sprite.Asset(player, "assets/mario-player.png", 18, 32);
                 Music.Asset(theme, "assets/music/runner.vgz");
                 Camera.Init(312, 0, 40);
@@ -116,7 +116,7 @@ public sealed class GameBoyStagedCameraTests
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmj");
+                World.Load("assets/maps/stage1.tmx");
                 Sprite.Asset(player, "assets/mario-player.gb.png", 18, 32);
                 Music.Asset(theme, "assets/music/runner.vgz");
                 Camera.Init(312, 0, 40);
@@ -138,7 +138,7 @@ public sealed class GameBoyStagedCameraTests
             }
             """;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.tmj"),
+            Path.Combine(directory, "assets/maps/stage1.tmx"),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             source,

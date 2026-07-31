@@ -146,8 +146,9 @@ Classify a regression by its primary observable:
   game-owned helper and state files.
 - NES and Game Boy both use per-target VGM/VGZ runner music via
   `assets/music/runner.vgz`; NES audio calls are not no-ops.
-- The runner uses the complete `samples/runner/assets/maps/stage1.tmj` and
-  `stage1.tsx`. `stage1.playable.tmj` is a smaller historical fixture.
+- The runner uses the complete editable `samples/runner/assets/maps/stage1.tmx`
+  directly with `stage1.tsx`; it no longer needs a derived TMJ export. The former
+  `stage1.playable.tmj` was a smaller historical fixture, not a runtime input.
 - `World.Load(...)` first produces target-neutral logical map and collision
   facts, then each target resolves graphics and encodes its native tiles.
 - Game Boy has one scrolling background tilemap. The authoring `background`

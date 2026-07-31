@@ -163,7 +163,7 @@ public sealed class NesLargeWorldCameraTests
     {
         var directory = RepositoryDirectory("samples/runner");
         var packed = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.tmj"),
+            Path.Combine(directory, "assets/maps/stage1.tmx"),
             NesVideoProgram.FirstSpriteTile + 95);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             RunnerSample.CompiledSource(),
@@ -811,7 +811,7 @@ public sealed class NesLargeWorldCameraTests
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmj");
+                World.Load("assets/maps/stage1.tmx");
                 Camera.Init(312, 0, 40);
                 while (true) {
                     Camera.SetPosition(8, 8);

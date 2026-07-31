@@ -1646,8 +1646,8 @@ public partial class GameBoyRomCompilerTests
         Assert.DoesNotContain("void DrawBackground()", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
         Assert.Contains("void LoadWorld()", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
-        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.tmj")));
+        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", source);
+        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.tmx")));
         Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.tsx")));
         Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.png")));
         Assert.DoesNotContain("World.Column(", source);
@@ -1722,7 +1722,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_stage1_wide_tiled_map_for_horizontal_scroll()
     {
-        var mapPath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
+        var mapPath = RepositoryFile("samples/runner/assets/maps/stage1.tmx");
         var source = RunnerSample.FlattenedSource();
         var map = LogicalTiledMapImporter.Load(mapPath);
 

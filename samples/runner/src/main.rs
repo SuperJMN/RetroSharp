@@ -22,7 +22,7 @@ void SetupAudio()
 
 void LoadWorld()
 {
-    World.Load("assets/maps/stage1.tmj");
+    World.Load("assets/maps/stage1.tmx");
 }
 
 void Main()

@@ -86,7 +86,7 @@ Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 reso
 | `World.Column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
 | `World.Flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
 | `World.Map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
-| `World.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
+| `World.Load(path)` | Import a finite orthogonal Tiled map from editable XML (`.tmx`) or JSON (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. TMX tile layers use uncompressed CSV data; TMJ tile layers use unencoded JSON arrays. |
 | `World.TileFlagsAt(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
 | `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` remains byte-range; `worldY` is a complete word expression and byte-backed callers zero-extend. |
@@ -178,8 +178,8 @@ the pool itself is generated fixed storage, not a runtime object.
 | Signature | Semantics |
 | --- | --- |
 | `Actors.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and fit the fixed struct-array storage model. For `pool.Draw()`, targets validate `capacity * max(enemy metasprite hardware sprites)` against their sprite budget after JSON/PNG assets have been resolved. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
-| `Actors.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `Camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` and `y` must fit `0..65535` and are split into low `x`/`y` plus high `xHi`/`yHi`. |
-| `Actors.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
+| `Actors.SpawnLayer(pool, "map.tmx", "layer")` | Read a Tiled object layer from the named `.tmx` or `.tmj` map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `Camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` and `y` must fit `0..65535` and are split into low `x`/`y` plus high `xHi`/`yHi`. |
+| `Actors.SpawnWindow(pool, "map.tmx", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
 | `Enemies.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `Enemies.Behavior(kind)`, `Enemies.Speed(kind)`, `Enemies.Hp(kind)`, `Enemies.Cooldown(kind)`, `Enemies.ContactDamage(kind)`, `Enemies.HitboxWidth(kind)`, `Enemies.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. The frontend emits only helpers that source actually calls, so unused metadata helpers do not remain in the lowered program or add bytes. |
 | `pool.TouchTiles(yOffset, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY` from world `x`/`xHi` and `y`/`yHi`, branch by kind, cull slots outside the visible camera window, and call `Camera.ScreenAabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
@@ -274,7 +274,7 @@ For a small pool, the source-level sugar:
 Actors.Pool(enemies, 2);
 Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1,
     hitboxWidth: 8, hitboxHeight: 8);
-Actors.SpawnLayer(enemies, "level.tmj", "actors");
+Actors.SpawnLayer(enemies, "level.tmx", "actors");
 enemies.Update();
 enemies.TouchTiles(0, 1);
 enemies.LandOnTiles(4, 12, 1);
@@ -523,7 +523,7 @@ Calls that expose raw hardware state are outside SDK v1. They can remain availab
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice lowers on both Game Boy and NES. The full runner remains a target-acceptance scenario rather than a portable SDK sample because broader world/HUD contracts are still missing. It now loads complete 156x20-cell `stage1.tmj`, expands it to 312x40 hardware tiles, and retains per-target VGM/VGZ background music, SFX, collision, and NES DPCM through target-owned `WorldPack` runtimes.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice lowers on both Game Boy and NES. The full runner remains a target-acceptance scenario rather than a portable SDK sample because broader world/HUD contracts are still missing. It now loads complete 156x20-cell `stage1.tmx`, expands it to 312x40 hardware tiles, and retains per-target VGM/VGZ background music, SFX, collision, and NES DPCM through target-owned `WorldPack` runtimes.
 
 - `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
 - LW-0.4 is accepted in `docs/WorldCoordinateCollisionContract.md`. LW-1.1 has
@@ -537,7 +537,7 @@ SDK v1 is usable for the current cross-target camera sample, and the runner-shap
   `source-library-package` manifest are the `portable-sdk` samples.
   `samples/runner/runner.retrosharp.json` remains a shared Game Boy/NES
   `target-acceptance` project with game-owned helper/state files, complete
-  `stage1.tmj`, and per-target VGM/VGZ music. The smaller tall, vertical,
+  `stage1.tmx`, and per-target VGM/VGZ music. The smaller tall, vertical,
   diagonal, and free-scroll samples remain focused target-acceptance fixtures.
 
 ## Minimal Game Boy/NES Example

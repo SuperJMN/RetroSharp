@@ -32,7 +32,7 @@ public sealed class GameBoyWorldPackPlacementTests
     [Fact]
     public void Runner_embeds_a_distinct_column_major_hardware_tile_plane_after_the_unchanged_world_pack()
     {
-        var mapPath = Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmj");
+        var mapPath = Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmx");
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
@@ -48,7 +48,7 @@ public sealed class GameBoyWorldPackPlacementTests
             segment => segment.Owner == "worldpack-column-plane:default");
         var expectedColumnTiles = CreateColumnMajorHardwareTiles(canonical.Pack);
 
-        Assert.Equal(2_568, originalSerializedBytes.Length);
+        Assert.Equal(2_609, originalSerializedBytes.Length);
         Assert.Equal(12_480, expectedColumnTiles.Length);
         Assert.Equal(new[] { 0, 1, 2, 3, 4 }, result.Report.OccupiedBanks);
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
@@ -57,7 +57,7 @@ public sealed class GameBoyWorldPackPlacementTests
         Assert.Equal(0x4000, packSegment.CpuAddress);
         Assert.Equal(originalSerializedBytes.Length, packSegment.Length);
         Assert.Equal(2, columnPlaneSegment.Bank);
-        Assert.Equal(0x4A08, columnPlaneSegment.CpuAddress);
+        Assert.Equal(0x4A31, columnPlaneSegment.CpuAddress);
         Assert.Equal(expectedColumnTiles.Length, columnPlaneSegment.Length);
         Assert.Equal(packSegment.PhysicalStart + packSegment.Length, columnPlaneSegment.PhysicalStart);
         Assert.Equal(

@@ -45,7 +45,7 @@ public sealed class GameBoyRunnerJointLoadCadenceTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             sdkPluginRegistry: null);
         var map = GameBoyTiledMapImporter.Load(
-            Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"),
+            Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmx"),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var artifact = new FunctionalRomArtifact("samples/runner/bin/runner.gb (fresh manifest build)", build.Rom);
         var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);

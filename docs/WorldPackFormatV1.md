@@ -473,10 +473,10 @@ The NES record retains palette slot and world-layer provenance in its second
 byte. Duplicate target records remain legal when distinct authoring identities
 quantize to the same target result.
 
-The focused full-`stage1` builds measure 2,568 serialized bytes on Game Boy and
+The focused full-`stage1` builds measure 2,609 serialized bytes on Game Boy and
 7,924 on NES. NES spends 3,120 bytes on each raw plane; Game Boy keeps its
 smaller canonical raw/RLE choice. Both builds retain 60 clipped chunks, 53 visual metatiles, three collision
-profiles, 82 GB patterns, 90 NES patterns, 788 solid hardware cells, and 56
+profiles, 82 GB patterns, 90 NES patterns, 836 solid hardware cells, and 160
 one-way platform cells. Tests also cover external TSJ/TSX tilesets, target PNG
 variants, background/world composition, explicit collision overrides, target
 metadata parity, raw and RLE round-trip decoding, and two fresh byte-identical

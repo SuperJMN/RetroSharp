@@ -350,7 +350,7 @@ public sealed class GameBoyWorldPackReaderTests
     public void Complete_stage1_cached_collision_hit_fits_the_runner_frame_budget()
     {
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmj"),
+            Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmx"),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             RunnerSample.CompiledSource(),

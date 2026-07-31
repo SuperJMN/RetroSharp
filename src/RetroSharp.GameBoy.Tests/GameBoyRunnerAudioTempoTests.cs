@@ -15,7 +15,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Shared_runner_discovers_the_exact_complete_stage1_pack_and_mbc1_link()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var mapPath = Path.Combine(runnerDirectory, "assets", "maps", "stage1.tmj");
+        var mapPath = Path.Combine(runnerDirectory, "assets", "maps", "stage1.tmx");
         var packed = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
@@ -28,8 +28,8 @@ public sealed class GameBoyRunnerAudioTempoTests
         Assert.Equal(40, packed.Pack.Descriptor.HardwareHeight);
         Assert.Equal(60, packed.Pack.Chunks.Count);
         Assert.Equal(770, packed.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(326, packed.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
-        Assert.Equal(2_568, packed.SerializedBytes.Length);
+        Assert.Equal(367, packed.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(2_609, packed.SerializedBytes.Length);
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
         Assert.Equal(131_072, result.Rom.Length);
         Assert.Equal(

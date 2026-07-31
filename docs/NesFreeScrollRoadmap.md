@@ -402,7 +402,7 @@ stable IRQ HUD remains a distinct follow-up:
   VBlank policy; Large Worlds v1 adds mapper-backed scale and banking, while
   HUD IRQs remain separate.
 - Horizontal-only NES programs stay on the horizontal camera path. The shared
-  runner now uses packed four-screen streaming over complete `stage1.tmj`;
+  runner now uses packed four-screen streaming over complete `stage1.tmx`;
   the focused vertical and diagonal samples remain isolation coverage.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
