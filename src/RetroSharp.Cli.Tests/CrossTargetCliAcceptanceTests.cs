@@ -398,7 +398,7 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("static class Mario", source, StringComparison.Ordinal);
         Assert.DoesNotContain("static class Hero", source, StringComparison.Ordinal);
         Assert.Contains("const u8 ShotY = 116;", source, StringComparison.Ordinal);
-        Assert.Contains("""Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);""", source, StringComparison.Ordinal);
+        Assert.Contains("""Sprite.Asset(mario_player, "../shared/platformer-assets/sprites/mario-player.png", 18, 32);""", source, StringComparison.Ordinal);
         Assert.Contains("""Sprite.Asset(mario_shot, "assets/mario-shot.json");""", source, StringComparison.Ordinal);
         Assert.Contains("""Projectiles.Def(MarioFireball, team: Hero""", source, StringComparison.Ordinal);
         Assert.Contains("""tileCollision: Bounce""", source, StringComparison.Ordinal);
@@ -467,9 +467,8 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
-    public void Runner_project_builds_game_sources_without_a_local_library_package()
+    public void Runner_project_manifest_keeps_its_dual_target_structure()
     {
-        using var workspace = TemporaryWorkspace();
         var projectPath = RepositoryFile("samples/runner/runner.retrosharp.json");
         using var projectJson = JsonDocument.Parse(File.ReadAllText(projectPath));
         var root = projectJson.RootElement;
@@ -483,38 +482,15 @@ public sealed class CrossTargetCliAcceptanceTests
             .ToArray();
         var outputs = root.GetProperty("outputs");
 
-        Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("target"));
-        Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("libraryPaths"));
-        Assert.Equal("Runner", root.GetProperty("rootNamespace").GetString());
-        Assert.Equal("src", root.GetProperty("sourceRoot").GetString());
-        Assert.Equal("physical", root.GetProperty("namespaceMode").GetString());
         Assert.Equal(new[] { "gb", "nes" }, targets);
         Assert.Equal("bin/runner.gb", outputs.GetProperty("gb").GetString());
         Assert.Equal("bin/runner.nes", outputs.GetProperty("nes").GetString());
-        Assert.Contains("src/level/constants.rs", sourcePaths);
-        Assert.Contains("src/player/state.rs", sourcePaths);
-        Assert.Contains("src/camera/state.rs", sourcePaths);
-        Assert.Contains("src/frame/state.rs", sourcePaths);
-        Assert.Contains("src/main.rs", sourcePaths);
-        Assert.DoesNotContain("runner.rs", sourcePaths);
-        Assert.False(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/runner.rs")));
-        Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/music")));
-        Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/maps")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.gb.vgz")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.nes.vgz")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.tmx")));
-        var mainSource = File.ReadAllText(RepositoryFile("samples/runner/src/main.rs"));
-        Assert.DoesNotContain("import Runner.Framework;", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", mainSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("stage1.playable.tmj", mainSource, StringComparison.Ordinal);
-
-        var outputPath = Path.Combine(workspace.Path, "runner.gb");
-        var result = RunCli("--target", "gb", "--out", outputPath, projectPath);
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.True(File.Exists(outputPath), result.CombinedOutput);
-        Assert.Equal(131072, new FileInfo(outputPath).Length);
+        Assert.NotEmpty(sourcePaths);
+        Assert.All(
+            sourcePaths,
+            source => Assert.True(
+                File.Exists(Path.Combine(Path.GetDirectoryName(projectPath)!, source!)),
+                $"Runner manifest source '{source}' does not exist."));
     }
 
     [Fact]
@@ -1293,10 +1269,10 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         var workspace = TemporaryWorkspace();
         File.Copy(
-            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tmx"),
             Path.Combine(workspace.Path, "stage1.normalized.tmx"));
-        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(workspace.Path, "stage1.tsx"));
-        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(workspace.Path, "stage1.png"));
+        File.Copy(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tsx"), Path.Combine(workspace.Path, "stage1.tsx"));
+        File.Copy(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.png"), Path.Combine(workspace.Path, "stage1.png"));
         return workspace;
     }
 

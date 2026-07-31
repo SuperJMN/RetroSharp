@@ -63,10 +63,10 @@ public sealed class GameBoyWorldPackReaderTests
     [Fact]
     public void Packed_collision_reference_links_the_worldpack_without_legacy_rows()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 i16 footY = 160;
                 i16 hitTop = Camera.AabbHitTop(72, footY - 4, 16, 12, 1);
@@ -90,8 +90,8 @@ public sealed class GameBoyWorldPackReaderTests
     [Fact]
     public void Collision_lookup_returns_packed_flags_and_never_writes_visual_slots()
     {
-        var directory = RepositoryDirectory("samples/runner");
-        var mapPath = Path.Combine(directory, "assets/maps/stage1.playable.tmj");
+        var directory = FullStage1ValidationFixture.Directory;
+        var mapPath = FullStage1ValidationFixture.MapPath;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
@@ -106,7 +106,7 @@ public sealed class GameBoyWorldPackReaderTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    value += 1;", 4_000));
         var source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 u8 value = 0;
             """ + filler + """
 
@@ -347,14 +347,14 @@ public sealed class GameBoyWorldPackReaderTests
     }
 
     [Fact]
-    public void Complete_stage1_cached_collision_hit_fits_the_runner_frame_budget()
+    public void Complete_stage1_cached_collision_hit_fits_one_frame_budget()
     {
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmx"),
+            FullStage1ValidationFixture.MapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
-            RunnerSample.CompiledSource(),
-            RunnerSample.Directory,
+            FullStage1ValidationFixture.Source,
+            FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var cpu = new GameBoyTestCpu(result.Rom);
         var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
@@ -396,7 +396,7 @@ public sealed class GameBoyWorldPackReaderTests
             $"A cold complete-stage collision chunk must decode within one DMG frame; measured {firstCycles} cycles.");
         Assert.True(
             cachedCycles <= 2_300,
-            $"A resident complete-stage collision lookup must fit the runner frame budget; measured cached={cachedCycles}, repeated={repeatedCellCycles}, memo={memoTableHitCycles} cycles.");
+            $"A resident complete-stage collision lookup must fit the frame budget; measured cached={cachedCycles}, repeated={repeatedCellCycles}, memo={memoTableHitCycles} cycles.");
         Assert.True(
             repeatedCellCycles <= 300,
             $"An exact repeated collision cell must leave frame slack; measured {repeatedCellCycles} cycles.");
@@ -994,8 +994,8 @@ public sealed class GameBoyWorldPackReaderTests
     [Fact]
     public void Packed_read_restores_the_live_audio_bank_and_audio_cadence_continues()
     {
-        var directory = RepositoryDirectory("samples/runner");
-        var mapPath = Path.Combine(directory, "assets/maps/stage1.playable.tmj");
+        var directory = FullStage1ValidationFixture.Directory;
+        var mapPath = FullStage1ValidationFixture.MapPath;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
@@ -1008,9 +1008,9 @@ public sealed class GameBoyWorldPackReaderTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    value += 1;", 4_000));
         var source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
-                Music.Asset(theme, "assets/music/runner.vgz");
-                Sfx.Asset(jump, "assets/sfx/smb-jump.gb.vgm");
+                World.Load("assets/stage1.tmx");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
+                Sfx.Asset(jump, "../../../samples/shared/platformer-assets/sfx/smb-jump.gb.vgm");
                 u8 value = 0;
             """ + filler + """
 

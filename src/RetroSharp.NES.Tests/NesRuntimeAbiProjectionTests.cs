@@ -84,11 +84,22 @@ public sealed class NesRuntimeAbiProjectionTests
     }
 
     [Fact]
-    public void Projection_exposes_the_runner_world_pack_regions_observed_by_external_tools()
+    public void Projection_exposes_world_pack_regions_observed_by_external_tools()
     {
+        const string source = """
+            import RetroSharp.Portable2D;
+
+            void Main()
+            {
+                Video.Init();
+                World.Load("assets/stage1.tmx");
+                Camera.Init(156, 0, 20);
+                Camera.Apply();
+            }
+            """;
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
-            RunnerSample.CompiledSource(),
-            RunnerSample.Directory,
+            source,
+            FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
         using var document = JsonDocument.Parse(SerializeProjection(result));
@@ -108,9 +119,6 @@ public sealed class NesRuntimeAbiProjectionTests
         Assert.Equal(
             Enumerable.Range(0, 6).Select(index => ($"WorldPack.VisualSlot{index}", 0x0400 + index * 64, 64)),
             visualSlots);
-        Assert.Equal(
-            File.ReadAllText(Path.Combine(RunnerSample.Directory, "bin", "runner.nes.runtime-abi.json")),
-            SerializeProjection(result));
     }
 
     private static string SerializeProjection(NesRomBuildResult result)

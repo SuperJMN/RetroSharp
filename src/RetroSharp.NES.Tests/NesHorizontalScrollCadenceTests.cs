@@ -4,7 +4,7 @@ using RetroSharp.NES;
 using RetroSharp.Sdk;
 using Xunit;
 
-public sealed class NesRunnerColumnPrepareMeasurementTests
+public sealed class NesHorizontalScrollCadenceTests
 {
     [Theory]
     [InlineData("hscroll-offset.rs", 220, 190, 96)]

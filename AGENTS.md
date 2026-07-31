@@ -2,7 +2,7 @@
 
 This is the first file an AI CLI agent should read before changing RetroSharp.
 
-RetroSharp is a .NET 10 multi-project solution for a small C#-like language that compiles directly to NES and Game Boy cartridges. The shared frontend and portable SDK feed target-owned lowerers, with the Game Boy/NES runner as the main acceptance sample.
+RetroSharp is a .NET 10 multi-project solution for a small C#-like language that compiles directly to NES and Game Boy cartridges. The shared frontend and portable SDK feed target-owned lowerers, with the Game Boy/NES runner as the main playable application.
 
 ## Read First
 
@@ -46,6 +46,13 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 - If public behavior, supported syntax, SDK calls, target capabilities, or sample workflows change, update the matching docs in the same patch.
 - Treat generated Game Boy and NES runner ROMs as tracked artifacts when their source sample changes. Regenerate them deliberately.
 - Generated screenshots under `samples/runner/*.png` are not source artifacts unless a task explicitly asks for them.
+
+## Runner And Stable Validation
+
+- Treat `samples/runner` as an editable game, not as a stable compiler or runtime fixture. Its map, collision, physics, resources, constants, and internal source organization may change without updating test baselines.
+- The runner's automated contract is limited to building and booting on Game Boy and NES, continuing through VBlank, avoiding unexpected resets, and making only safe observed VRAM/PPU/OAM writes. A runner smoke failure is actionable only for one of those conditions.
+- Stable behavior belongs in focused canary samples under `samples/`; stable full-stage WorldPack, layout, banking, profile, offset, and budget evidence belongs in versioned fixtures under `validation/fixtures/`.
+- Samples outside `samples/runner` must use stable assets under `samples/shared/`, never `samples/runner/assets`.
 
 ## Architecture Rules
 

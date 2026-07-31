@@ -354,9 +354,9 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
     }
 
     [Fact]
-    public void Load_imports_the_authored_runner_tmx()
+    public void Load_imports_the_versioned_full_stage_fixture()
     {
-        var map = LogicalTiledMapImporter.Load(RepositoryFile("samples/runner/assets/maps/stage1.tmx"));
+        var map = LogicalTiledMapImporter.Load(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tmx"));
 
         Assert.Equal(156, map.Geometry.SourceWidth);
         Assert.Equal(20, map.Geometry.SourceHeight);
@@ -367,9 +367,9 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
     }
 
     [Fact]
-    public void Runner_tileset_declares_the_authored_collision_flags()
+    public void Full_stage_fixture_tileset_declares_the_versioned_collision_flags()
     {
-        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(directory, "stage1.tsx"));
+        File.Copy(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tsx"), Path.Combine(directory, "stage1.tsx"));
         var expectedFlags = new Dictionary<int, WorldTileFlags>
         {
             [6] = WorldTileFlags.Solid,
@@ -421,24 +421,6 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
             }
         }
     }
-
-    [Fact]
-    public void Runner_tiled_project_defines_collision_flags_as_a_string_enum()
-    {
-        using var project = JsonDocument.Parse(
-            File.ReadAllBytes(RepositoryFile("samples/runner/assets/maps/runner.tiled-project")));
-        var collisionFlags = Assert.Single(
-            project.RootElement.GetProperty("propertyTypes").EnumerateArray(),
-            propertyType => propertyType.GetProperty("name").GetString() == "CollisionFlags");
-
-        Assert.Equal("enum", collisionFlags.GetProperty("type").GetString());
-        Assert.Equal("string", collisionFlags.GetProperty("storageType").GetString());
-        Assert.True(collisionFlags.GetProperty("valuesAsFlags").GetBoolean());
-        Assert.Equal(
-            new[] { "Solid", "Hazard", "Platform" },
-            collisionFlags.GetProperty("values").EnumerateArray().Select(value => value.GetString()));
-    }
-
     private static void AssertEquivalent(LogicalTiledMap expected, LogicalTiledMap actual)
     {
         Assert.Equal(expected.Geometry.SourceWidth, actual.Geometry.SourceWidth);

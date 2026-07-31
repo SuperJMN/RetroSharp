@@ -29,7 +29,7 @@ void SetupVideo()
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
     Palette.Sprite(0, 0, 0, 1, 3);
-    Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);
+    Sprite.Asset(mario_player, "../shared/platformer-assets/sprites/mario-player.png", 18, 32);
     Sprite.Asset(mario_shot, "assets/mario-shot.json");
     Sprite.Asset(muzzle_flash, "assets/muzzle-flash.json");
 }

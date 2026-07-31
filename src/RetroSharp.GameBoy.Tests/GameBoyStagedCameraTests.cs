@@ -25,13 +25,13 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Resident_column_at_LY145_commits_in_the_current_vblank_without_losing_source_cadence()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmx");
-                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
-                Music.Asset(theme, "assets/music/runner.vgz");
+                World.Load("assets/stage1.tmx");
+                Sprite.Asset(player, "../../../samples/shared/platformer-assets/sprites/mario-player.png", 18, 32);
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
                 Camera.Init(312, 0, 40);
                 Audio.Init();
                 Music.Play(theme);
@@ -112,13 +112,13 @@ public sealed class GameBoyStagedCameraTests
     [InlineData(311)]
     public void Packed_column_plane_copies_nineteen_tiles_contiguously_with_wrapped_y_and_one_table_bank_selection(int worldX)
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmx");
-                Sprite.Asset(player, "assets/mario-player.gb.png", 18, 32);
-                Music.Asset(theme, "assets/music/runner.vgz");
+                World.Load("assets/stage1.tmx");
+                Sprite.Asset(player, "../../../samples/shared/platformer-assets/sprites/mario-player.png", 18, 32);
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
                 Camera.Init(312, 0, 40);
                 Audio.Init();
                 Music.Play(theme);
@@ -138,7 +138,7 @@ public sealed class GameBoyStagedCameraTests
             }
             """;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.tmx"),
+            FullStage1ValidationFixture.MapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             source,
@@ -285,10 +285,10 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Two_same_axis_crossings_commit_in_world_edge_order_one_bounded_vblank_at_a_time()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 Camera.SetPosition(16, 0);
                 while (true) {
@@ -301,7 +301,7 @@ public sealed class GameBoyStagedCameraTests
             source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
-            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+            packedWorldOverride: CompileWorldPack(directory, "assets/stage1.tmx"));
         var cpu = new GameBoyTestCpu(result.Rom)
         {
             CycleAccurateLy = true,
@@ -403,10 +403,10 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Reversal_before_commit_releases_the_resident_edge_without_visible_advance()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 i16 target = 8;
                 Camera.SetPosition(target, 0);
@@ -422,7 +422,7 @@ public sealed class GameBoyStagedCameraTests
             source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
-            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+            packedWorldOverride: CompileWorldPack(directory, "assets/stage1.tmx"));
         var cpu = new GameBoyTestCpu(result.Rom)
         {
             CycleAccurateLy = true,
@@ -446,10 +446,10 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Reversal_never_mutates_a_slot_that_has_entered_committing()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 i16 target = 0;
                 while (true) {
@@ -470,7 +470,7 @@ public sealed class GameBoyStagedCameraTests
             source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
-            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+            packedWorldOverride: CompileWorldPack(directory, "assets/stage1.tmx"));
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true, EnforceVblankVramWrites = true };
         cpu.Held.Add("right");
         cpu.RunUntilWramEquals(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Resident);
@@ -608,7 +608,7 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Packed_camera_crosses_255_256_both_directions_across_chunk_and_physical_bank_boundaries()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
                 Video.Init();
@@ -689,11 +689,11 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Packed_stalls_and_consecutive_crossings_keep_bgm_at_one_update_per_real_frame()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
-                Music.Asset(theme, "assets/music/runner.vgz");
+                World.Load("assets/stage1.tmx");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
                 Camera.Init(176, 0, 30);
                 Audio.Init();
                 Music.Play(theme);
@@ -716,7 +716,7 @@ public sealed class GameBoyStagedCameraTests
             source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
-            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+            packedWorldOverride: CompileWorldPack(directory, "assets/stage1.tmx"));
         Assert.Equal(11_614, result.Report.Segments.Where(segment => segment.Owner == "bgm:theme").Sum(segment => segment.Length));
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true, EnforceVblankVramWrites = true };
         cpu.RunUntilWramEquals(0xC000, 2, 100_000_000);
@@ -746,12 +746,12 @@ public sealed class GameBoyStagedCameraTests
     [Fact]
     public void Delayed_packed_commit_does_not_publish_shadow_oam_a_second_time()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.playable.tmj");
-                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
+                World.Load("assets/stage1.tmx");
+                Sprite.Asset(player, "../../../samples/shared/platformer-assets/sprites/mario-player.png", 18, 32);
                 Camera.Init(176, 0, 30);
                 Camera.SetPosition(8, 0);
                 while (true) {
@@ -767,7 +767,7 @@ public sealed class GameBoyStagedCameraTests
             source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
-            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+            packedWorldOverride: CompileWorldPack(directory, "assets/stage1.tmx"));
         var cpu = new GameBoyTestCpu(result.Rom)
         {
             CycleAccurateLy = true,

@@ -645,8 +645,9 @@ internal sealed class NesTestCpu
                 PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2001:
+                var renderingEnabledBeforeWrite = RenderingEnabled;
                 ppuMask = value;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, renderingEnabledBeforeWrite));
                 break;
             case 0x2003:
                 oamAddress = value;
