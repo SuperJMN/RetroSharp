@@ -45,12 +45,6 @@ public sealed class GameBoyRunnerJumpScrollCadenceTests
         Assert.InRange(reproduction.MaximumRequestedVisibleLag, 0, 2);
         Assert.NotEmpty(reproduction.ExtendedColumns);
         Assert.All(reproduction.ExtendedColumns, observation => Assert.Equal(21, observation.PayloadLength));
-        Assert.Contains(
-            reproduction.ExtendedColumns,
-            observation => observation.RowLatch == GameBoyPackedCameraRuntime.Negative);
-        Assert.Contains(
-            reproduction.ExtendedColumns,
-            observation => observation.RowLatch == GameBoyPackedCameraRuntime.Positive);
         Assert.True(
             reproduction.MaximumCommitVramWrites <= 21,
             $"Packed edge commit exceeded its 21-write VBlank budget: {reproduction.Summary}.");

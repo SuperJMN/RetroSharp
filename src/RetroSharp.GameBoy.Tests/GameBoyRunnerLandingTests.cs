@@ -24,14 +24,14 @@ public sealed class GameBoyRunnerLandingTests
     [Fact]
     public void Shared_runner_authors_one_way_platforms_and_only_lands_on_them()
     {
-        var mapPath = Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj");
+        var mapPath = Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmx");
         var world = GameBoyTiledMapImporter.Load(mapPath, GameBoyVideoProgram.FirstGeneratedBackgroundTile);
 
         Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[34 * world.Width + 94]);
         Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[35 * world.Width + 106]);
         Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[34 * world.Width + 132]);
-        Assert.Equal(WorldTileFlags.Empty, world.WorldFlags[31 * world.Width + 94]);
-        Assert.Equal(WorldTileFlags.Empty, world.WorldFlags[31 * world.Width + 96]);
+        Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[31 * world.Width + 94]);
+        Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[31 * world.Width + 96]);
 
         var operations = GameBoyRomCompiler.CollectSdkOperations(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var landing = Assert.Single(operations.OfType<Sdk2DOperation.CameraAabbHitTop>());
@@ -54,7 +54,7 @@ public sealed class GameBoyRunnerLandingTests
         var source = $$"""
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmj");
+                World.Load("assets/maps/stage1.tmx");
                 Camera.Init(312, 0, 40);
                 i16 cameraX = {{cameraX}};
                 i16 cameraY = 176;
@@ -134,7 +134,7 @@ public sealed class GameBoyRunnerLandingTests
         var cameraX = variables["view.x"].Address;
         var cameraY = variables["view.y"].Address;
         var respawnPhase = variables["frame.respawnPhase"].Address;
-        var world = GameBoyTiledMapImporter.Load(Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"));
+        var world = GameBoyTiledMapImporter.Load(Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmx"));
         var cpu = new GameBoyTestCpu(build.Rom) { CycleAccurateLy = true };
         cpu.TracedWramBytes.Add(playerY);
         cpu.TracedWramBytes.Add(checked((ushort)(playerY + 1)));

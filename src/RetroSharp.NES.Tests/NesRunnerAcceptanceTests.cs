@@ -43,7 +43,7 @@ public sealed class NesRunnerAcceptanceTests
             RunnerSample.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var canonical = NesTiledWorldImporter.CompileWorldPack(
-            RepositoryFile("samples/runner/assets/maps/stage1.tmj"),
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
             NesVideoProgram.FirstSpriteTile + 95);
 
         Assert.Equal(312, canonical.Pack.Descriptor.HardwareWidth);

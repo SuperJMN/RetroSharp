@@ -2,7 +2,6 @@ namespace RetroSharp.Cli.Tests;
 
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Xunit;
 
 public sealed class CrossTargetCliAcceptanceTests
@@ -258,7 +257,7 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Theory]
-    [InlineData("gb", 4_299, 3_000, 112, 2_568, 770, 326, 82, 298, 554, 8_192, 21, 0)]
+    [InlineData("gb", 4_299, 3_000, 112, 2_609, 770, 367, 82, 298, 554, 8_192, 21, 0)]
     [InlineData("nes", 7_205, 3_000, 3_000, 7_924, 3_120, 3_120, 90, 338, 594, 2_048, 32, 9)]
     public void Cli_world_budget_report_uses_real_small_and_full_stage1_packs(
         string target,
@@ -299,12 +298,12 @@ public sealed class CrossTargetCliAcceptanceTests
             "--target",
             target,
             "--world-budget-report",
-            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmj"));
+            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmx"));
         var stage1Second = RunCli(
             "--target",
             target,
             "--world-budget-report",
-            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmj"));
+            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmx"));
 
         Assert.Equal(0, stage1.ExitCode);
         Assert.Equal(string.Empty, stage1.StandardError);
@@ -503,11 +502,11 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/maps")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.gb.vgz")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.nes.vgz")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.tmj")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.tmx")));
         var mainSource = File.ReadAllText(RepositoryFile("samples/runner/src/main.rs"));
         Assert.DoesNotContain("import Runner.Framework;", mainSource, StringComparison.Ordinal);
         Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", mainSource, StringComparison.Ordinal);
         Assert.DoesNotContain("stage1.playable.tmj", mainSource, StringComparison.Ordinal);
 
         var outputPath = Path.Combine(workspace.Path, "runner.gb");
@@ -1293,37 +1292,13 @@ public sealed class CrossTargetCliAcceptanceTests
     private static TemporaryDirectory CreateNormalizedFullStage1()
     {
         var workspace = TemporaryWorkspace();
-        var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
-        var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
-                   ?? throw new InvalidOperationException($"{sourcePath} is empty.");
-        var height = root["height"]?.GetValue<int>()
-                     ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
-        root["properties"] = new JsonArray(
-            MapProperty("retrosharpStreamY", 0),
-            MapProperty("retrosharpWorldY", 0),
-            MapProperty("retrosharpWorldHeight", height));
-        foreach (var layer in root["layers"]?.AsArray() ?? [])
-        {
-            if (layer?["type"]?.GetValue<string>() == "tilelayer")
-            {
-                layer["name"] = "world";
-            }
-        }
-
-        File.WriteAllText(
-            Path.Combine(workspace.Path, "stage1.normalized.tmj"),
-            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Copy(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            Path.Combine(workspace.Path, "stage1.normalized.tmx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(workspace.Path, "stage1.tsx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(workspace.Path, "stage1.png"));
         return workspace;
     }
-
-    private static JsonObject MapProperty(string name, int value) => new()
-    {
-        ["name"] = name,
-        ["type"] = "int",
-        ["value"] = value,
-    };
 
     private static SampleManifest LoadManifest()
     {

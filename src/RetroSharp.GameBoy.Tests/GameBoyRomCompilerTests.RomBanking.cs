@@ -74,7 +74,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("player.Land(Player.StartY);", source);
         Assert.Contains("frame.AdvanceRespawn(player, view);", source);
         Assert.Contains("player.ApplyGravity();", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", source);
         Assert.Contains("LoadWorld();", source);
         Assert.Contains("Sprite.Draw(mario_player, screenX, screenY", source);
         Assert.DoesNotContain("const WorldWidth", source);
@@ -328,7 +328,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("i16 footWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("u8 respawnPhase;", source);
 
-        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -396,7 +396,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(1, CountOccurrences(source, "y = Player.StartY;"));
         Assert.Equal(1, CountOccurrences(source, "player.Land(footTile - Player.FootOffset);"));
         Assert.DoesNotContain("player.y = 77;", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmx");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);

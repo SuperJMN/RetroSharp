@@ -1192,8 +1192,8 @@ foundations) is complete. Game Boy `LW-2.1` through `LW-2.5` implement the MBC1
 foundation, placement, reader, staged streaming, and full-stage acceptance.
 NES `LW-3.1` through `LW-3.4` implement the MMC3/TVROM foundation, honest
 profile selection, fixed-bank reader/restoration, and bounded four-screen
-streaming. `LW-3.5` completes the graph by migrating the shared runner to
-complete `stage1.tmj` and jointly validating/regenerating both targets. Each
+streaming. `LW-3.5` completes the graph by migrating the shared runner to the
+complete Stage 1 map and jointly validating/regenerating both targets. Each
 target chain retains its layer boundaries; Wave 4 residency, IRQ HUD, #244, and
 unrelated #247 gaps remain separate.
 
@@ -1287,7 +1287,7 @@ Acceptance criteria:
 ## Large Worlds completion checkpoint
 
 `LW-3.5` / #305 completes the sequential Wave 2/3 graph. The shared runner now
-loads complete `stage1.tmj`, both tracked ROMs are generated from that one
+loads the complete Stage 1 map, both tracked ROMs are generated from that one
 manifest, and focused plus emulator-backed acceptance covers the original
 addressing, collision, storage, mapper, banking, streaming, visual, and audio
 ceilings. Wave 4 residency, #244 spawn indexing, IRQ HUD, and unrelated #247
@@ -1302,7 +1302,7 @@ timeline binds exact GB/NES ROMs to word-wide collision, camera/chunk,
 background, sprite, write-timing, and bank/mapper evidence without adding a
 genre-level API.
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, NES DPCM retained, and one-way ledges authored with the existing `Platform` flag. The landing response remains portable source policy: `Solid | Platform` for non-rising feet/support, `Solid` for walls/ceilings, an approach-from-above check before snapping, and grounded-state release when support disappears. Jump response is likewise source-owned: signed 4.4 position/velocity, speed-dependent SMB3-style takeoff, and lower gravity while A remains held produce a 70.6875 px standard standing arc without introducing a genre-level SDK operation. No new language feature, SDK call, target intrinsic, managed object, or runtime dispatch is needed. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmx` directly (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, NES DPCM retained, and one-way ledges authored with the existing `Platform` flag. The landing response remains portable source policy: `Solid | Platform` for non-rising feet/support, `Solid` for walls/ceilings, an approach-from-above check before snapping, and grounded-state release when support disappears. Jump response is likewise source-owned: signed 4.4 position/velocity, speed-dependent SMB3-style takeoff, and lower gravity while A remains held produce a 70.6875 px standard standing arc without introducing a genre-level SDK operation. No new language feature, SDK call, target intrinsic, managed object, or runtime dispatch is needed. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
 
 The final cross-target sample should prove:
 

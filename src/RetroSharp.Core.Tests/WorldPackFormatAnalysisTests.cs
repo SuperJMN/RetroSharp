@@ -1,7 +1,6 @@
 namespace RetroSharp.Core.Tests;
 
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 using Xunit;
@@ -12,7 +11,7 @@ public sealed class WorldPackFormatAnalysisTests
     public void Full_stage1_v1_costs_are_reproducible()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmj"));
+        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmx"));
         var geometry = logical.Geometry;
 
         Assert.Equal(156, geometry.SourceWidth);
@@ -151,39 +150,12 @@ public sealed class WorldPackFormatAnalysisTests
         var path = Path.Combine(Path.GetTempPath(), "retrosharp-worldpack-analysis", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
 
-        var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
-        var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
-                   ?? throw new InvalidOperationException($"{sourcePath} is empty.");
-        var height = root["height"]?.GetValue<int>()
-                     ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
-        root["properties"] = new JsonArray(
-            MapProperty("retrosharpStreamY", 0),
-            MapProperty("retrosharpWorldY", 0),
-            MapProperty("retrosharpWorldHeight", height));
-        foreach (var layer in root["layers"]?.AsArray() ?? [])
-        {
-            if (layer?["type"]?.GetValue<string>() == "tilelayer")
-            {
-                layer["name"] = "world";
-            }
-        }
-
-        File.WriteAllText(
-            Path.Combine(path, "stage1.worldpack.tmj"),
-            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Copy(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            Path.Combine(path, "stage1.worldpack.tmx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(path, "stage1.png"));
         return new TemporaryDirectory(path);
-    }
-
-    private static JsonObject MapProperty(string name, int value)
-    {
-        return new JsonObject
-        {
-            ["name"] = name,
-            ["type"] = "int",
-            ["value"] = value,
-        };
     }
 
     private static string RepositoryFile(string relativePath)

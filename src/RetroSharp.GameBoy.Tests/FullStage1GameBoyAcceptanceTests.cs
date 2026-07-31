@@ -1,7 +1,6 @@
 namespace RetroSharp.GameBoy.Tests;
 
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
 using Xunit;
@@ -26,11 +25,11 @@ public sealed class FullStage1GameBoyAcceptanceTests
 
         Assert.Equal(312, pack.Pack.Descriptor.HardwareWidth);
         Assert.Equal(40, pack.Pack.Descriptor.HardwareHeight);
-        Assert.Equal(2_568, pack.SerializedBytes.Length);
+        Assert.Equal(2_609, pack.SerializedBytes.Length);
         Assert.Equal("gb-simple-mbc1-current", compiled.Report.SelectedProfile);
         Assert.Equal(1, compiled.Rom[0x147]);
         Assert.Equal(131_072, compiled.Rom.Length);
-        Assert.Equal(2_568, compiled.Report.Segments
+        Assert.Equal(2_609, compiled.Report.Segments
             .Where(segment => segment.Owner == "worldpack:default")
             .Sum(segment => segment.Length));
         Assert.Equal(11_614, compiled.Report.Segments
@@ -334,25 +333,8 @@ public sealed class FullStage1GameBoyAcceptanceTests
         {
             var path = Path.Combine(Path.GetTempPath(), "retrosharp-full-stage1-gb-acceptance", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(path);
-            var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
-            var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
-                       ?? throw new InvalidOperationException($"{sourcePath} is empty.");
-            var height = root["height"]?.GetValue<int>()
-                         ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
-            root["properties"] = new JsonArray(
-                MapProperty("retrosharpStreamY", 0),
-                MapProperty("retrosharpWorldY", 0),
-                MapProperty("retrosharpWorldHeight", height));
-            foreach (var layer in root["layers"]?.AsArray() ?? [])
-            {
-                if (layer?["type"]?.GetValue<string>() == "tilelayer")
-                {
-                    layer["name"] = "world";
-                }
-            }
-
-            var mapPath = Path.Combine(path, "stage1.full-acceptance.tmj");
-            File.WriteAllText(mapPath, root.ToJsonString(JsonOptions));
+            var mapPath = Path.Combine(path, "stage1.full-acceptance.tmx");
+            File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tmx"), mapPath);
             File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
             File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(path, "stage1.png"));
             return new FullStage1Fixture(path, mapPath);
@@ -362,7 +344,7 @@ public sealed class FullStage1GameBoyAcceptanceTests
         {
             var source = RunnerSample.CompiledSource()
                 .Replace(
-                    "assets/maps/stage1.playable.tmj",
+                    "assets/maps/stage1.tmx",
                     MapPath.Replace('\\', '/'),
                     StringComparison.Ordinal)
                 .Replace("const i16 Width = 176;", "const i16 Width = 312;", StringComparison.Ordinal)
@@ -509,12 +491,6 @@ public sealed class FullStage1GameBoyAcceptanceTests
             }
         }
 
-        private static JsonObject MapProperty(string name, int value) => new()
-        {
-            ["name"] = name,
-            ["type"] = "int",
-            ["value"] = value,
-        };
     }
 
     private static string RepositoryFile(string relativePath)

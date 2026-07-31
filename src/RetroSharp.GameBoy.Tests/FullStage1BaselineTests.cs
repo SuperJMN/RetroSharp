@@ -1,7 +1,6 @@
 namespace RetroSharp.GameBoy.Tests;
 
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
@@ -14,7 +13,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     public void Full_stage1_canonical_pack_is_embedded_once_with_exact_offsets()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmx");
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
@@ -32,14 +31,14 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var segment = Assert.Single(first.Report.Segments, item => item.Owner == "worldpack:default");
 
-        Assert.Equal(2_568, canonical.SerializedBytes.Length);
+        Assert.Equal(2_609, canonical.SerializedBytes.Length);
         Assert.Equal(60, canonical.Pack.Chunks.Count);
         Assert.Equal(48u, canonical.Pack.Descriptor.CollisionProfilesOffset);
         Assert.Equal(60u, canonical.Pack.Descriptor.TargetExpansionsOffset);
         Assert.Equal(272u, canonical.Pack.Descriptor.DirectoryOffset);
         Assert.Equal(1_472u, canonical.Pack.Descriptor.ChunkDataOffset);
         Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(326, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(367, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
         Assert.Equal(49, canonical.Pack.Chunks.Max(chunk => chunk.Directory.VisualStoredBytes + chunk.Directory.CollisionStoredBytes));
         var largestChunkIndex = canonical.Pack.Chunks
             .Select((chunk, index) => (chunk, index))
@@ -124,7 +123,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     public void Full_stage1_game_boy_world_pack_matches_the_raw_importer_and_is_byte_deterministic()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmx");
         var firstGeneratedTile = GameBoyVideoProgram.FirstGeneratedBackgroundTile;
         var raw = GameBoyTiledMapImporter.Load(mapPath, firstGeneratedTile);
 
@@ -152,7 +151,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     public void Full_stage1_game_boy_baseline_is_frozen()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmx");
         var world = GameBoyTiledMapImporter.Load(mapPath, GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var sprite = GameBoySpriteAssetCompiler.CompileFromFile(
             "mario_player",
@@ -171,8 +170,8 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(40, world.Height);
         Assert.Equal(12_480, world.WorldTileIds.Length);
         Assert.Equal(12_480, world.WorldFlags.Length);
-        Assert.Equal(788, world.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
-        Assert.Equal(56, world.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
+        Assert.Equal(836, world.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
+        Assert.Equal(160, world.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
         Assert.Equal(WorldTileFlags.Solid, world.WorldFlags[38 * world.Width]);
         Assert.Equal(82, world.GeneratedTileData.Length / 16);
         Assert.Equal(1_312, world.GeneratedTileData.Length);
@@ -202,7 +201,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             target = "gb",
             sourceCells = new { width = 156, height = 20, tilePixels = 16 },
             hardwareTiles = new { width = world.Width, height = world.Height, cells = world.WorldTileIds.Length },
-            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, platformCells = 56, platformTopY = 272, floorY = 304, noHit = -1 },
+            collision = new { bytes = world.WorldFlags.Length, solidCells = 836, platformCells = 160, platformTopY = 272, floorY = 304, noHit = -1 },
             resources = new
             {
                 visualBytes = world.WorldTileIds.Length,
@@ -233,7 +232,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     {
         var portablePath = mapPath.Replace('\\', '/');
         return RunnerSample.CompiledSource().Replace(
-            "assets/maps/stage1.playable.tmj",
+            "assets/maps/stage1.tmx",
             portablePath,
             StringComparison.Ordinal);
     }
@@ -252,39 +251,12 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var path = Path.Combine(Path.GetTempPath(), "retrosharp-full-stage1-gb", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
 
-        var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
-        var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
-                   ?? throw new InvalidOperationException($"{sourcePath} is empty.");
-        var height = root["height"]?.GetValue<int>()
-                     ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
-        root["properties"] = new JsonArray(
-            MapProperty("retrosharpStreamY", 0),
-            MapProperty("retrosharpWorldY", 0),
-            MapProperty("retrosharpWorldHeight", height));
-        foreach (var layer in root["layers"]?.AsArray() ?? [])
-        {
-            if (layer?["type"]?.GetValue<string>() == "tilelayer")
-            {
-                layer["name"] = "world";
-            }
-        }
-
-        File.WriteAllText(
-            Path.Combine(path, "stage1.full-baseline.tmj"),
-            root.ToJsonString(JsonOptions));
+        File.Copy(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            Path.Combine(path, "stage1.full-baseline.tmx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(path, "stage1.png"));
         return new TemporaryDirectory(path);
-    }
-
-    private static JsonObject MapProperty(string name, int value)
-    {
-        return new JsonObject
-        {
-            ["name"] = name,
-            ["type"] = "int",
-            ["value"] = value,
-        };
     }
 
     private static void AssertReportDocuments(string target, params string[] facts)

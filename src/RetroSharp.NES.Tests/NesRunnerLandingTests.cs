@@ -18,7 +18,7 @@ public sealed class NesRunnerLandingTests
     [Fact]
     public void Shared_runner_authors_one_way_platforms_and_only_lands_on_them()
     {
-        var mapPath = Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj");
+        var mapPath = Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmx");
         var world = NesTiledWorldImporter.Load(mapPath, NesVideoProgram.FirstSpriteTile + 95);
 
         Assert.Equal(WorldTileFlags.Platform, world.WorldFlags[34 * world.Width + 94]);
@@ -77,7 +77,7 @@ public sealed class NesRunnerLandingTests
         var cameraY = variables["view.y"].Address;
         var respawnPhase = variables["frame.respawnPhase"].Address;
         var world = NesTiledWorldImporter.Load(
-            Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"),
+            Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmx"),
             NesVideoProgram.FirstSpriteTile + 95);
         var cpu = new NesTestCpu(build.Rom);
         cpu.TracedRamBytes.Add(playerY);
@@ -182,7 +182,7 @@ public sealed class NesRunnerLandingTests
         var maximumMissedGameplayFrames = 0;
         var maximumMissedAudioFrames = 0;
         var transitionFrames = 0;
-        while (cpu.Ram(respawnPhase) != 0 && transitionFrames < 400)
+        while (cpu.Ram(respawnPhase) != 0 && transitionFrames < 700)
         {
             var gameplayTicksBefore = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
             var audioTicksBefore = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.AudioTickCount);
@@ -241,7 +241,8 @@ public sealed class NesRunnerLandingTests
             transitionFrames++;
         }
 
-        Assert.InRange(transitionFrames, 1, 400);
+        Assert.Equal(0, cpu.Ram(respawnPhase));
+        Assert.InRange(transitionFrames, 1, 700);
         Assert.True(respawnOamPublished, "NES never published the target-correct respawn OAM pose.");
         Assert.True(
             transitionGameplayTicks * 100 >= transitionFrames * 95 && maximumMissedGameplayFrames <= 1,

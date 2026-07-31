@@ -36,7 +36,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
 
         var map = NesTiledWorldImporter.Load(
-            RepositoryFile("samples/runner/assets/maps/stage1.tmj"),
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
             NesVideoProgram.FirstSpriteTile + 95);
         var scenario = new FunctionalScenario(
             "runner-nes-nonzero-y-return",

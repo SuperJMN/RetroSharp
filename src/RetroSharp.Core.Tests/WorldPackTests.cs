@@ -1,7 +1,6 @@
 namespace RetroSharp.Core.Tests;
 
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 using Xunit;
@@ -217,7 +216,7 @@ public sealed class WorldPackTests
     public void Full_stage1_is_represented_by_canonical_clipped_chunks_without_a_physical_location()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmj"));
+        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmx"));
         var plan = TiledWorldPackPlan.Create(logical);
         var targetExpansions = Enumerable.Range(
                 0,
@@ -268,10 +267,10 @@ public sealed class WorldPackTests
 
         var legacyCollision = pack.ToWorldMap2D();
         Assert.Equal(12_480, legacyCollision.TileCount);
-        Assert.Equal(788, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
-        Assert.Equal(56, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
-        Assert.Equal(788, CountFlags(legacyCollision, WorldTileFlags.Solid));
-        Assert.Equal(56, CountFlags(legacyCollision, WorldTileFlags.Platform));
+        Assert.Equal(836, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
+        Assert.Equal(160, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
+        Assert.Equal(836, CountFlags(legacyCollision, WorldTileFlags.Solid));
+        Assert.Equal(160, CountFlags(legacyCollision, WorldTileFlags.Platform));
         Assert.Equal(WorldTileFlags.Solid, legacyCollision.FlagsAt(0, 38));
 
         var legacyTiles = pack.ToWorldTileGrid(cell => cell.Span[0]);
@@ -319,39 +318,12 @@ public sealed class WorldPackTests
         var path = Path.Combine(Path.GetTempPath(), "retrosharp-worldpack-model", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
 
-        var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
-        var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
-                   ?? throw new InvalidOperationException($"{sourcePath} is empty.");
-        var height = root["height"]?.GetValue<int>()
-                     ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
-        root["properties"] = new JsonArray(
-            MapProperty("retrosharpStreamY", 0),
-            MapProperty("retrosharpWorldY", 0),
-            MapProperty("retrosharpWorldHeight", height));
-        foreach (var layer in root["layers"]?.AsArray() ?? [])
-        {
-            if (layer?["type"]?.GetValue<string>() == "tilelayer")
-            {
-                layer["name"] = "world";
-            }
-        }
-
-        File.WriteAllText(
-            Path.Combine(path, "stage1.worldpack.tmj"),
-            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Copy(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            Path.Combine(path, "stage1.worldpack.tmx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
         File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(path, "stage1.png"));
         return new TemporaryDirectory(path);
-    }
-
-    private static JsonObject MapProperty(string name, int value)
-    {
-        return new JsonObject
-        {
-            ["name"] = name,
-            ["type"] = "int",
-            ["value"] = value,
-        };
     }
 
     private static string RepositoryFile(string relativePath)
@@ -375,7 +347,7 @@ public sealed class WorldPackTests
     public void Hardware_coordinates_resolve_across_255_and_256_and_preserve_floor_collision()
     {
         using var workspace = CreateNormalizedFullStage1();
-        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmj"));
+        var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmx"));
         var plan = TiledWorldPackPlan.Create(logical);
         var targetExpansions = Enumerable.Range(0, plan.VisualMetatiles.Count * plan.MetatileWidth * plan.MetatileHeight)
             .Select(value => checked((byte)value))
