@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: current navigation and execution context.
-Last updated: 2026-07-28.
+Last updated: 2026-07-31.
 
 Read this after `AGENTS.md`. It is deliberately short and current. Historical
 issue closeouts, commit hashes, ROM hashes, and one-off acceptance measurements
@@ -36,8 +36,9 @@ Boy and NES cartridges directly.
 | Behavioral cartridge simulation | `src/RetroSharp.FunctionalAcceptance` and target test projects |
 | Acceptance samples | `samples`, classified by `samples/manifest.json` |
 
-The shared runner is the main playable acceptance app. Its presence in both
-targets does not make every call in it a portable API contract.
+The shared runner is the main playable app. It is deliberately editable and is
+not a stable compiler/runtime fixture; its presence in both targets does not
+make every call in it a portable API contract.
 
 ## Gameplay Acceptance Capsule
 
@@ -142,6 +143,19 @@ Classify a regression by its primary observable:
 
 ## Runner And Tiled Facts
 
+- The runner's only automated contract is its Game Boy/NES smoke: a fresh
+  manifest build must boot, render and reach VBlank, keep running without a new
+  reset, and make only safe observed VRAM/PPU/OAM writes. Map content,
+  collisions, positions, audio, physics, mapper, ROM bytes, and ROM size are not
+  smoke assertions.
+- Stable platformer, streaming, camera, audio, and joint-load behavior is owned
+  by focused canaries such as `platformer-landing`, `oneway-platform`,
+  `tiled-hscroll-*`, `tiled-vertical-scroll`, `deadzone-follow`, and
+  `audio-mixed-load`. Stable full-stage pack/layout evidence uses the versioned
+  fixture under `validation/fixtures/full-stage1-v1`.
+- Normal runner edits never update stable baselines. Samples outside the runner
+  use `samples/shared/platformer-assets`, not game-owned files under
+  `samples/runner/assets`.
 - Build the runner from `samples/runner/runner.retrosharp.json`; it includes its
   game-owned helper and state files.
 - NES and Game Boy both use per-target VGM/VGZ runner music via
@@ -203,8 +217,10 @@ evidence relevant to the changed owner:
   the solution.
 - Target lowering or runtime: focused target tests plus behavioral simulation
   on a freshly compiled ROM.
-- Runner or sample source: regenerate the tracked target artifacts deliberately
-  and validate the affected behavior.
+- Runner source: regenerate its tracked target artifacts deliberately and run
+  only the target smoke unless a named gameplay report requires perceptual
+  acceptance. Other sample source: regenerate tracked artifacts and validate
+  the focused behavior that sample owns.
 - Documentation only: `git diff --check`; run executable checks when commands,
   examples, generated artifacts, or enforced navigation contracts changed.
 - External-emulator runs are opt-in diagnostics. Multi-emulator comparison is

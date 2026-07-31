@@ -7737,7 +7737,7 @@
   "tilesets": [
     {
       "firstgid": 1,
-      "source": "../runner/assets/maps/runner-tiles.tsj"
+      "source": "../shared/platformer-assets/tilesets/runner-tiles.tsj"
     }
   ]
 }

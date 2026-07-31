@@ -49,7 +49,7 @@
   "tiledversion": "1.12.2",
   "tileheight": 16,
   "tilesets": [
-    { "firstgid": 1, "source": "../../runner/assets/maps/stage1.tsx" }
+    { "firstgid": 1, "source": "../../shared/platformer-assets/tilesets/stage1.tsx" }
   ],
   "tilewidth": 16,
   "type": "map",

@@ -30,17 +30,39 @@ public sealed class GameBoyWorldPackPlacementTests
     }
 
     [Fact]
-    public void Runner_embeds_a_distinct_column_major_hardware_tile_plane_after_the_unchanged_world_pack()
+    public void Full_stage_fixture_embeds_a_distinct_column_major_hardware_tile_plane_after_the_unchanged_world_pack()
     {
-        var mapPath = Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmx");
+        var mapPath = FullStage1ValidationFixture.MapPath;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var originalSerializedBytes = canonical.SerializedBytes.ToArray();
+        const string source = """
+            void Main() {
+                Video.Init();
+                World.Load("assets/stage1.tmx");
+                Sprite.Asset(player, "../../../samples/shared/platformer-assets/sprites/mario-player.png", 18, 32);
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
+                Camera.Init(312, 10, 30);
+                Audio.Init();
+                Music.Play(theme);
+                i16 cameraX = 0;
+                while (true) {
+                    Video.WaitVBlank();
+                    Camera.Apply();
+                    Audio.Update();
+                    Input.Poll();
+                    if (Input.IsDown(Button.Right)) {
+                        cameraX = 8;
+                    }
+                    Camera.SetPosition(cameraX, 80);
+                }
+            }
+            """;
 
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
-            RunnerSample.CompiledSource(),
-            RunnerSample.Directory,
+            source,
+            FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
         var columnPlaneSegment = Assert.Single(
@@ -50,9 +72,9 @@ public sealed class GameBoyWorldPackPlacementTests
 
         Assert.Equal(2_609, originalSerializedBytes.Length);
         Assert.Equal(12_480, expectedColumnTiles.Length);
-        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, result.Report.OccupiedBanks);
+        Assert.Equal(new[] { 0, 1, 2, 3 }, result.Report.OccupiedBanks);
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
-        Assert.Equal(128 * 1024, result.Rom.Length);
+        Assert.Equal(64 * 1024, result.Rom.Length);
         Assert.Equal(2, packSegment.Bank);
         Assert.Equal(0x4000, packSegment.CpuAddress);
         Assert.Equal(originalSerializedBytes.Length, packSegment.Length);
@@ -156,17 +178,17 @@ public sealed class GameBoyWorldPackPlacementTests
     [Fact]
     public void Packed_world_coexists_with_bgm_and_sfx_in_disjoint_reported_ranges()
     {
-        var directory = RepositoryDirectory("samples/runner");
-        var mapPath = Path.Combine(directory, "assets/maps/stage1.playable.tmj");
+        var directory = FullStage1ValidationFixture.Directory;
+        var mapPath = FullStage1ValidationFixture.MapPath;
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
             mapPath,
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    value += 1;", 4_000));
         var source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
-                Music.Asset(theme, "assets/music/runner.vgz");
-                Sfx.Asset(jump, "assets/sfx/smb-jump.gb.vgm");
+                World.Load("assets/stage1.tmx");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
+                Sfx.Asset(jump, "../../../samples/shared/platformer-assets/sfx/smb-jump.gb.vgm");
                 u8 value = 0;
             """ + filler + """
 

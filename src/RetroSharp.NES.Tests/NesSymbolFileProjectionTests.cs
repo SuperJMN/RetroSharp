@@ -10,9 +10,21 @@ public sealed class NesSymbolFileProjectionTests
     [Fact]
     public void Projection_is_complete_deterministic_and_mcp_compatible()
     {
+        const string source = """
+            import RetroSharp.Portable2D;
+
+            void Main()
+            {
+                i16 playerX = 0;
+                Video.Init();
+                World.Load("assets/stage1.tmx");
+                Camera.Init(156, 0, 20);
+                Camera.Apply();
+            }
+            """;
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
-            RunnerSample.CompiledSource(),
-            RunnerSample.Directory,
+            source,
+            FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
         var first = NesSymbolFileProjection.Serialize(result);
@@ -33,8 +45,8 @@ public sealed class NesSymbolFileProjectionTests
         Assert.Equal(NesRuntimeMemoryLayout.PackedCamera.CommitCount, addresses["packed camera.CommitCount"]);
         Assert.Equal(0x0400, addresses["WorldPack.VisualSlot0"]);
         Assert.Equal(
-            Assert.Single(result.Report.UserVariables, variable => variable.Name == "player.x").Address,
-            addresses["player.x"]);
+            Assert.Single(result.Report.UserVariables, variable => variable.Name == "playerX").Address,
+            addresses["playerX"]);
     }
 
     [Fact]

@@ -392,11 +392,11 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Complete_stage1_raw_collision_reads_fit_the_runner_cadence_without_decode()
+    public void Complete_stage1_raw_collision_reads_fit_the_frame_budget_without_decode()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             "void Main() { }",
             packedWorldOverride: fixture.SerializedBytes);
@@ -432,8 +432,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     public void Complete_stage1_raw_visual_reads_fit_a_single_frame_edge_prepare_budget_without_decode()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             "void Main() { }",
             packedWorldOverride: fixture.SerializedBytes);
@@ -465,8 +465,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     public void Complete_stage1_raw_planes_use_fast_wide_lookups_without_decoding_and_restore_r6()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var runtime = NesWorldPackRuntimePlan.Create(fixture.SerializedBytes);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             "void Main() { }",
@@ -509,8 +509,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     public void Complete_stage1_raw_initialization_and_viewport_lookups_do_not_decode_chunks()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var plan = NesWorldPackRuntimePlan.Create(fixture.SerializedBytes);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             "void Main() { }",
@@ -573,8 +573,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     public void Fast_coordinate_layout_rejects_aliasing_and_non_power_of_two_final_chunks()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var descriptor = fixture.Pack.Descriptor;
 
         Assert.True(NesWorldPackRuntimePlan.SupportsFastCoordinateLayout(descriptor, fixture.Pack.Chunks.Count));
@@ -847,7 +847,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         const ushort hardwareX = 406 * 8;
         const string source = """
             void Main() {
-                Music.Asset(theme, "assets/music/runner.vgz");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
                 Audio.Init();
                 Music.Play(theme);
                 while (true) {
@@ -858,7 +858,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             """;
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
             source,
-            RepositoryDirectory("samples/runner"),
+            FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [RetroSharp.Sdk.SdkImportResolver.Portable2D],
             packedWorldOverride: fixture.SerializedBytes,
             worldPackProbe: new NesWorldPackProbe(hardwareX, 0));

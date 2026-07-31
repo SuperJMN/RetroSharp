@@ -159,11 +159,11 @@ public sealed class NesWorldPackPlacementTests
     [Fact]
     public void Forced_mmc3_places_bgm_and_sfx_in_pinned_r7_while_dpcm_stays_fixed()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                Music.Asset(theme, "assets/music/runner.vgz");
-                Sfx.Asset(jump, "assets/sfx/smb-jump.vgm");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
+                Sfx.Asset(jump, "../../../samples/shared/platformer-assets/sfx/smb-jump.vgm");
                 Audio.Init();
                 Music.Play(theme);
                 Sfx.Play(jump);

@@ -90,6 +90,15 @@ public sealed class ArchitectureBoundaryTests
         "src/RetroSharp.Core/Sdk/Tiled/TiledWorldPackPlan.cs",
     ];
 
+    private static readonly string[] RunnerContractTestFiles =
+    [
+        "src/RetroSharp.Architecture.Tests/ArchitectureBoundaryTests.cs",
+        "src/RetroSharp.Cli.Tests/CrossTargetCliAcceptanceTests.cs",
+        "src/RetroSharp.Core.Tests/SampleApiQuarantineTests.cs",
+        "src/RetroSharp.GameBoy.Tests/GameBoyRunnerSmokeTests.cs",
+        "src/RetroSharp.NES.Tests/NesRunnerSmokeTests.cs",
+    ];
+
     [Fact]
     public void Language_projects_do_not_reference_sdk_frontend_or_concrete_targets()
     {
@@ -174,6 +183,44 @@ public sealed class ArchitectureBoundaryTests
 
         Assert.Equal(AllowedNonTargetRawHardwareFiles.Order(StringComparer.Ordinal), observedAllowedFiles);
         Assert.Empty(disallowedMatches);
+    }
+
+    [Fact]
+    public void Tests_only_reference_the_runner_through_smoke_or_structural_contracts()
+    {
+        var root = RepositoryRoot();
+        var allowed = RunnerContractTestFiles.ToHashSet(StringComparer.Ordinal);
+        var violations = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/'))
+            .Where(path => path.Contains(".Tests/", StringComparison.Ordinal))
+            .Where(path => !allowed.Contains(path))
+            .SelectMany(path => File.ReadLines(Path.Combine(root, path))
+                .Select((text, index) => (Path: path, Line: index + 1, Text: text)))
+            .Where(line => line.Text.Contains("RunnerSample", StringComparison.Ordinal)
+                || line.Text.Contains("samples/runner/", StringComparison.Ordinal))
+            .Select(line => $"{line.Path}:{line.Line} references the editable runner.")
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void Non_runner_samples_do_not_depend_on_runner_assets()
+    {
+        var root = RepositoryRoot();
+        var samplesRoot = Path.Combine(root, "samples");
+        var runnerRoot = Path.Combine(samplesRoot, "runner") + Path.DirectorySeparatorChar;
+        string[] inspectedExtensions = [".rs", ".json", ".tmj", ".tmx", ".tsj", ".tsx"];
+        var violations = Directory.EnumerateFiles(samplesRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !path.StartsWith(runnerRoot, StringComparison.Ordinal))
+            .Where(path => inspectedExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+            .SelectMany(path => File.ReadLines(path)
+                .Select((text, index) => (Path: path, Line: index + 1, Text: text)))
+            .Where(line => line.Text.Contains("runner/assets", StringComparison.Ordinal))
+            .Select(line => $"{Path.GetRelativePath(root, line.Path)}:{line.Line} depends on runner/assets.")
+            .ToArray();
+
+        Assert.Empty(violations);
     }
 
     [Fact]

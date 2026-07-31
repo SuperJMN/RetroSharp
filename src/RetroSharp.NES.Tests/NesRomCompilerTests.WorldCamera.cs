@@ -93,20 +93,6 @@ public partial class NesRomCompilerTests
         Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(direct, baseDirectory), NesRomCompiler.CompileSource(library, baseDirectory));
     }
-
-    [Fact]
-    public void Runner_shaped_sprite_draw_is_byte_identical_nes()
-    {
-        var source = RunnerSample.CompiledSource();
-
-        var defaultImportRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
-        var mergedSourceRom = NesRomCompiler.CompileSource(
-            SdkLibrarySource.Merge(NesTarget.Intrinsics, source),
-            RunnerSample.Directory);
-
-        Assert.Equal(mergedSourceRom, defaultImportRom);
-    }
-
     [Fact]
     public void Sprite_draw_library_preserves_capability_and_budget_checks_nes()
     {

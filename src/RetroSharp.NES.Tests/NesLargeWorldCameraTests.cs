@@ -161,12 +161,12 @@ public sealed class NesLargeWorldCameraTests
     [Fact]
     public void Complete_stage1_resident_column_prepare_amortizes_each_slice_below_one_ntsc_frame()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         var packed = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.tmx"),
-            NesVideoProgram.FirstSpriteTile + 95);
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
-            RunnerSample.CompiledSource(),
+            FullStage1ValidationFixture.Source,
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: packed.SerializedBytes);
@@ -270,11 +270,11 @@ public sealed class NesLargeWorldCameraTests
     {
         var serialized = CreatePaletteSyntheticWorldPack();
         var packed = RetroSharp.Core.Sdk.WorldPackSerializer.Deserialize(serialized);
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
-                Music.Asset(theme, "assets/music/runner.vgz");
-                Sfx.Asset(jump, "assets/sfx/smb-jump.vgm");
+                Music.Asset(theme, "../../../samples/shared/platformer-assets/music/runner.vgz");
+                Sfx.Asset(jump, "../../../samples/shared/platformer-assets/sfx/smb-jump.vgm");
                 Audio.Init();
                 Music.Play(theme);
                 Sfx.Play(jump);
@@ -484,13 +484,13 @@ public sealed class NesLargeWorldCameraTests
     [Fact]
     public void Packed_stale_then_fresh_frame_commits_and_releases_one_prepared_edge_without_another_camera_request()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         var packed = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.playable.tmj"),
+            FullStage1ValidationFixture.MapPath,
             NesVideoProgram.FirstSpriteTile);
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 u8 continueAfterStale = 0;
                 u8 staleBoundaryDone = 0;
@@ -649,13 +649,13 @@ public sealed class NesLargeWorldCameraTests
     [Fact]
     public void Packed_camera_source_calls_prepare_during_gameplay_and_commit_from_camera_apply()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         var packed = NesTiledWorldImporter.CompileWorldPack(
-            Path.Combine(directory, "assets/maps/stage1.playable.tmj"),
+            FullStage1ValidationFixture.MapPath,
             NesVideoProgram.FirstSpriteTile);
         const string source = """
             void Main() {
-                World.Load("assets/maps/stage1.playable.tmj");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(176, 0, 30);
                 Camera.SetPosition(8, 0);
                 while (true) {
@@ -807,11 +807,11 @@ public sealed class NesLargeWorldCameraTests
     [Fact]
     public void Diagonal_position_prefetches_at_fine_x_two_and_crosses_only_after_the_column_is_resident()
     {
-        var directory = RepositoryDirectory("samples/runner");
+        var directory = FullStage1ValidationFixture.Directory;
         const string source = """
             void Main() {
                 Video.Init();
-                World.Load("assets/maps/stage1.tmx");
+                World.Load("assets/stage1.tmx");
                 Camera.Init(312, 0, 40);
                 while (true) {
                     Camera.SetPosition(8, 8);

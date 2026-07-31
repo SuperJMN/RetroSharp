@@ -33,10 +33,10 @@ void Main()
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
     Palette.Sprite(0, 0, 0, 1, 3);
-    Sprite.Asset(player_sprite, "../runner/assets/mario-player.png", 18, 32);
+    Sprite.Asset(player_sprite, "../shared/platformer-assets/sprites/mario-player.png", 18, 32);
     World.Load("../tiled-hscroll/stage1-short.tmj");
-    Music.Asset(load_theme, "../runner/assets/music/runner.vgz");
-    Sfx.Asset(load_sfx, "../runner/assets/sfx/smb-jump.vgm");
+    Music.Asset(load_theme, "../shared/platformer-assets/music/runner.vgz");
+    Sfx.Asset(load_sfx, "../shared/platformer-assets/sfx/smb-jump.vgm");
     Audio.Init();
     Music.Play(load_theme);
     Camera.Init(Level.Width, 0, Level.Height);

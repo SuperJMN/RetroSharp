@@ -44,25 +44,4 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.", exception.Message);
     }
-
-    [Fact]
-    public void GameBoy_runner_uses_lighter_object_palette_for_player_sprite()
-    {
-        var source = RunnerSample.FlattenedSource();
-
-        Assert.Contains("Palette.Background(0, 0, 1, 2, 3);", source);
-        Assert.Contains("Palette.Sprite(0, 0, 0, 1, 3);", source);
-        Assert.DoesNotContain("Palette.Set(", source);
-        Assert.DoesNotContain("ObjectPalette.Set(", source);
-        Assert.DoesNotContain("ObjectPalette.Set(1, 1);", source);
-        Assert.DoesNotContain("ObjectPalette.Set(2, 2);", source);
-        Assert.DoesNotContain("ObjectPalette.Set(1, 2);", source);
-        Assert.DoesNotContain("ObjectPalette.Set(2, 3);", source);
-
-        var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
-
-        AssertRunnerMbc1Rom(rom);
-        Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Runner should map sprite tones to OBP0 as 0, 0, 1, 3.");
-    }
-
 }

@@ -40,7 +40,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         // Music banking already exists; this guards that the SDK-stream / banking
         // work does not regress it.
-        var directory = RepositoryDirectory("samples/runner/assets/music");
+        var directory = RepositoryDirectory("samples/shared/platformer-assets/music");
         var source = $$"""
             void Main() {
                 Video.Init();
@@ -82,20 +82,6 @@ public sealed class GameBoyBankingRoadmapTests
         Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
     }
-
-    [Fact]
-    public void Mbc1_bank_selection_updates_the_authoritative_actual_bank_shadow()
-    {
-        var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
-        var cpu = new GameBoyTestCpu(rom);
-
-        cpu.RunFrames(120);
-
-        Assert.NotEmpty(cpu.RomBankWrites);
-        Assert.All(cpu.RomBankWrites, write => Assert.Equal(write.SelectedBank, write.ShadowBank));
-        Assert.Equal(cpu.CurrentRomBank, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
-    }
-
     [Fact]
     public void Banked_rom_emits_the_far_read_foundation_in_fixed_bank_zero()
     {
@@ -271,7 +257,7 @@ public sealed class GameBoyBankingRoadmapTests
 
             void Main() {
                 Video.Init();
-                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
+                Sprite.Asset(player, "../../../samples/shared/platformer-assets/sprites/mario-player.png", 18, 32);
                 Animation.Clip(walk, 1, 4, 4);
                 while (true) {
                     Video.WaitVBlank();
@@ -281,7 +267,7 @@ public sealed class GameBoyBankingRoadmapTests
             }
             """;
 
-        var rom = GameBoyRomCompiler.CompileSource(source, RepositoryDirectory("samples/runner"));
+        var rom = GameBoyRomCompiler.CompileSource(source, FullStage1ValidationFixture.Directory);
         var cpu = new GameBoyTestCpu(rom);
         cpu.RunFrames(4);
 
@@ -290,33 +276,6 @@ public sealed class GameBoyBankingRoadmapTests
     }
 
     // --- Phase 2: MBC1 code overlays + trampolines ---
-
-    [Fact]
-    public void Runner_sample_builds_as_banked_mbc1_rom()
-    {
-        var source = RunnerSample.CompiledSource();
-        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
-
-        Assert.Equal(CartridgeMbc1, rom[0x147]);
-        Assert.True(rom.Length > 32768, "a banked ROM spans more than two banks");
-        Assert.Equal(0, rom.Length % 16384);
-    }
-
-    [Fact]
-    public void Banked_runner_executes_across_a_bank_boundary_without_faulting()
-    {
-        var source = RunnerSample.CompiledSource();
-        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
-
-        var cpu = new GameBoyTestCpu(rom);
-        cpu.RunFrames(120);
-
-        // The actor sprite is drawn every frame; OAM/VRAM must be populated and the
-        // CPU must keep running (a bad cross-bank CALL/RET would hang or fault).
-        Assert.True(cpu.Cycles > 0);
-        Assert.True(Enumerable.Range(0x8000, 0x1800).Any(address => cpu.Vram((ushort)address) != 0));
-    }
-
     [Fact]
     public void Banked_subroutine_calls_go_through_fixed_bank_trampolines()
     {
@@ -381,7 +340,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var directory = CreateTempDirectory();
         WriteLargeGbApuTrace(Path.Combine(directory, "large.gbapu"), frameCount: 12000);
-        CopyRunnerSprite(directory, "player.gb.png");
+        CopyPlatformerSprite(directory, "player.gb.png");
         var source = LargeProgramWithStartupSpriteDataAndBankedMusic();
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
@@ -404,7 +363,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var directory = CreateTempDirectory();
         WriteLargeGbApuTrace(Path.Combine(directory, "large.gbapu"), frameCount: 12000);
-        CopyRunnerSprite(directory, "player.gb.png");
+        CopyPlatformerSprite(directory, "player.gb.png");
         var source = LargeProgramWithBankedMapRowsAndMusic();
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
@@ -894,9 +853,9 @@ public sealed class GameBoyBankingRoadmapTests
         return (byte)(0x80 | (frame & 0x7F));
     }
 
-    private static void CopyRunnerSprite(string directory, string fileName)
+    private static void CopyPlatformerSprite(string directory, string fileName)
     {
-        File.Copy(RepositoryFile("samples/runner/assets/mario-player.gb.png"), Path.Combine(directory, fileName));
+        File.Copy(RepositoryFile("samples/shared/platformer-assets/sprites/mario-player.gb.png"), Path.Combine(directory, fileName));
     }
 
     private static string RepositoryFile(string relativePath)

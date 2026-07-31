@@ -2,7 +2,6 @@ namespace RetroSharp.GameBoy.Tests;
 
 using System.Globalization;
 using System.Reflection;
-using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class GameBoySymbolFileProjectionTests
@@ -11,9 +10,7 @@ public sealed class GameBoySymbolFileProjectionTests
     public void Projection_is_complete_deterministic_and_mcp_compatible()
     {
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
-            RunnerSample.CompiledSource(),
-            RunnerSample.Directory,
-            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+            "void Main() { i16 playerX = 0; }");
 
         var first = GameBoySymbolFileProjection.Serialize(result);
         var second = GameBoySymbolFileProjection.Serialize(result);
@@ -33,8 +30,8 @@ public sealed class GameBoySymbolFileProjectionTests
         Assert.Equal(GameBoyRuntimeMemoryLayout.PackedCamera.CommitCount, addresses["packed camera.CommitCount"]);
         Assert.Equal(GameBoyRuntimeMemoryLayout.WorldPackStaging.Start, addresses["WorldPackStaging"]);
         Assert.Equal(
-            Assert.Single(result.Report.UserVariables, variable => variable.Name == "player.x").Address,
-            addresses["player.x"]);
+            Assert.Single(result.Report.UserVariables, variable => variable.Name == "playerX").Address,
+            addresses["playerX"]);
     }
 
     [Fact]

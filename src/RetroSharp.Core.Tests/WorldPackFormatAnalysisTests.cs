@@ -151,10 +151,10 @@ public sealed class WorldPackFormatAnalysisTests
         Directory.CreateDirectory(path);
 
         File.Copy(
-            RepositoryFile("samples/runner/assets/maps/stage1.tmx"),
+            RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tmx"),
             Path.Combine(path, "stage1.worldpack.tmx"));
-        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
-        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(path, "stage1.png"));
+        File.Copy(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.tsx"), Path.Combine(path, "stage1.tsx"));
+        File.Copy(RepositoryFile("validation/fixtures/full-stage1-v1/assets/stage1.png"), Path.Combine(path, "stage1.png"));
         return new TemporaryDirectory(path);
     }
 

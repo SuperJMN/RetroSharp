@@ -242,7 +242,7 @@ void Main()
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
     Palette.Sprite(0, 0, 0, 1, 3);
-    Sprite.Asset(player_sprite, "../runner/assets/mario-player.png", 18, 32);
+    Sprite.Asset(player_sprite, "../shared/platformer-assets/sprites/mario-player.png", 18, 32);
     World.Load("assets/platformer-landing.tmj");
     Camera.Init(Level.Width, 0, Level.Height);
 
