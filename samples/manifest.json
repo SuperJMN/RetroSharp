@@ -89,6 +89,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "tiled-stage1-diagonal-speed-sweep",
+      "path": "samples/tiled-hscroll/stage1-diagonal-speed-sweep.rs",
+      "readme": "samples/tiled-hscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "tiled-vertical-scroll",
       "path": "samples/tiled-vertical-scroll/vertical-scroll.rs",
       "readme": "samples/tiled-vertical-scroll/README.md",
