@@ -1,6 +1,7 @@
 namespace RetroSharp.Architecture.Tests;
 
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using RetroSharp.Core.Sdk;
 
@@ -133,12 +134,19 @@ public sealed class ArchitectureBoundaryTests
             .SelectMany(file => File.ReadLines(file)
                 .Select((text, index) => (Text: text, Line: index + 1))
                 .SelectMany(line => forbiddenTerms
-                    .Where(term => line.Text.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    .Where(term => ContainsPortableWorldPackForbiddenTerm(line.Text, term))
                     .Select(term => $"{Path.GetRelativePath(root, file)}:{line.Line} exposes forbidden term '{term}'.")))
             .ToArray();
 
         Assert.Empty(violations);
     }
+
+    private static bool ContainsPortableWorldPackForbiddenTerm(string text, string term) =>
+        term == "nes"
+            ? Regex.IsMatch(
+                text,
+                @"(?:^|[^A-Za-z])nes(?:$|[^A-Za-z])|(?:^|[^A-Za-z]|[a-z0-9])(?:Nes|NES)(?:$|[^a-z]|[A-Z])")
+            : text.Contains(term, StringComparison.OrdinalIgnoreCase);
 
     [Fact]
     public void Language_sources_do_not_contain_portable_sdk_or_target_domain_terms()

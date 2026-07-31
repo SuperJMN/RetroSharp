@@ -59,7 +59,10 @@ internal static class GameBoyTiledMapImporter
             }
         }
 
-        var compiled = plan.Build(expansions, targetCellStride: 1);
+        var compiled = plan.Build(
+            expansions,
+            targetCellStride: 1,
+            rawPlanes: WorldPackRawPlanes.None);
         return new GameBoyTiledWorldPack(compiled.Pack, compiled.SerializedBytes, lowered.GeneratedTileData, lowered);
     }
 

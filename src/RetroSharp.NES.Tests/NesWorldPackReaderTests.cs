@@ -392,7 +392,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Complete_stage1_cached_collision_hit_fits_the_runner_cadence_budget()
+    public void Complete_stage1_raw_collision_reads_fit_the_runner_cadence_without_decode()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
             Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
@@ -411,25 +411,25 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var cached = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
         var repeatedCell = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
 
-        output.WriteLine($"complete stage1 collision lookup: first={first.Cycles}, cached={cached.Cycles} cycles");
+        output.WriteLine($"complete stage1 raw collision lookup: first={first.Cycles}, adjacent={cached.Cycles} cycles");
         Assert.Equal((byte)NesWorldPackResult.Success, first.A);
         Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
         Assert.True(
-            first.Cycles <= 5_000,
-            $"Entering a complete-stage collision chunk must use O(1) descriptor work plus bounded RLE decode, measured {first.Cycles} cycles.");
+            first.Cycles <= 1_200,
+            $"A complete-stage raw collision lookup must remain direct and bounded, measured {first.Cycles} cycles.");
         Assert.True(
-            cached.Cycles <= 375,
-            $"The complete-stage runner performs about twelve resident collision subqueries per tick; cached hits must cost at most 375 cycles, measured {cached.Cycles}.");
+            cached.Cycles <= 1_200,
+            $"An adjacent complete-stage raw collision lookup must remain direct and bounded, measured {cached.Cycles} cycles.");
         Assert.True(
             repeatedCell.Cycles <= 120,
             $"A repeated collision cell must leave frame slack for staged camera work; measured {repeatedCell.Cycles} cycles.");
-        Assert.Equal(1, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
+        Assert.Equal(0, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
-    public void Complete_stage1_cached_visual_hit_fits_a_single_frame_edge_prepare_budget()
+    public void Complete_stage1_raw_visual_reads_fit_a_single_frame_edge_prepare_budget_without_decode()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
             Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
@@ -447,21 +447,66 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         var cached = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
 
-        output.WriteLine($"complete stage1 visual lookup: first={first.Cycles}, cached={cached.Cycles} cycles");
+        output.WriteLine($"complete stage1 raw visual lookup: first={first.Cycles}, adjacent={cached.Cycles} cycles");
         Assert.Equal((byte)NesWorldPackResult.Success, first.A);
         Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
         Assert.True(
-            first.Cycles <= 7_500,
-            $"Entering a complete-stage visual chunk must use O(1) descriptor work plus bounded RLE decode, measured {first.Cycles} cycles.");
+            first.Cycles <= 1_200,
+            $"A complete-stage raw visual lookup must remain direct and bounded, measured {first.Cycles} cycles.");
         Assert.True(
-            cached.Cycles <= 400,
-            $"A 32-cell complete-stage edge must prepare within one gameplay frame; cached visual hits must cost at most 400 cycles, measured {cached.Cycles}.");
+            cached.Cycles <= 1_200,
+            $"An adjacent complete-stage raw visual lookup must remain direct and bounded, measured {cached.Cycles} cycles.");
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
-    public void Complete_stage1_prewarms_both_horizontal_sets_of_viewport_chunks_in_bounded_ram()
+    public void Complete_stage1_raw_planes_use_fast_wide_lookups_without_decoding_and_restore_r6()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var runtime = NesWorldPackRuntimePlan.Create(fixture.SerializedBytes);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+
+        Assert.True(runtime.UsesFastLookup);
+        Assert.All(runtime.Planes, plane => Assert.Equal(WorldPackCodec.Raw, plane.Codec));
+        foreach (var x in new ushort[] { 255, 256 })
+        {
+            const ushort y = 38;
+            var coordinate = fixture.Pack.Locate(x, y);
+            var visualId = fixture.Pack.VisualIdAt(x, y);
+            var expansionOffset = (visualId * 4 + coordinate.SubcellIndex) * 2;
+
+            cpu.SetWorldPackCoordinates(x, y);
+            var visual = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+            Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
+            Assert.Equal(fixture.Pack.TargetExpansions.Span[expansionOffset], cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
+            Assert.Equal(fixture.Pack.TargetExpansions.Span[expansionOffset + 1], cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
+
+            cpu.SetWorldPackCoordinates(x, y);
+            var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+            Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
+            Assert.Equal((byte)fixture.Pack.CollisionAt(x, y), cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
+        }
+
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+        Assert.Equal(0, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot0State));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot1State));
+        Assert.Equal(5, cpu.CurrentR6Bank);
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
+    }
+
+    [Fact]
+    public void Complete_stage1_raw_initialization_and_viewport_lookups_do_not_decode_chunks()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(
             Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
@@ -491,7 +536,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, plan.Layout.TotalBytes);
         Assert.True(plan.Layout.TotalBytes <= NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
         Assert.Equal((byte)NesWorldPackResult.Success, prewarm.A);
-        Assert.Equal(6, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }

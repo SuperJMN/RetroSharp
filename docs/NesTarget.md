@@ -129,7 +129,7 @@ explicitly so target-side addressing optimizations do not need to preserve an
 accidental one-frame visibility measurement.
 raw/direct compatibility operations remain separate.
 
-The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. During diagonal movement, the packed path materializes the Y destination once and prefetches the future column at horizontal fine position 2: the post-crossing edge is `tile+33` to the right or `tile-1` to the left, while the camera remains on its current safe pixel. The direction latch limits the remaining substeps so at least one `Camera.Apply()` occurs before crossing. A resident prefetched column advances and publishes X immediately at the crossing; a pending column retains the last safe pixel and retries, while the non-prefetched path remains reactive. In mapper-backed packed builds, column preparation advances outside VBlank in bounded eight-row slices across source ticks and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. A resident column may interleave between row phases without mutating the row slot. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
+The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. During diagonal movement, the packed path materializes the Y destination once and prefetches the future column before the boundary: the post-crossing edge is `tile+33` to the right or `tile-1` to the left, while the camera remains on its current safe pixel. The direction latch limits the remaining substeps so at least one `Camera.Apply()` occurs before crossing. A resident prefetched column advances and publishes X immediately at the crossing; a pending column retains the last safe pixel and retries, while the non-prefetched path remains reactive. In mapper-backed packed builds, column preparation advances outside VBlank in bounded eight-row slices across source ticks and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. A resident column may interleave between row phases without mutating the row slot. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
 
 A camera window that exactly fills the visible height (its configured stream height fits the 30-row screen and reaches the bottom visible row) would otherwise draw its bottom tile row against the very bottom scanlines that hardware and most emulators crop as bottom overscan. This is based on the effective camera window, not the complete backing-map height, so a fixed 30-row view over a taller imported world receives the same treatment. The camera scroll restore shifts the scene up one tile row (adds 8 px of vertical scroll) and `Sprite.Draw(...)` offsets sprite Y by the same amount, so the full bottom row lands inside the safe area while staying aligned with sprites; the exposed bottom strip wraps to the empty four-screen sky row. Vertically scrolling windows keep their framing and receive no inset.
 
@@ -242,7 +242,7 @@ LW-1.4 also exposes an internal inspection build that serializes the same Tiled
 result as `WorldPack` v1. It retains the weighted palette plan and historical
 first-encounter CHR deduplication, then writes two-byte target expansion cells:
 tile ID followed by palette slot plus the world-layer provenance bit. Full
-normalized `stage1` uses 2,780 bytes and retains all 90 generated CHR patterns.
+normalized `stage1` uses 7,924 bytes and retains all 90 generated CHR patterns.
 The shared runner's green ledges contribute 56 `Platform` hardware cells. Its
 source landing/support query uses `Solid | Platform` while wall and ceiling
 queries use only `Solid`; a non-rising actor lands only when its previous/current
@@ -306,11 +306,9 @@ and AprNes proves the combined mapper-4/four-screen behavior. `LW-3.2` adds the
 production mapper-0-first selector and target-private physical data linker:
 ordered R6 world banks are `0, 3, 4, 5`, pinned R7 is bank `1`, boot-only R7 is
 bank `2`, and fixed execution is banks `6, 7`. The normalized full-`stage1`
-placement baseline measures 2,780 pack, 5,012 pinned, 4,128 boot, 4,327 fixed
-payload including the LW-3.3 reader, and 3,056 resident CHR bytes. The current
-packed-camera profile uses a 3,158-byte runtime index and measures 7,310 pinned
-bytes after adding physical-nametable-aligned column attributes, still inside
-the same 8 KiB R7 window. The 8 KiB R6 window is not a whole-pack
+current production placement measures 7,924 pack bytes; the accepted profile
+remains inside the 8 KiB R6 budget, and the pinned runtime index remains inside
+the 8 KiB R7 budget. The 8 KiB R6 window is not a whole-pack
 limit: continuation segments preserve canonical bytes and all v1 relative
 offsets across non-contiguous physical banks. Mapper 0 remains byte-identical
 when its exact historical final link fits; the internal MMC3 profile is chosen
@@ -320,11 +318,9 @@ Runtime CHR banking and the IRQ HUD remain out of scope. Large Worlds v1 banks d
 code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
 and automatic executable-code banking is not implemented by this epic.
 
-The final packed-camera runtime probe currently measures 8,989 fixed bytes and
-7,310 pinned R7 bytes after the bounded column-commit, hardware-VBlank, and
-physical 30-row attribute-seam corrections. It remains within the same
-`nes-mmc3-tvrom-v1` layout; the mapper, bank ownership, PRG/CHR capacity, and
-automatic profile-selection rules are unchanged.
+The final packed-camera runtime remains within the same `nes-mmc3-tvrom-v1`
+layout; the mapper, bank ownership, PRG/CHR capacity, and automatic
+profile-selection rules are unchanged.
 
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 

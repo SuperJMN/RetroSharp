@@ -11,9 +11,21 @@ public static class WorldPackSerializer
     public static SerializedWorldPack Build(
         TiledWorldPackPlan plan,
         ReadOnlyMemory<byte> targetExpansions,
-        int targetCellStride)
+        int targetCellStride) =>
+        Build(plan, targetExpansions, targetCellStride, WorldPackRawPlanes.None);
+
+    public static SerializedWorldPack Build(
+        TiledWorldPackPlan plan,
+        ReadOnlyMemory<byte> targetExpansions,
+        int targetCellStride,
+        WorldPackRawPlanes rawPlanes)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if ((rawPlanes & ~WorldPackRawPlanes.All) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rawPlanes), rawPlanes, "WorldPack raw planes contain an undefined value.");
+        }
+
         if (targetCellStride is < 1 or > byte.MaxValue)
         {
             throw new ArgumentOutOfRangeException(
@@ -35,7 +47,13 @@ public static class WorldPackSerializer
         var collisionIdBytes = CanonicalIdBytes(plan.CollisionProfiles.Count);
         var chunkColumns = CeilingDivide(plan.SourceWidth, WorldPackDescriptor.V1ChunkWidth);
         var chunkRows = CeilingDivide(plan.SourceHeight, WorldPackDescriptor.V1ChunkHeight);
-        var chunkPayloads = CreateChunkPayloads(plan, visualIdBytes, collisionIdBytes, chunkColumns, chunkRows);
+        var chunkPayloads = CreateChunkPayloads(
+            plan,
+            visualIdBytes,
+            collisionIdBytes,
+            chunkColumns,
+            chunkRows,
+            rawPlanes);
 
         var collisionProfilesOffset = (uint)WorldPackDescriptor.V1HeaderBytes;
         var targetExpansionsOffset = CheckedUInt32(
@@ -142,10 +160,10 @@ public static class WorldPackSerializer
         for (var index = 0; index < pack.Chunks.Count; index++)
         {
             var chunk = pack.Chunks[index];
-            var visual = EncodeCanonical(chunk.VisualIds, descriptor.VisualIdBytes);
-            var collision = EncodeCanonical(chunk.CollisionProfileIds, descriptor.CollisionIdBytes);
-            RequireCanonicalDirectory(index, "visual", chunk.Directory.VisualCodec, chunk.Directory.VisualStoredBytes, visual);
-            RequireCanonicalDirectory(index, "collision", chunk.Directory.CollisionCodec, chunk.Directory.CollisionStoredBytes, collision);
+            var visual = EncodeDeclared(chunk.VisualIds, descriptor.VisualIdBytes, chunk.Directory.VisualCodec);
+            var collision = EncodeDeclared(chunk.CollisionProfileIds, descriptor.CollisionIdBytes, chunk.Directory.CollisionCodec);
+            RequireDeclaredDirectory(index, "visual", chunk.Directory.VisualStoredBytes, visual);
+            RequireDeclaredDirectory(index, "collision", chunk.Directory.CollisionStoredBytes, collision);
             encodedChunks.Add((visual, collision));
 
             var entry = span.Slice(directoryOffset + index * WorldPackDescriptor.V1DirectoryEntryBytes, WorldPackDescriptor.V1DirectoryEntryBytes);
@@ -293,7 +311,8 @@ public static class WorldPackSerializer
         int visualIdBytes,
         int collisionIdBytes,
         int chunkColumns,
-        int chunkRows)
+        int chunkRows,
+        WorldPackRawPlanes rawPlanes)
     {
         var result = new List<ChunkPayload>(checked(chunkColumns * chunkRows));
         for (var chunkY = 0; chunkY < chunkRows; chunkY++)
@@ -323,8 +342,8 @@ public static class WorldPackSerializer
                     validHeight,
                     visualIds,
                     collisionIds,
-                    EncodeCanonical(visualIds, visualIdBytes),
-                    EncodeCanonical(collisionIds, collisionIdBytes)));
+                    EncodePlane(visualIds, visualIdBytes, rawPlanes.HasFlag(WorldPackRawPlanes.Visual)),
+                    EncodePlane(collisionIds, collisionIdBytes, rawPlanes.HasFlag(WorldPackRawPlanes.Collision))));
             }
         }
 
@@ -333,16 +352,38 @@ public static class WorldPackSerializer
 
     private static EncodedPlane EncodeCanonical(IReadOnlyList<ushort> ids, int idBytes)
     {
+        var raw = EncodeRaw(ids, idBytes);
+        var rle = EncodeRle(ids, idBytes);
+        return rle.Length < raw.Length
+            ? new EncodedPlane(WorldPackCodec.ElementRle, rle)
+            : new EncodedPlane(WorldPackCodec.Raw, raw);
+    }
+
+    private static EncodedPlane EncodePlane(IReadOnlyList<ushort> ids, int idBytes, bool forceRaw) =>
+        forceRaw
+            ? new EncodedPlane(WorldPackCodec.Raw, EncodeRaw(ids, idBytes))
+            : EncodeCanonical(ids, idBytes);
+
+    private static EncodedPlane EncodeDeclared(
+        IReadOnlyList<ushort> ids,
+        int idBytes,
+        WorldPackCodec codec) =>
+        codec switch
+        {
+            WorldPackCodec.Raw => new EncodedPlane(codec, EncodeRaw(ids, idBytes)),
+            WorldPackCodec.ElementRle => new EncodedPlane(codec, EncodeRle(ids, idBytes)),
+            _ => throw Invalid($"uses unsupported codec {(byte)codec}."),
+        };
+
+    private static byte[] EncodeRaw(IReadOnlyList<ushort> ids, int idBytes)
+    {
         var raw = new byte[checked(ids.Count * idBytes)];
         for (var index = 0; index < ids.Count; index++)
         {
             WriteId(raw, index * idBytes, ids[index], idBytes);
         }
 
-        var rle = EncodeRle(ids, idBytes);
-        return rle.Length < raw.Length
-            ? new EncodedPlane(WorldPackCodec.ElementRle, rle)
-            : new EncodedPlane(WorldPackCodec.Raw, raw);
+        return raw;
     }
 
     private static byte[] EncodeRle(IReadOnlyList<ushort> ids, int idBytes)
@@ -473,17 +514,16 @@ public static class WorldPackSerializer
         return length;
     }
 
-    private static void RequireCanonicalDirectory(
+    private static void RequireDeclaredDirectory(
         int chunkIndex,
         string plane,
-        WorldPackCodec codec,
         ushort storedBytes,
         EncodedPlane encoded)
     {
-        if (codec != encoded.Codec || storedBytes != encoded.StoredBytes.Length)
+        if (storedBytes != encoded.StoredBytes.Length)
         {
             throw Invalid(
-                $"chunk {chunkIndex} {plane} directory is not the canonical {encoded.Codec} encoding of its decoded IDs.");
+                $"chunk {chunkIndex} {plane} stored length does not match its declared {encoded.Codec} encoding.");
         }
     }
 

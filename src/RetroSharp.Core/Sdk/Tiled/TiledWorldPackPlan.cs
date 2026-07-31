@@ -153,6 +153,12 @@ public sealed class TiledWorldPackPlan
     public SerializedWorldPack Build(ReadOnlyMemory<byte> targetExpansions, int targetCellStride) =>
         WorldPackSerializer.Build(this, targetExpansions, targetCellStride);
 
+    public SerializedWorldPack Build(
+        ReadOnlyMemory<byte> targetExpansions,
+        int targetCellStride,
+        WorldPackRawPlanes rawPlanes) =>
+        WorldPackSerializer.Build(this, targetExpansions, targetCellStride, rawPlanes);
+
     private static TiledVisualTileReference ResolveReference(LogicalTiledMap logical, uint gid, string context)
     {
         var cleanGid = LogicalTiledMapImporter.CleanTiledGid(gid, context);

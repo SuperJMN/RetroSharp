@@ -760,6 +760,8 @@ internal sealed partial class NesSdkOperationLowerer
         var prepareRight = builder.CreateLabel("nes_packed_column_prefetch_right");
         var request = builder.CreateLabel("nes_packed_column_prefetch_request");
         var checkStartPhase = builder.CreateLabel("nes_packed_column_prefetch_check_start_phase");
+        var checkEvenResume = builder.CreateLabel("nes_packed_column_prefetch_check_even_resume");
+        var checkPositiveStart = builder.CreateLabel("nes_packed_column_prefetch_check_positive_start");
         var resume = builder.CreateLabel("nes_packed_column_prefetch_resume");
         var failed = builder.CreateLabel("nes_packed_column_prefetch_failed");
         var done = builder.CreateLabel("nes_packed_column_prefetch_done");
@@ -775,6 +777,16 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
         builder.AndImmediate(NesPackedCameraRuntime.Column);
         builder.JumpIf(0xD0, done);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
+        builder.CompareImmediate(NesPackedCameraRuntime.Negative);
+        builder.JumpIf(0xD0, checkEvenResume);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
+        builder.AndImmediate(0x07);
+        builder.CompareImmediate(0x07);
+        builder.JumpIf(0xF0, resume);
+        builder.CompareImmediate(0);
+        builder.JumpIf(0xF0, done);
+        builder.Label(checkEvenResume);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
         builder.AndImmediate(0x01);
         builder.JumpIf(0xD0, done);
@@ -782,10 +794,15 @@ internal sealed partial class NesSdkOperationLowerer
 
         builder.Label(checkStartPhase);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitDirection);
-        builder.AndImmediate(0x01);
-        builder.ShiftLeftA();
-        builder.ShiftLeftA();
-        builder.XorZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
+        builder.CompareImmediate(NesPackedCameraRuntime.Positive);
+        builder.JumpIf(0xF0, checkPositiveStart);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
+        builder.AndImmediate(0x07);
+        builder.CompareImmediate(6);
+        builder.JumpIf(0xD0, done);
+        builder.JumpAbsolute(selectDirection);
+        builder.Label(checkPositiveStart);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.NewX);
         builder.AndImmediate(0x07);
         builder.CompareImmediate(2);
         builder.JumpIf(0xD0, done);

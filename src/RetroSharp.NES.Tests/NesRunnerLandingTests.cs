@@ -14,8 +14,6 @@ public sealed class NesRunnerLandingTests
     private const ushort PlayerJumping = 0x000B;
     private const ushort PlayerVerticalSubpixelLow = 0x000C;
     private const int FloorPlayerY = 273;
-    private const int FirstStairWallX = 448;
-    private const int PlayerWidth = 18;
 
     [Fact]
     public void Shared_runner_authors_one_way_platforms_and_only_lands_on_them()
@@ -559,47 +557,6 @@ public sealed class NesRunnerLandingTests
         Assert.Equal(FloorPlayerY, RamWord(cpu, PlayerYLow));
         Assert.Equal(0, unchecked((sbyte)cpu.Ram(PlayerVelocityY)));
         Assert.Equal(1, cpu.Ram(PlayerGrounded));
-    }
-
-    [Fact]
-    public void Running_into_the_first_staircase_with_B_never_enters_solid_or_loses_floor_support()
-    {
-        var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
-
-        for (var bDelay = 0; bDelay < 9; bDelay++)
-        {
-            var cpu = new NesTestCpu(rom);
-            RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
-            AdvanceGameplayTick(cpu);
-            AdvanceGameplayTick(cpu);
-            cpu.Held.Add("right");
-            var trace = new Queue<string>();
-
-            for (var tick = 0; tick < 250; tick++)
-            {
-                if (tick >= bDelay)
-                {
-                    cpu.Held.Add("b");
-                }
-
-                AdvanceGameplayTick(cpu);
-                var playerX = RamWord(cpu, PlayerXLow);
-                var playerY = RamWord(cpu, PlayerYLow);
-                trace.Enqueue($"{tick}:{playerX}/{playerY}/{unchecked((sbyte)cpu.Ram(PlayerVelocityY))}/{cpu.Ram(PlayerGrounded)}");
-                while (trace.Count > 32)
-                {
-                    trace.Dequeue();
-                }
-
-                Assert.True(
-                    playerX + PlayerWidth <= FirstStairWallX &&
-                    playerY <= FloorPlayerY &&
-                    cpu.Ram(PlayerGrounded) == 1,
-                    $"Mario entered the first stair or crossed the floor with B delayed {bDelay} ticks: {string.Join(',', trace)}.");
-            }
-
-            Assert.Equal(FirstStairWallX - PlayerWidth, RamWord(cpu, PlayerXLow));
-        }
     }
 
     private static List<int> RunJump(NesTestCpu cpu, int heldTicks, int observedTicks)

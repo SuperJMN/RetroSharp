@@ -8,6 +8,15 @@ public enum WorldPackCodec : byte
     ElementRle = 1,
 }
 
+[Flags]
+public enum WorldPackRawPlanes
+{
+    None = 0,
+    Visual = 1,
+    Collision = 2,
+    All = Visual | Collision,
+}
+
 public sealed class WorldPackValidationException(string message) : ArgumentException(message);
 
 public sealed record WorldPackDescriptor

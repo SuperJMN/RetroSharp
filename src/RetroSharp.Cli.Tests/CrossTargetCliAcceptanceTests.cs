@@ -259,7 +259,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
     [Theory]
     [InlineData("gb", 4_299, 3_000, 112, 2_568, 770, 326, 82, 298, 554, 8_192, 21, 0)]
-    [InlineData("nes", 4_317, 3_000, 112, 2_780, 770, 326, 90, 338, 594, 2_048, 32, 9)]
+    [InlineData("nes", 7_205, 3_000, 3_000, 7_924, 3_120, 3_120, 90, 338, 594, 2_048, 32, 9)]
     public void Cli_world_budget_report_uses_real_small_and_full_stage1_packs(
         string target,
         int smallPackBytes,

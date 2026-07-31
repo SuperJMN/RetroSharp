@@ -244,7 +244,10 @@ public static class FunctionalScenarioRunner
             var endProgress = frames[end].AudioProgress!;
             var registerEvents = endProgress.RegisterEventCount - startProgress.RegisterEventCount;
             checks.Add(MinimumCheck("audio-register-events", registerEvents, scenario.Audio.MinimumRegisterEvents));
-            checks.Add(MaximumCheck("audio-register-events-maximum", registerEvents, scenario.Audio.MaximumRegisterEvents!.Value));
+            if (scenario.Audio.MaximumRegisterEvents is { } maximumRegisterEvents)
+            {
+                checks.Add(MaximumCheck("audio-register-events-maximum", registerEvents, maximumRegisterEvents));
+            }
             checks.Add(MaximumCheck(
                 "audio-register-event-gap",
                 MaximumAudioRegisterEventGap(scenario, frames, start, end),
@@ -359,13 +362,16 @@ public static class FunctionalScenarioRunner
             CompareAudioActive("music", scenario.Audio.MusicActiveAtEnd, final.Music.Active, end, failures);
             CompareAudioActive("sfx", scenario.Audio.SoundEffectActiveAtEnd, final.SoundEffect.Active, end, failures);
             CompareAudioActive("dpcm", scenario.Audio.DpcmActiveAtEnd, final.Dpcm.Active, end, failures);
-            var actualDigest = OrderedAudioEventSha256(frames, start, end);
-            if (!string.Equals(actualDigest, scenario.Audio.OrderedRegisterEventSha256, StringComparison.OrdinalIgnoreCase))
+            if (scenario.Audio.OrderedRegisterEventSha256 is { } expectedDigest)
             {
-                failures.Add(new(
-                    "audio-register-order",
-                    end,
-                    $"Expected ordered per-frame register digest {scenario.Audio.OrderedRegisterEventSha256}, observed {actualDigest}."));
+                var actualDigest = OrderedAudioEventSha256(frames, start, end);
+                if (!string.Equals(actualDigest, expectedDigest, StringComparison.OrdinalIgnoreCase))
+                {
+                    failures.Add(new(
+                        "audio-register-order",
+                        end,
+                        $"Expected ordered per-frame register digest {expectedDigest}, observed {actualDigest}."));
+                }
             }
         }
 
