@@ -196,7 +196,7 @@ public sealed class NesLargeWorldCameraTests
             slice => Assert.InRange(slice.Cycles, 1, 29_780));
         Assert.Equal(1, cpu.Ram(RequestCount));
         Assert.Equal(1, cpu.Ram(PrepareCount));
-        Assert.Equal(6, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
     }
 
     [Fact]

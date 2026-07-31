@@ -49,9 +49,18 @@ public sealed class NesRunnerAcceptanceTests
         Assert.Equal(312, canonical.Pack.Descriptor.HardwareWidth);
         Assert.Equal(40, canonical.Pack.Descriptor.HardwareHeight);
         Assert.Equal(60, canonical.Pack.Chunks.Count);
-        Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(326, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
-        Assert.Equal(2_780, canonical.SerializedBytes.Length);
+        Assert.Equal(3_120, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
+        Assert.Equal(3_120, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.All(
+            canonical.Pack.Chunks,
+            chunk =>
+            {
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.VisualCodec);
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.CollisionCodec);
+            });
+        Assert.True(
+            canonical.SerializedBytes.Length <= 8 * 1_024,
+            $"NES WorldPack exceeded its R6 bank budget: {canonical.SerializedBytes.Length} bytes.");
         Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
         Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, result.Rom[4..8]);
         Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");
@@ -93,6 +102,28 @@ public sealed class NesRunnerAcceptanceTests
             "The packed runner must retry paired controller snapshots so DPCM DMA cannot create phantom direction input.");
 
         WriteCadenceHarnessIfRequested(result);
+    }
+
+    [Fact]
+    public void Nes_full_stage1_runner_gameplay_uses_no_visual_or_collision_plane_decodes()
+    {
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+
+        cpu.RunFrames(600);
+
+        Assert.NotEqual(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount));
+        Assert.NotEqual(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.AudioTickCount));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+        Assert.Equal(
+            0,
+            cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow)
+            | cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountHigh) << 8);
     }
 
     [Theory]

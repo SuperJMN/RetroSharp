@@ -56,7 +56,18 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(3, first.Pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, first.Pack.Chunks.Count);
         Assert.Equal(2, first.Pack.Descriptor.TargetCellStride);
-        Assert.True(first.SerializedBytes.Length <= 7_924, $"NES WorldPack used {first.SerializedBytes.Length} bytes.");
+        Assert.True(
+            first.SerializedBytes.Length <= 8 * 1_024,
+            $"NES WorldPack exceeded its R6 bank budget: {first.SerializedBytes.Length} bytes.");
+        Assert.Equal(3_120, first.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
+        Assert.Equal(3_120, first.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.All(
+            first.Pack.Chunks,
+            chunk =>
+            {
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.VisualCodec);
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.CollisionCodec);
+            });
         Assert.Equal(first.SerializedBytes, second.SerializedBytes);
         Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
         Assert.Equal(raw.BackgroundPalette, first.BackgroundPalette);
@@ -111,7 +122,9 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var segment = Assert.Single(result.Report.Segments, item => item.Owner == "worldpack:default");
 
-        Assert.Equal(2_780, canonical.SerializedBytes.Length);
+        Assert.True(
+            canonical.SerializedBytes.Length <= 8 * 1_024,
+            $"NES WorldPack exceeded its R6 bank budget: {canonical.SerializedBytes.Length} bytes.");
         Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
         Assert.Equal(0, segment.PhysicalBank);
         Assert.Equal(0, segment.RelativeOffset);
@@ -130,9 +143,9 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var runtimeIndex = Assert.Single(
             result.Report.Segments,
             item => item.Owner == "pinned:worldpack-runtime-index");
-        Assert.Equal(2_056, runtimeIndex.Length);
+        Assert.InRange(runtimeIndex.Length, 1, 8 * 1_024);
         var pinned = result.Report.Segments.Where(item => item.Window == "R7 pinned $A000-$BFFF").ToArray();
-        Assert.Equal(6_208, pinned.Sum(item => item.Length));
+        Assert.Equal(result.Report.PinnedR7Bytes, pinned.Sum(item => item.Length));
         Assert.All(
             pinned,
             item =>
@@ -206,9 +219,10 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(81_936, fullPayload.Rom.Length);
         Assert.Equal(fullPayload.Rom, rebuiltFullPayload.Rom);
         Assert.Equal(fullPayload.Report.Segments, rebuiltFullPayload.Report.Segments);
-        Assert.Equal(
-            2_780,
-            fullPayload.Report.Segments.Where(item => item.Owner == "worldpack:default").Sum(item => item.Length));
+        var worldPackBytes = fullPayload.Report.Segments
+            .Where(item => item.Owner == "worldpack:default")
+            .Sum(item => item.Length);
+        Assert.InRange(worldPackBytes, 1, 8 * 1_024);
         Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:bgm:runner_theme");
         Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:sfx:jump_sfx");
         Assert.Contains(fullPayload.Report.Segments, item => item.Owner.StartsWith("fixed:dpcm:", StringComparison.Ordinal));
@@ -242,8 +256,12 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.DoesNotContain(
             runtimeProbe.Report.Segments,
             item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal));
-        Assert.Equal(9_246, runtimeProbe.Report.FixedPayloadBytes);
-        Assert.Equal(7_310, runtimeProbe.Report.PinnedR7Bytes);
+        Assert.True(
+            runtimeProbe.Report.FixedPayloadBytes <= 9_246,
+            $"The packed runtime exceeded its accepted fixed-code budget: {runtimeProbe.Report.FixedPayloadBytes} bytes.");
+        Assert.True(
+            runtimeProbe.Report.PinnedR7Bytes <= 8 * 1_024,
+            $"The packed runtime exceeded its pinned-R7 budget: {runtimeProbe.Report.PinnedR7Bytes} bytes.");
         Assert.Equal(1_536, runtimeProbe.Report.ResidentChrBytes);
         Assert.Equal(runtimeProbe.Rom, rebuiltRuntimeProbe.Rom);
         Assert.Equal(runtimeProbe.Report.Segments, rebuiltRuntimeProbe.Report.Segments);

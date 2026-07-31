@@ -70,7 +70,7 @@ internal static class NesTiledWorldImporter
             }
         }
 
-        var compiled = plan.Build(expansions, targetCellStride);
+        var compiled = plan.Build(expansions, targetCellStride, WorldPackRawPlanes.All);
         return new NesTiledWorldPack(
             compiled.Pack,
             compiled.SerializedBytes,

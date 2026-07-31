@@ -241,9 +241,7 @@ internal sealed record NesWorldPackRuntimePlan(
     private static bool SupportsFastLookup(
         WorldPackDescriptor descriptor,
         IReadOnlyList<NesWorldPackPlaneRuntimeDescriptor> planes) =>
-        SupportsFastCoordinateLayout(descriptor, planes.Count / 2)
-        && planes.Where((_, index) => index % 2 == 1)
-            .All(plane => plane.Codec == WorldPackCodec.ElementRle);
+        SupportsFastCoordinateLayout(descriptor, planes.Count / 2);
 
     internal static bool SupportsFastCoordinateLayout(WorldPackDescriptor descriptor, int chunkCount) =>
         descriptor.MetatileWidth == 2
@@ -364,7 +362,14 @@ internal static class NesWorldPackRuntimeEmitter
     private const string CollisionProfilesLabel = "worldpack_collision_profiles";
     private const string FastVisualPlaneDescriptorsLabel = "worldpack_fast_visual_plane_descriptors";
     private const string FastCollisionPlaneDescriptorsLabel = "worldpack_fast_collision_plane_descriptors";
+    private const string FastVisualAddressLowLabel = "worldpack_fast_visual_address_low";
+    private const string FastVisualAddressHighLabel = "worldpack_fast_visual_address_high";
+    private const string FastVisualSegmentLabel = "worldpack_fast_visual_segment";
+    private const string FastCollisionAddressLowLabel = "worldpack_fast_collision_address_low";
+    private const string FastCollisionAddressHighLabel = "worldpack_fast_collision_address_high";
+    private const string FastCollisionSegmentLabel = "worldpack_fast_collision_segment";
     private const string FastLoadPlaneDescriptorLabel = "worldpack_fast_load_plane_descriptor";
+    private const string R6BankTableLabel = "worldpack_r6_bank_table";
 
     public static void Emit(
         PrgBuilder builder,
@@ -379,7 +384,7 @@ internal static class NesWorldPackRuntimeEmitter
         EmitReadByte(builder, plan, placement);
         EmitValidation(builder, plan);
         EmitPlaneDecoders(builder, plan, placement);
-        EmitLookups(builder, plan);
+        EmitLookups(builder, plan, placement);
         EmitRuntimeInitialization(builder, plan);
         if (probe is not null)
         {
@@ -391,7 +396,11 @@ internal static class NesWorldPackRuntimeEmitter
         }
         if (placement is null)
         {
-            EmitPinnedLookupData(builder, plan, frameScheduler is not null);
+            EmitPinnedLookupData(
+                builder,
+                plan,
+                frameScheduler is not null,
+                includeDirectRawAddresses: false);
         }
     }
 
@@ -410,6 +419,24 @@ internal static class NesWorldPackRuntimeEmitter
             address += checked(plan.Pack.Chunks.Count * 7);
             builder.DefineExternalLabel(FastCollisionPlaneDescriptorsLabel, checked((ushort)address));
             address += checked(plan.Pack.Chunks.Count * 7);
+            if (SupportsDirectRawVisualRead(plan))
+            {
+                builder.DefineExternalLabel(FastVisualAddressLowLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+                builder.DefineExternalLabel(FastVisualAddressHighLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+                builder.DefineExternalLabel(FastVisualSegmentLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+            }
+            if (SupportsDirectRawCollisionRead(plan))
+            {
+                builder.DefineExternalLabel(FastCollisionAddressLowLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+                builder.DefineExternalLabel(FastCollisionAddressHighLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+                builder.DefineExternalLabel(FastCollisionSegmentLabel, checked((ushort)address));
+                address += plan.Pack.Chunks.Count;
+            }
         }
         else
         {
@@ -418,19 +445,19 @@ internal static class NesWorldPackRuntimeEmitter
                 builder.DefineExternalLabel(label, checked((ushort)address));
                 address += plan.Pack.Chunks.Count;
             }
-        }
-        if (HasRawCollisionPlanes(plan))
-        {
-            foreach (var label in CollisionPlaneOffsetLabels)
+            if (HasRawCollisionPlanes(plan))
             {
-                builder.DefineExternalLabel(label, checked((ushort)address));
+                foreach (var label in CollisionPlaneOffsetLabels)
+                {
+                    builder.DefineExternalLabel(label, checked((ushort)address));
+                    address += plan.Pack.Chunks.Count;
+                }
+            }
+            if (HasMixedCollisionCodecs(plan))
+            {
+                builder.DefineExternalLabel(CollisionPlaneCodecLabel, checked((ushort)address));
                 address += plan.Pack.Chunks.Count;
             }
-        }
-        if (HasMixedCollisionCodecs(plan))
-        {
-            builder.DefineExternalLabel(CollisionPlaneCodecLabel, checked((ushort)address));
-            address += plan.Pack.Chunks.Count;
         }
         if (UsesFastCollisionLookup(plan))
         {
@@ -471,6 +498,22 @@ internal static class NesWorldPackRuntimeEmitter
     }
 
     private static bool UsesFastCollisionLookup(NesWorldPackRuntimePlan plan) => plan.UsesFastLookup;
+
+    private static bool SupportsDirectRawVisualRead(NesWorldPackRuntimePlan plan) =>
+        plan.UsesFastLookup
+        && plan.Planes
+            .Where((_, index) => index % 2 == 0)
+            .Where(plane => plane.Codec == WorldPackCodec.Raw)
+            .All(plane => (plane.Offset & 0x1FFF) + plane.DecodedBytes <= 8 * 1_024)
+        && plan.Planes.Where((_, index) => index % 2 == 0)
+            .Any(plane => plane.Codec == WorldPackCodec.Raw);
+
+    private static bool SupportsDirectRawCollisionRead(NesWorldPackRuntimePlan plan) =>
+        plan.Planes
+            .Where((_, index) => index % 2 == 1)
+            .Where(plane => plane.Codec == WorldPackCodec.Raw)
+            .All(plane => (plane.Offset & 0x1FFF) + plane.DecodedBytes <= 8 * 1_024)
+        && HasRawCollisionPlanes(plan);
 
     private static void EmitRuntimeInitialization(PrgBuilder builder, NesWorldPackRuntimePlan plan)
     {
@@ -582,6 +625,8 @@ internal static class NesWorldPackRuntimeEmitter
             return checked(
                 plan.TargetExpansionBytes.Length
                 + plan.Pack.Chunks.Count * 14
+                + (SupportsDirectRawVisualRead(plan) ? plan.Pack.Chunks.Count * 3 : 0)
+                + (SupportsDirectRawCollisionRead(plan) ? plan.Pack.Chunks.Count * 3 : 0)
                 + plan.CollisionProfileBytes.Length
                 + AttributeDataLength(plan, includeColumnAttributes));
         }
@@ -602,7 +647,8 @@ internal static class NesWorldPackRuntimeEmitter
     internal static void EmitPinnedLookupData(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
-        bool includeColumnAttributes)
+        bool includeColumnAttributes,
+        bool includeDirectRawAddresses = true)
     {
         builder.Label(TargetExpansionsLabel);
         builder.Emit(plan.TargetExpansionBytes);
@@ -614,6 +660,34 @@ internal static class NesWorldPackRuntimeEmitter
             builder.Emit(FastPlaneDescriptorBytes(visualPlanes));
             builder.Label(FastCollisionPlaneDescriptorsLabel);
             builder.Emit(FastPlaneDescriptorBytes(collisionPlanes));
+            if (includeDirectRawAddresses && SupportsDirectRawVisualRead(plan))
+            {
+                EmitPlaneByteTable(builder, FastVisualAddressLowLabel, visualPlanes, plane => (byte)plane.Offset);
+                EmitPlaneByteTable(
+                    builder,
+                    FastVisualAddressHighLabel,
+                    visualPlanes,
+                    plane => (byte)(0x80 | ((plane.Offset >> 8) & 0x1F)));
+                EmitPlaneByteTable(
+                    builder,
+                    FastVisualSegmentLabel,
+                    visualPlanes,
+                    plane => checked((byte)(plane.Offset >> 13)));
+            }
+            if (includeDirectRawAddresses && SupportsDirectRawCollisionRead(plan))
+            {
+                EmitPlaneByteTable(builder, FastCollisionAddressLowLabel, collisionPlanes, plane => (byte)plane.Offset);
+                EmitPlaneByteTable(
+                    builder,
+                    FastCollisionAddressHighLabel,
+                    collisionPlanes,
+                    plane => (byte)(0x80 | ((plane.Offset >> 8) & 0x1F)));
+                EmitPlaneByteTable(
+                    builder,
+                    FastCollisionSegmentLabel,
+                    collisionPlanes,
+                    plane => checked((byte)(plane.Offset >> 13)));
+            }
         }
         else
         {
@@ -1103,7 +1177,10 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Return();
     }
 
-    private static void EmitLookups(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    private static void EmitLookups(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        NesWorldPackPlacement? placement)
     {
         var coordinates = builder.CreateLabel("worldpack_lookup_coordinates");
         var coordinateBounds = builder.CreateLabel("worldpack_lookup_coordinate_bounds");
@@ -1112,10 +1189,13 @@ internal static class NesWorldPackRuntimeEmitter
         var collisionContinue = builder.CreateLabel("worldpack_collision_lookup_continue");
         var malformed = builder.CreateLabel("worldpack_lookup_malformed");
         var descriptor = plan.Pack.Descriptor;
+        var visualPlanes = plan.Planes.Where((_, index) => index % 2 == 0).ToArray();
+        var hasRleVisualPlanes = visualPlanes.Any(plane => plane.Codec == WorldPackCodec.ElementRle);
         var collisionPlanes = plan.Planes.Where((_, index) => index % 2 == 1).ToArray();
         var hasRawCollisionPlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.Raw);
         var hasRleCollisionPlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.ElementRle);
         var useFastCoordinates = UsesFastCollisionLookup(plan);
+        var useDirectRawVisualRead = placement is not null && SupportsDirectRawVisualRead(plan);
         var fastCoordinates = builder.CreateLabel("worldpack_fast_lookup_coordinates");
 
         builder.Label(NesRomBuilder.WorldPackVisualLookupLabel);
@@ -1125,7 +1205,22 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Return();
         builder.Label(visualContinue);
         builder.Label(NesRomBuilder.WorldPackVisualLookupPreparedLabel);
-        ushort[] fastVisualCacheTags =
+        var visualRawFastDirect = builder.CreateLabel("worldpack_visual_raw_fast_direct");
+        var visualIdReady = builder.CreateLabel("worldpack_visual_id_ready");
+        if (useDirectRawVisualRead && !hasRleVisualPlanes)
+        {
+            builder.Label(visualRawFastDirect);
+            builder.CallSubroutine(NesRomBuilder.WorldPackValidateLabel);
+            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            var visualRawOnlyValidated = builder.CreateLabel("worldpack_visual_raw_only_validated");
+            builder.JumpIf(0xF0, visualRawOnlyValidated);
+            builder.Return();
+            builder.Label(visualRawOnlyValidated);
+            EmitDirectRawVisualRead(builder, plan, visualIdReady);
+        }
+        else
+        {
+            ushort[] fastVisualCacheTags =
         [
             NesRuntimeMemoryLayout.WorldPack.FastVisualCacheTag0,
             NesRuntimeMemoryLayout.WorldPack.FastVisualCacheTag1,
@@ -1134,237 +1229,252 @@ internal static class NesWorldPackRuntimeEmitter
             NesRuntimeMemoryLayout.WorldPack.FastVisualCacheTag4,
             NesRuntimeMemoryLayout.WorldPack.FastVisualCacheTag5,
         ];
-        var visualCaches = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
-            .Select(index => builder.CreateLabel($"worldpack_visual_cache_{index}"))
-            .ToArray();
-        var visualSelectSlots = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
-            .Select(index => builder.CreateLabel($"worldpack_visual_select_slot_{index}"))
-            .ToArray();
-        var visualPublishSlots = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
-            .Select(index => builder.CreateLabel($"worldpack_visual_publish_slot_{index}"))
-            .ToArray();
-        var visualCheckCache1 = builder.CreateLabel("worldpack_visual_check_cache_1");
-        var visualSelectSlot = builder.CreateLabel("worldpack_visual_select_slot");
-        var visualDecode = builder.CreateLabel("worldpack_visual_decode_selected");
-        var visualRawDirect = builder.CreateLabel("worldpack_visual_raw_direct");
-        var visualRawValidated = builder.CreateLabel("worldpack_visual_raw_validated");
-        var visualIdReady = builder.CreateLabel("worldpack_visual_id_ready");
+            var visualCaches = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
+                .Select(index => builder.CreateLabel($"worldpack_visual_cache_{index}"))
+                .ToArray();
+            var visualSelectSlots = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
+                .Select(index => builder.CreateLabel($"worldpack_visual_select_slot_{index}"))
+                .ToArray();
+            var visualPublishSlots = Enumerable.Range(0, plan.Layout.VisualSlots.Count)
+                .Select(index => builder.CreateLabel($"worldpack_visual_publish_slot_{index}"))
+                .ToArray();
+            var visualCheckCache1 = builder.CreateLabel("worldpack_visual_check_cache_1");
+            var visualSelectSlot = builder.CreateLabel("worldpack_visual_select_slot");
+            var visualDecode = builder.CreateLabel("worldpack_visual_decode_selected");
+            var visualRawDirect = builder.CreateLabel("worldpack_visual_raw_direct");
+            var visualRawValidated = builder.CreateLabel("worldpack_visual_raw_validated");
 
-        if (useFastCoordinates)
-        {
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-            builder.ClearCarry();
-            builder.AddImmediate(1);
-            for (var index = 0; index < fastVisualCacheTags.Length; index++)
+            if (useFastCoordinates)
             {
-                builder.CompareAbsolute(fastVisualCacheTags[index]);
-                builder.JumpIf(0xF0, visualCaches[index]);
-            }
-            builder.JumpAbsolute(visualSelectSlot);
-        }
-        else
-        {
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
-            builder.JumpIf(0xF0, visualCheckCache1);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkLow);
-            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-            builder.JumpIf(0xD0, visualCheckCache1);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkHigh);
-            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexHigh);
-            builder.JumpIf(0xF0, visualCaches[0]);
-
-            builder.Label(visualCheckCache1);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
-            builder.JumpIf(0xF0, visualSelectSlot);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkLow);
-            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-            builder.JumpIf(0xD0, visualSelectSlot);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkHigh);
-            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexHigh);
-            builder.JumpIf(0xF0, visualCaches[1]);
-        }
-
-        builder.Label(visualSelectSlot);
-        if (useFastCoordinates)
-        {
-            builder.LoadAImmediate(0);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
-            builder.CallSubroutine(FastLoadPlaneDescriptorLabel);
-        }
-        else
-        {
-            EmitLoadChunkTableValue(builder, VisualPlaneCodecLabel, NesRuntimeMemoryLayout.WorldPack.Codec);
-        }
-        builder.CompareImmediate((byte)WorldPackCodec.Raw);
-        builder.JumpIf(0xF0, visualRawDirect);
-        if (useFastCoordinates)
-        {
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
-            for (var index = 0; index < visualSelectSlots.Length - 1; index++)
-            {
-                builder.CompareImmediate(index);
-                builder.JumpIf(0xF0, visualSelectSlots[index]);
-            }
-
-            builder.JumpAbsolute(visualSelectSlots[^1]);
-        }
-        else
-        {
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
-            builder.JumpIf(0xF0, visualSelectSlots[0]);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
-            builder.JumpIf(0xF0, visualSelectSlots[1]);
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
-            builder.JumpIf(0xF0, visualSelectSlots[0]);
-            builder.JumpAbsolute(visualSelectSlots[1]);
-        }
-
-        for (var index = 0; index < visualSelectSlots.Length; index++)
-        {
-            builder.Label(visualSelectSlots[index]);
-            builder.LoadAImmediate(index);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-            builder.JumpAbsolute(visualDecode);
-        }
-
-        builder.Label(visualDecode);
-        builder.CallSubroutine(NesRomBuilder.WorldPackVisualDecodeLabel);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
-        var visualDecoded = builder.CreateLabel("worldpack_visual_lookup_decoded");
-        builder.BranchRelative(0xF0, visualDecoded);
-        builder.Return();
-        builder.Label(visualDecoded);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-        if (useFastCoordinates)
-        {
-            for (var index = 0; index < visualPublishSlots.Length; index++)
-            {
-                builder.CompareImmediate(index);
-                builder.JumpIf(0xF0, visualPublishSlots[index]);
-            }
-        }
-        else
-        {
-            builder.CompareImmediate(1);
-            builder.JumpIf(0xF0, visualPublishSlots[1]);
-        }
-
-        if (useFastCoordinates)
-        {
-            for (var index = 0; index < visualPublishSlots.Length; index++)
-            {
-                builder.Label(visualPublishSlots[index]);
                 builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
                 builder.ClearCarry();
                 builder.AddImmediate(1);
-                builder.StoreAAbsolute(fastVisualCacheTags[index]);
-                builder.LoadAImmediate((index + 1) % visualPublishSlots.Length);
+                for (var index = 0; index < fastVisualCacheTags.Length; index++)
+                {
+                    builder.CompareAbsolute(fastVisualCacheTags[index]);
+                    builder.JumpIf(0xF0, visualCaches[index]);
+                }
+                builder.JumpAbsolute(visualSelectSlot);
+            }
+            else
+            {
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
+                builder.JumpIf(0xF0, visualCheckCache1);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkLow);
+                builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+                builder.JumpIf(0xD0, visualCheckCache1);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkHigh);
+                builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexHigh);
+                builder.JumpIf(0xF0, visualCaches[0]);
+
+                builder.Label(visualCheckCache1);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
+                builder.JumpIf(0xF0, visualSelectSlot);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkLow);
+                builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+                builder.JumpIf(0xD0, visualSelectSlot);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkHigh);
+                builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexHigh);
+                builder.JumpIf(0xF0, visualCaches[1]);
+            }
+
+            builder.Label(visualSelectSlot);
+            if (useFastCoordinates)
+            {
+                builder.LoadAImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+                builder.CallSubroutine(FastLoadPlaneDescriptorLabel);
+            }
+            else
+            {
+                EmitLoadChunkTableValue(builder, VisualPlaneCodecLabel, NesRuntimeMemoryLayout.WorldPack.Codec);
+            }
+            builder.CompareImmediate((byte)WorldPackCodec.Raw);
+            builder.JumpIf(0xF0, useDirectRawVisualRead ? visualRawFastDirect : visualRawDirect);
+            if (useFastCoordinates)
+            {
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
+                for (var index = 0; index < visualSelectSlots.Length - 1; index++)
+                {
+                    builder.CompareImmediate(index);
+                    builder.JumpIf(0xF0, visualSelectSlots[index]);
+                }
+
+                builder.JumpAbsolute(visualSelectSlots[^1]);
+            }
+            else
+            {
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
+                builder.JumpIf(0xF0, visualSelectSlots[0]);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
+                builder.JumpIf(0xF0, visualSelectSlots[1]);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
+                builder.JumpIf(0xF0, visualSelectSlots[0]);
+                builder.JumpAbsolute(visualSelectSlots[1]);
+            }
+
+            for (var index = 0; index < visualSelectSlots.Length; index++)
+            {
+                builder.Label(visualSelectSlots[index]);
+                builder.LoadAImmediate(index);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+                builder.JumpAbsolute(visualDecode);
+            }
+
+            builder.Label(visualDecode);
+            builder.CallSubroutine(NesRomBuilder.WorldPackVisualDecodeLabel);
+            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            var visualDecoded = builder.CreateLabel("worldpack_visual_lookup_decoded");
+            builder.BranchRelative(0xF0, visualDecoded);
+            builder.Return();
+            builder.Label(visualDecoded);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+            if (useFastCoordinates)
+            {
+                for (var index = 0; index < visualPublishSlots.Length; index++)
+                {
+                    builder.CompareImmediate(index);
+                    builder.JumpIf(0xF0, visualPublishSlots[index]);
+                }
+            }
+            else
+            {
+                builder.CompareImmediate(1);
+                builder.JumpIf(0xF0, visualPublishSlots[1]);
+            }
+
+            if (useFastCoordinates)
+            {
+                for (var index = 0; index < visualPublishSlots.Length; index++)
+                {
+                    builder.Label(visualPublishSlots[index]);
+                    builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+                    builder.ClearCarry();
+                    builder.AddImmediate(1);
+                    builder.StoreAAbsolute(fastVisualCacheTags[index]);
+                    builder.LoadAImmediate((index + 1) % visualPublishSlots.Length);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
+                    builder.JumpAbsolute(visualCaches[index]);
+                }
+            }
+            else
+            {
+                builder.LoadAImmediate(1);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
+                CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow, NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkLow, count: 2);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
-                builder.JumpAbsolute(visualCaches[index]);
+                builder.JumpAbsolute(visualCaches[0]);
+                builder.Label(visualPublishSlots[1]);
+                builder.LoadAImmediate(1);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
+                CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow, NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkLow, count: 2);
+                builder.LoadAImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
+                builder.JumpAbsolute(visualCaches[1]);
             }
-        }
-        else
-        {
-            builder.LoadAImmediate(1);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid);
-            CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow, NesRuntimeMemoryLayout.WorldPack.VisualCache0ChunkLow, count: 2);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
-            builder.JumpAbsolute(visualCaches[0]);
-            builder.Label(visualPublishSlots[1]);
-            builder.LoadAImmediate(1);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid);
-            CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow, NesRuntimeMemoryLayout.WorldPack.VisualCache1ChunkLow, count: 2);
-            builder.LoadAImmediate(0);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.VisualReplacementNext);
-            builder.JumpAbsolute(visualCaches[1]);
-        }
 
-        builder.Label(visualRawDirect);
-        builder.CallSubroutine(NesRomBuilder.WorldPackValidateLabel);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
-        builder.JumpIf(0xF0, visualRawValidated);
-        builder.Return();
-        builder.Label(visualRawValidated);
-        if (useFastCoordinates)
-        {
-            CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.PlaneOffset0, NesRuntimeMemoryLayout.WorldPack.SourceOffset0, count: 4);
-        }
-        else
-        {
-            EmitLoadChunkTableValue(builder, VisualPlaneOffset0Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
-            EmitLoadChunkTableValue(builder, VisualPlaneOffset1Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
-            EmitLoadChunkTableValue(builder, VisualPlaneOffset2Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
-            EmitLoadChunkTableValue(builder, VisualPlaneOffset3Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
-        }
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
-        if (descriptor.VisualIdBytes == 2)
-        {
-            builder.ShiftLeftA();
-        }
-
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
-        builder.ClearCarry();
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
-        builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
-        builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
-        builder.AddImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
-        builder.AddImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
-        builder.CallSubroutine(ReadAdvanceLabel);
-        builder.JumpIf(0xB0, malformed);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdLow);
-        if (descriptor.VisualIdBytes == 2)
-        {
-            builder.CallSubroutine(ReadAdvanceLabel);
-            builder.JumpIf(0xB0, malformed);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
-        }
-        else
-        {
-            builder.LoadAImmediate(0);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
-        }
-
-        builder.JumpAbsolute(visualIdReady);
-
-        if (useFastCoordinates)
-        {
-            for (var index = 0; index < visualCaches.Length; index++)
+            if (useDirectRawVisualRead)
             {
-                builder.Label(visualCaches[index]);
-                builder.LoadAImmediate(index);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-                EmitLoadIdFromSlot(
-                    builder,
-                    plan.Layout.VisualSlots[index].Start,
-                    descriptor.VisualIdBytes,
-                    descriptor.VisualMetatileCount,
-                    malformed);
+                builder.Label(visualRawFastDirect);
+                builder.CallSubroutine(NesRomBuilder.WorldPackValidateLabel);
+                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.JumpIf(0xF0, visualRawValidated);
+                builder.Return();
+                builder.Label(visualRawValidated);
+                EmitDirectRawVisualRead(builder, plan, visualIdReady);
+            }
+
+            if (!useDirectRawVisualRead)
+            {
+                builder.Label(visualRawDirect);
+                builder.CallSubroutine(NesRomBuilder.WorldPackValidateLabel);
+                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                var visualRawGenericValidated = builder.CreateLabel("worldpack_visual_raw_generic_validated");
+                builder.JumpIf(0xF0, visualRawGenericValidated);
+                builder.Return();
+                builder.Label(visualRawGenericValidated);
+                if (useFastCoordinates)
+                {
+                    CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.PlaneOffset0, NesRuntimeMemoryLayout.WorldPack.SourceOffset0, count: 4);
+                }
+                else
+                {
+                    EmitLoadChunkTableValue(builder, VisualPlaneOffset0Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
+                    EmitLoadChunkTableValue(builder, VisualPlaneOffset1Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
+                    EmitLoadChunkTableValue(builder, VisualPlaneOffset2Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
+                    EmitLoadChunkTableValue(builder, VisualPlaneOffset3Label, NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
+                }
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+                if (descriptor.VisualIdBytes == 2)
+                {
+                    builder.ShiftLeftA();
+                }
+
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+                builder.LoadAImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+                builder.ClearCarry();
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
+                builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
+                builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
+                builder.AddImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
+                builder.AddImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
+                builder.CallSubroutine(ReadAdvanceLabel);
+                builder.JumpIf(0xB0, malformed);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdLow);
+                if (descriptor.VisualIdBytes == 2)
+                {
+                    builder.CallSubroutine(ReadAdvanceLabel);
+                    builder.JumpIf(0xB0, malformed);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
+                }
+                else
+                {
+                    builder.LoadAImmediate(0);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
+                }
+
                 builder.JumpAbsolute(visualIdReady);
             }
-        }
-        else
-        {
-            for (var index = 0; index < 2; index++)
+
+            if (useFastCoordinates)
             {
-                builder.Label(visualCaches[index]);
-                builder.LoadAImmediate(index);
-                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-                EmitLoadIdFromSlot(
-                    builder,
-                    plan.Layout.VisualSlots[index].Start,
-                    descriptor.VisualIdBytes,
-                    descriptor.VisualMetatileCount,
-                    malformed);
-                builder.JumpAbsolute(visualIdReady);
+                for (var index = 0; index < visualCaches.Length; index++)
+                {
+                    builder.Label(visualCaches[index]);
+                    builder.LoadAImmediate(index);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+                    EmitLoadIdFromSlot(
+                        builder,
+                        plan.Layout.VisualSlots[index].Start,
+                        descriptor.VisualIdBytes,
+                        descriptor.VisualMetatileCount,
+                        malformed);
+                    builder.JumpAbsolute(visualIdReady);
+                }
+            }
+            else
+            {
+                for (var index = 0; index < 2; index++)
+                {
+                    builder.Label(visualCaches[index]);
+                    builder.LoadAImmediate(index);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+                    EmitLoadIdFromSlot(
+                        builder,
+                        plan.Layout.VisualSlots[index].Start,
+                        descriptor.VisualIdBytes,
+                        descriptor.VisualMetatileCount,
+                        malformed);
+                    builder.JumpAbsolute(visualIdReady);
+                }
             }
         }
 
@@ -1385,7 +1495,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Label(NesRomBuilder.WorldPackCollisionLookupLabel);
         if (useFastCoordinates)
         {
-            EmitFastCollisionLookup(builder, plan, fastCoordinates);
+            EmitFastCollisionLookup(builder, plan, placement, fastCoordinates);
         }
         else
         {
@@ -1771,10 +1881,18 @@ internal static class NesWorldPackRuntimeEmitter
     private static void EmitFastCollisionLookup(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
+        NesWorldPackPlacement? placement,
         string coordinates)
     {
         var descriptor = plan.Pack.Descriptor;
+        var collisionPlanes = plan.Planes.Where((_, index) => index % 2 == 1).ToArray();
+        var hasRawPlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.Raw);
+        var hasRlePlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.ElementRle);
+        var useDirectRawRead = placement is not null && SupportsDirectRawCollisionRead(plan);
         var coordinateReady = builder.CreateLabel("worldpack_fast_collision_coordinate_ready");
+        var rawDirect = builder.CreateLabel("worldpack_fast_collision_raw_direct");
+        var rawValidated = builder.CreateLabel("worldpack_fast_collision_raw_validated");
+        var rleLookup = builder.CreateLabel("worldpack_fast_collision_rle_lookup");
         var selectSlot0 = builder.CreateLabel("worldpack_fast_collision_select_slot_0");
         var selectSlot1 = builder.CreateLabel("worldpack_fast_collision_select_slot_1");
         var decode = builder.CreateLabel("worldpack_fast_collision_decode");
@@ -1811,63 +1929,123 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Return();
         builder.Label(coordinateReady);
 
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
-        builder.JumpIf(0xF0, cache0);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
-        builder.JumpIf(0xF0, cache1);
+        if (hasRawPlanes)
+        {
+            if (hasRlePlanes)
+            {
+                builder.LoadAImmediate(1);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+                builder.CallSubroutine(FastLoadPlaneDescriptorLabel);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+                builder.CompareImmediate((byte)WorldPackCodec.ElementRle);
+                builder.JumpIf(0xF0, rleLookup);
+                builder.CompareImmediate((byte)WorldPackCodec.Raw);
+                builder.JumpIf(0xD0, malformed);
+            }
 
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
-        builder.JumpIf(0xF0, selectSlot0);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
-        builder.JumpIf(0xF0, selectSlot1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
-        builder.JumpIf(0xF0, selectSlot0);
-        builder.JumpAbsolute(selectSlot1);
+            builder.Label(rawDirect);
+            builder.CallSubroutine(NesRomBuilder.WorldPackValidateLabel);
+            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.JumpIf(0xF0, rawValidated);
+            builder.Return();
+            builder.Label(rawValidated);
+            if (useDirectRawRead)
+            {
+                EmitDirectRawCollisionRead(builder, idReady);
+            }
+            else
+            {
+                if (!hasRlePlanes)
+                {
+                    builder.LoadAImmediate(1);
+                    builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+                    builder.CallSubroutine(FastLoadPlaneDescriptorLabel);
+                }
+                CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.PlaneOffset0, NesRuntimeMemoryLayout.WorldPack.SourceOffset0, count: 4);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+                builder.LoadAImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+                builder.ClearCarry();
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
+                builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset0);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
+                builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset1);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
+                builder.AddImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset2);
+                builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
+                builder.AddImmediate(0);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SourceOffset3);
+                builder.CallSubroutine(ReadAdvanceLabel);
+                builder.JumpIf(0xB0, malformed);
+            }
+            builder.JumpAbsolute(idReady);
+        }
 
-        builder.Label(selectSlot0);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-        builder.JumpAbsolute(decode);
-        builder.Label(selectSlot1);
-        builder.LoadAImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-        builder.Label(decode);
-        builder.CallSubroutine(NesRomBuilder.WorldPackCollisionDecodeLabel);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
-        builder.JumpIf(0xF0, decoded);
-        builder.Return();
-        builder.Label(decoded);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, publishSlot1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
-        builder.LoadAImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
-        builder.JumpAbsolute(cache0);
-        builder.Label(publishSlot1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
-        builder.JumpAbsolute(cache1);
+        if (hasRlePlanes)
+        {
+            builder.Label(rleLookup);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
+            builder.JumpIf(0xF0, cache0);
+            builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
+            builder.JumpIf(0xF0, cache1);
 
-        builder.Label(cache0);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
-        builder.TransferAToX();
-        builder.LoadAAbsoluteX(plan.Layout.CollisionSlots[0].Start);
-        builder.JumpAbsolute(idReady);
-        builder.Label(cache1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
-        builder.TransferAToX();
-        builder.LoadAAbsoluteX(plan.Layout.CollisionSlots[1].Start);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
+            builder.JumpIf(0xF0, selectSlot0);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
+            builder.JumpIf(0xF0, selectSlot1);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
+            builder.JumpIf(0xF0, selectSlot0);
+            builder.JumpAbsolute(selectSlot1);
+
+            builder.Label(selectSlot0);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+            builder.JumpAbsolute(decode);
+            builder.Label(selectSlot1);
+            builder.LoadAImmediate(1);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+            builder.Label(decode);
+            builder.CallSubroutine(NesRomBuilder.WorldPackCollisionDecodeLabel);
+            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.JumpIf(0xF0, decoded);
+            builder.Return();
+            builder.Label(decoded);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+            builder.CompareImmediate(1);
+            builder.JumpIf(0xF0, publishSlot1);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid);
+            builder.LoadAImmediate(1);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
+            builder.JumpAbsolute(cache0);
+            builder.Label(publishSlot1);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionReplacementNext);
+            builder.JumpAbsolute(cache1);
+
+            builder.Label(cache0);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+            builder.TransferAToX();
+            builder.LoadAAbsoluteX(plan.Layout.CollisionSlots[0].Start);
+            builder.JumpAbsolute(idReady);
+            builder.Label(cache1);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+            builder.TransferAToX();
+            builder.LoadAAbsoluteX(plan.Layout.CollisionSlots[1].Start);
+        }
         builder.Label(idReady);
         builder.CompareImmediate(descriptor.CollisionProfileCount);
         builder.JumpIf(0xB0, malformed);
@@ -1894,6 +2072,128 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Label(malformed);
         builder.LoadAImmediate((byte)NesWorldPackResult.Malformed);
         builder.Return();
+    }
+
+    private static void EmitDirectRawVisualRead(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        string idReady)
+    {
+        var bankReady = builder.CreateLabel("worldpack_fast_visual_bank_ready");
+        var addressReady = builder.CreateLabel("worldpack_fast_visual_address_ready");
+        var bankRestored = builder.CreateLabel("worldpack_fast_visual_bank_restored");
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        if (plan.Pack.Descriptor.VisualIdBytes == 2)
+        {
+            builder.ShiftLeftA();
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+            builder.LoadAImmediate(0);
+            builder.AddImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+        }
+        else
+        {
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+        }
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(FastVisualSegmentLabel);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(R6BankTableLabel);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.JumpIf(0xF0, bankReady);
+        builder.PushA();
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.CallSubroutine("mmc3_select_r6");
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        builder.JumpAbsolute(addressReady);
+        builder.Label(bankReady);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        builder.Label(addressReady);
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(FastVisualAddressLowLabel);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultLow);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.WorldPack.PointerLow);
+        builder.LdaAbsoluteX(FastVisualAddressHighLabel);
+        builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.MathResultHigh);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.WorldPack.PointerHigh);
+        builder.LoadYImmediate(0);
+        builder.LoadAIndirectY(NesRuntimeMemoryLayout.WorldPack.PointerLow);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdLow);
+        if (plan.Pack.Descriptor.VisualIdBytes == 2)
+        {
+            builder.IncrementY();
+            builder.LoadAIndirectY(NesRuntimeMemoryLayout.WorldPack.PointerLow);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
+        }
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        builder.JumpIf(0xF0, bankRestored);
+        builder.PullA();
+        builder.CallSubroutine("mmc3_select_r6");
+        builder.Label(bankRestored);
+        builder.JumpAbsolute(idReady);
+    }
+
+    private static void EmitDirectRawCollisionRead(PrgBuilder builder, string idReady)
+    {
+        var bankReady = builder.CreateLabel("worldpack_fast_collision_bank_ready");
+        var bankRestored = builder.CreateLabel("worldpack_fast_collision_bank_restored");
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(FastCollisionSegmentLabel);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(R6BankTableLabel);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.JumpIf(0xF0, bankReady);
+        builder.PushA();
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        builder.CallSubroutine("mmc3_select_r6");
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        var addressReady = builder.CreateLabel("worldpack_fast_collision_address_ready");
+        builder.JumpAbsolute(addressReady);
+        builder.Label(bankReady);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        builder.Label(addressReady);
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(FastCollisionAddressLowLabel);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.WorldPack.PointerLow);
+        builder.LdaAbsoluteX(FastCollisionAddressHighLabel);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.WorldPack.PointerHigh);
+        builder.LoadYAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        builder.LoadAIndirectY(NesRuntimeMemoryLayout.WorldPack.PointerLow);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+        builder.JumpIf(0xF0, bankRestored);
+        builder.PullA();
+        builder.CallSubroutine("mmc3_select_r6");
+        builder.Label(bankRestored);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+        builder.JumpAbsolute(idReady);
     }
 
     private static void EmitUnsigned16BoundsCheck(
@@ -2476,7 +2776,6 @@ internal static class NesWorldPackRuntimeEmitter
         const byte pointerHigh = NesRuntimeMemoryLayout.WorldPack.PointerHigh;
         var inBounds = builder.CreateLabel("worldpack_read_in_bounds");
         var boundsError = builder.CreateLabel("worldpack_read_bounds_error");
-        var bankTable = builder.CreateLabel("worldpack_r6_bank_table");
         var bulkRead = builder.CreateLabel("worldpack_bulk_read");
         var bulkInBounds = builder.CreateLabel("worldpack_bulk_read_in_bounds");
         var bulkBankReady = builder.CreateLabel("worldpack_bulk_bank_ready");
@@ -2507,7 +2806,7 @@ internal static class NesWorldPackRuntimeEmitter
                 builder.ShiftRightA();
             }
             builder.TransferAToX();
-            builder.LdaAbsoluteX(bankTable);
+            builder.LdaAbsoluteX(R6BankTableLabel);
             builder.CallSubroutine("mmc3_select_r6");
             RestoreSourceOffsetFromStack(builder);
 
@@ -2564,7 +2863,7 @@ internal static class NesWorldPackRuntimeEmitter
             }
 
             builder.TransferAToX();
-            builder.LdaAbsoluteX(bankTable);
+            builder.LdaAbsoluteX(R6BankTableLabel);
             builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadCurrentBank);
             builder.JumpIf(0xF0, bulkBankReady);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadCurrentBank);
@@ -2585,7 +2884,7 @@ internal static class NesWorldPackRuntimeEmitter
             builder.SetCarry();
             builder.Return();
 
-            builder.Label(bankTable);
+            builder.Label(R6BankTableLabel);
             builder.Emit(placement.Segments.Select(segment => checked((byte)segment.PhysicalBank)).ToArray());
         }
     }

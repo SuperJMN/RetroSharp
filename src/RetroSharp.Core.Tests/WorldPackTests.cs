@@ -110,11 +110,28 @@ public sealed class WorldPackTests
 
         var compiled = plan.Build(targetExpansions, targetCellStride: 1);
         var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+        var raw = plan.Build(
+            targetExpansions,
+            targetCellStride: 1,
+            rawPlanes: WorldPackRawPlanes.All);
+        var decodedRaw = WorldPackSerializer.Deserialize(raw.SerializedBytes);
 
         Assert.Equal(compiled.SerializedBytes, WorldPackSerializer.Serialize(decoded));
+        Assert.Equal(raw.SerializedBytes, WorldPackSerializer.Serialize(decodedRaw));
         Assert.Equal(compiled.Pack.Descriptor, decoded.Descriptor);
         Assert.Equal(new[] { WorldPackCodec.ElementRle, WorldPackCodec.Raw }, compiled.Pack.Chunks.Select(chunk => chunk.Directory.VisualCodec));
         Assert.All(compiled.Pack.Chunks, chunk => Assert.Equal(WorldPackCodec.ElementRle, chunk.Directory.CollisionCodec));
+        Assert.All(
+            raw.Pack.Chunks,
+            chunk =>
+            {
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.VisualCodec);
+                Assert.Equal(WorldPackCodec.Raw, chunk.Directory.CollisionCodec);
+            });
+        Assert.True(raw.SerializedBytes.Length > compiled.SerializedBytes.Length);
+        Assert.Equal(
+            Enumerable.Range(0, sourceWidth * sourceHeight).Select(index => decoded.VisualIdAt(index % sourceWidth, index / sourceWidth)),
+            Enumerable.Range(0, sourceWidth * sourceHeight).Select(index => decodedRaw.VisualIdAt(index % sourceWidth, index / sourceWidth)));
         Assert.Equal(
             new byte[] { 0x8D, 0 },
             compiled.SerializedBytes.AsSpan(

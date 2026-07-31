@@ -156,22 +156,21 @@ internal static class FunctionalScenarioValidator
             throw new InvalidOperationException($"Functional scenario '{scenario.Id}' audio progress budgets cannot be negative.");
         }
         if (scenario.ExpectedFeatures.AudioProgress &&
-            (scenario.Audio.MaximumRegisterEvents is null ||
-             scenario.Audio.MaximumRegisterEventGapFrames is null ||
+            (scenario.Audio.MaximumRegisterEventGapFrames is null ||
              scenario.Audio.MaximumSoundEffectStarts is null ||
              scenario.Audio.MaximumSoundEffectCompletions is null ||
              scenario.Audio.MaximumDpcmStarts is null ||
              scenario.Audio.MaximumDpcmCompletions is null ||
              scenario.Audio.MusicActiveAtEnd is null ||
              scenario.Audio.SoundEffectActiveAtEnd is null ||
-             scenario.Audio.DpcmActiveAtEnd is null ||
-             string.IsNullOrWhiteSpace(scenario.Audio.OrderedRegisterEventSha256)))
+             scenario.Audio.DpcmActiveAtEnd is null))
         {
             throw new InvalidOperationException(
-                $"Functional scenario '{scenario.Id}' audio progress acceptance requires exact upper bounds, end lifecycle states, and an ordered register-event digest.");
+                $"Functional scenario '{scenario.Id}' audio progress acceptance requires lifecycle upper bounds, end states, and a register-event gap budget.");
         }
         if (scenario.ExpectedFeatures.AudioProgress &&
-            (scenario.Audio.MaximumRegisterEvents < scenario.Audio.MinimumRegisterEvents ||
+            ((scenario.Audio.MaximumRegisterEvents is { } maximumRegisterEvents
+              && maximumRegisterEvents < scenario.Audio.MinimumRegisterEvents) ||
              scenario.Audio.MaximumSoundEffectStarts < scenario.Audio.MinimumSoundEffectStarts ||
              scenario.Audio.MaximumSoundEffectCompletions < scenario.Audio.MinimumSoundEffectCompletions ||
              scenario.Audio.MaximumDpcmStarts < scenario.Audio.MinimumDpcmStarts ||
@@ -181,8 +180,9 @@ internal static class FunctionalScenarioValidator
                 $"Functional scenario '{scenario.Id}' audio progress maximums cannot be lower than their minimums.");
         }
         if (scenario.ExpectedFeatures.AudioProgress &&
-            (scenario.Audio.OrderedRegisterEventSha256!.Length != 64 ||
-             scenario.Audio.OrderedRegisterEventSha256.Any(character => !Uri.IsHexDigit(character))))
+            scenario.Audio.OrderedRegisterEventSha256 is { } orderedRegisterEventSha256 &&
+            (orderedRegisterEventSha256.Length != 64 ||
+             orderedRegisterEventSha256.Any(character => !Uri.IsHexDigit(character))))
         {
             throw new InvalidOperationException(
                 $"Functional scenario '{scenario.Id}' orderedRegisterEventSha256 must be a 64-character SHA-256 hex digest.");

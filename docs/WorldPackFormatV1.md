@@ -255,9 +255,12 @@ longer than 130) and otherwise accumulates the maximal literal packet up to 128
 IDs or the next run of at least three. A one- or two-ID tail left after a split
 run is encoded as a literal. This removes encoder-choice ambiguity.
 
-The packer uses RLE only when it is strictly shorter than raw; ties use raw.
-Consequently compression can never increase the budgeted payload. No v1 codec
-may span chunks or planes, and a whole-level sequential stream is invalid.
+The default canonical packer uses RLE only when it is strictly shorter than
+raw; ties use raw. A target may explicitly request raw visual, collision, or
+both planes through `WorldPackRawPlanes`; serialization then preserves each
+declared codec instead of replacing a valid raw plane with its smaller RLE
+form. No v1 codec may span chunks or planes, and a whole-level sequential
+stream is invalid.
 
 ## Random access
 
@@ -273,12 +276,13 @@ cell      = localY * validWidth + localX
 subcell   = subcellY * metatileWidth + subcellX
 ```
 
-A collision lookup reads one directory entry, decodes only that chunk's
-collision plane into a fixed slot, reads its profile ID, and then reads one
-profile byte. A camera edge reads the intersecting visual chunks, expands IDs
-through the target table, and writes the target edge slot. Neither path reads
-or decompresses the whole level; visual lookup never requires the collision
-plane and collision lookup never requires the visual plane.
+A collision lookup reads one directory entry and one profile ID, then reads
+the selected profile byte. Raw planes permit a direct ID read; RLE planes
+decode only that chunk into a fixed slot. A camera edge applies the same policy
+to the intersecting visual chunks, expands IDs through the target table, and
+writes the target edge slot. Neither path reads or decompresses the whole
+level; visual lookup never requires the collision plane and collision lookup
+never requires the visual plane.
 
 ## Fixed staging and residency
 
@@ -374,7 +378,10 @@ NES = 48 + 12 + (53 * 2 * 2 * 2) + 1,200 + 3,120 + 3,120 = 7,924 bytes
 | **WorldPack total** | **7,712** | **7,924** |
 
 These are worst-case pack sizes for the measured level because every plane is
-budgeted as raw; RLE may only reduce them.
+budgeted as raw. Game Boy retains the default per-plane raw/RLE selection. The
+NES Tiled importer deliberately emits both planes raw, so the current runner
+uses the full 3,120-byte visual plane plus 3,120-byte collision plane and the
+7,924-byte envelope is its production size, not only a fallback budget.
 
 The complete known non-code payload frozen by LW-0.1 is:
 
@@ -451,8 +458,10 @@ LW-1.4 adds `TiledWorldPackPlan.Create(...)` beside the logical Tiled importer.
 The plan selects the playable source slice, validates background/world GIDs,
 assigns visual IDs by the authoring tuple order above, and interns collision
 profiles independently. `WorldPackSerializer` builds the clipped chunk model,
-selects raw or canonical element RLE independently for every plane, writes the
-binary envelope, and can deserialize it for tooling/tests. The target
+selects raw or canonical element RLE independently for every plane by default,
+honors an explicit `WorldPackRawPlanes` construction policy, writes the binary
+envelope, and can deserialize it for tooling/tests without canonicalizing a
+declared raw plane. The target
 inspection seams are `GameBoyTiledMapImporter.CompileWorldPack(...)` and
 `NesTiledWorldImporter.CompileWorldPack(...)`.
 
@@ -465,13 +474,13 @@ byte. Duplicate target records remain legal when distinct authoring identities
 quantize to the same target result.
 
 The focused full-`stage1` builds measure 2,568 serialized bytes on Game Boy and
-2,780 on NES, compared with the raw-fallback envelopes of 7,712 and 7,924.
-Both builds retain 60 clipped chunks, 53 visual metatiles, three collision
+7,924 on NES. NES spends 3,120 bytes on each raw plane; Game Boy keeps its
+smaller canonical raw/RLE choice. Both builds retain 60 clipped chunks, 53 visual metatiles, three collision
 profiles, 82 GB patterns, 90 NES patterns, 788 solid hardware cells, and 56
 one-way platform cells. Tests also cover external TSJ/TSX tilesets, target PNG
 variants, background/world composition, explicit collision overrides, target
-metadata parity, canonical round-trip decoding, and two fresh byte-identical
-compilations.
+metadata parity, raw and RLE round-trip decoding, and two fresh byte-identical
+compilations. NES readers continue to accept external v1 packs that use RLE.
 
 ## Consequences, rejected alternatives, and non-goals
 

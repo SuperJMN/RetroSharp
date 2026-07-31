@@ -245,6 +245,27 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Audio_progress_can_use_liveness_and_lifecycle_budgets_without_an_exact_register_golden()
+    {
+        var observations = HealthyAudioProgressFrames();
+        var exact = AudioProgressScenario(observations);
+        var scenario = exact with
+        {
+            Audio = exact.Audio with
+            {
+                MaximumRegisterEvents = null,
+                OrderedRegisterEventSha256 = null,
+            },
+        };
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations));
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.DoesNotContain(report.TimingChecks, check => check.Metric == "audio-register-events-maximum");
+        Assert.DoesNotContain(report.IntegrityFailures, failure => failure.Code == "audio-register-order");
+    }
+
+    [Fact]
     public void Ordered_audio_progress_rejects_a_frozen_register_stream()
     {
         var healthy = HealthyAudioProgressFrames();
