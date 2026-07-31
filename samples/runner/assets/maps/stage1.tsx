@@ -23,32 +23,37 @@
  </tile>
  <tile id="11">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="12">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="13">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
+ </tile>
+ <tile id="22">
+  <objectgroup draworder="index" id="2">
+   <object id="1" x="0" y="0" width="16" height="16"/>
+  </objectgroup>
  </tile>
  <tile id="29">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="30">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="31">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="38">
@@ -78,17 +83,17 @@
  </tile>
  <tile id="50">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="51">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="52">
   <properties>
-   <property name="retrosharpCollision" type="string" propertytype="CollisionFlags" value="Platform"/>
+   <property name="retrosharpCollision" value="Platform"/>
   </properties>
  </tile>
  <tile id="83">
