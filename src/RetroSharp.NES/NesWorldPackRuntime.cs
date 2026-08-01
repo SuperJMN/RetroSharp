@@ -291,7 +291,8 @@ internal sealed record NesWorldPackRuntimeLayout(
     int TotalBytes)
 {
     private const int ChunkCells = 64;
-    private const int EdgeBytes = 32 + 9;
+    private const int EdgeBytes =
+        NesPackedCameraRuntime.AttributeStagingOffset + NesPackedCameraRuntime.MaximumAttributeBytes;
     public static NesWorldPackRuntimeLayout Create(
         int visualIdBytes,
         int collisionIdBytes,

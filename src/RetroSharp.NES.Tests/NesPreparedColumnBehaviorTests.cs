@@ -82,20 +82,19 @@ public sealed class NesPreparedColumnBehaviorTests
         cpu.SetRam(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, 0);
         cpu.SetRam(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, payloadLength);
 
-        var prepareResults = Enumerable.Range(0, 4)
+        var prepareCalls = NesPackedCameraRuntime.ColumnPrepareCalls(payloadLength);
+        var prepareResults = Enumerable.Range(0, prepareCalls)
             .Select(_ => cpu.RunRoutine(
                 result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
                 maxInstructions: 5_000_000).A)
             .ToArray();
 
         Assert.Equal(
-            new byte[]
-            {
-                NesPackedCameraRuntime.PreparePending,
-                NesPackedCameraRuntime.PreparePending,
-                NesPackedCameraRuntime.PreparePending,
-                (byte)NesWorldPackResult.Success,
-            },
+            Enumerable.Range(0, prepareCalls)
+                .Select(index => index == prepareCalls - 1
+                    ? (byte)NesWorldPackResult.Success
+                    : NesPackedCameraRuntime.PreparePending)
+                .ToArray(),
             prepareResults);
         Assert.Equal(1, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.RequestCount));
         Assert.Equal(1, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.PrepareCount));
@@ -130,7 +129,7 @@ public sealed class NesPreparedColumnBehaviorTests
             .Select(row => runtime.Attributes.ColumnBytes[row * runtime.Attributes.Columns + attributeColumn])
             .ToArray();
         var actualAttributes = Enumerable.Range(0, attributeCount)
-            .Select(index => cpu.Ram((ushort)(edge.Start + 32 + index)))
+            .Select(index => cpu.Ram((ushort)(edge.Start + NesPackedCameraRuntime.AttributeStagingOffset + index)))
             .ToArray();
         Assert.Equal(expectedAttributes, actualAttributes);
     }

@@ -261,9 +261,12 @@ canonical bytes and the shared runner uses the complete banked path.
 LW-1.5 exposes that exact inspection payload through the opt-in CLI form
 `--target nes --world-budget-report <map.tmx|map.tmj>`. The deterministic JSON sums the
 actual stored visual/collision bytes from each chunk directory entry and
-reports the accepted 338-byte one-byte-ID staging shape (128 visual chunk
-bytes, 128 collision chunk bytes, and two 41-byte tile/attribute edge slots)
-against the format's 594-byte two-byte-ID maximum. The machine's 2 KiB RAM
+reports the accepted 358-byte one-byte-ID staging shape (128 visual chunk
+bytes, 128 collision chunk bytes, and two 51-byte tile/attribute edge slots)
+against the format's 614-byte two-byte-ID maximum. An edge slot holds the
+tallest streamed column payload (40 tiles for a four-screen band) followed by
+its attribute bytes (up to 11, because attribute grouping restarts every 30
+physical nametable rows). The machine's 2 KiB RAM
 capacity remains a separate reported fact, not the staging allowance.
 It evaluates current PRG use against `nes-mapper-0-current` and separately
 names `nes-mmc3-tvrom-v1-accepted-future` as an unimplemented requirement with
@@ -390,7 +393,7 @@ mapper restoration, and legal PPU/OAM timing. See
 
 NES packed-camera correctness is independent of unspecified CPU RAM power-on
 contents. Reset initializes the exact WorldPack/camera-owned `$0326..$03FF`
-control block and the exact 594-byte `$0400..$0651` staging layout, assigns the
+control block and the exact 614-byte `$0400..$0665` staging layout, assigns the
 `NoSlot` sentinel explicitly, and leaves mapper shadows, OAM, audio, game state,
 and the first byte after staging outside those clears. FCEUmm `$00`/`$FF` plus
 a deterministic nonzero pattern and AprNes lifecycle evidence are recorded in

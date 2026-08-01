@@ -46,6 +46,7 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         packedColumnRuntimeConfig = config;
+        frameScheduler.ConfigurePackedColumnBand(config);
     }
 
     private void EmitPackedColumnRequestSubroutine()
@@ -90,7 +91,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
         builder.LoadAImmediate(config.StreamY);
-        if (config.UseFourScreenNametables)
+        if (config.UseFourScreenNametables && !config.UsesStaticColumnBand)
         {
             builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
@@ -112,7 +113,7 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
-        builder.LoadAImmediate(Math.Min(NesTarget.Capabilities.ScreenTiles.Height, config.StreamHeight));
+        builder.LoadAImmediate(config.ColumnPayloadLength);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
         builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);

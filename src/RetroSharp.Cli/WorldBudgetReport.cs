@@ -251,13 +251,12 @@ public static class WorldBudgetReportFactory
 
     private static WorldBudgetReport FromNes(RetroSharp.NES.NesWorldPackInspection inspection)
     {
-        const int stagingLimit = 594;
+        var stagingLimit = RetroSharp.NES.NesPackedCameraBudget.MaximumStagingBytes;
         const int physicalRamCapacity = 2 * 1024;
         const int prgLimit = 32 * 1024 - 6;
         const int bankBytes = 32 * 1024;
         var capabilities = RetroSharp.NES.NesTarget.Capabilities;
-        var edgeSlotsBytes = checked(2 * (
-            capabilities.MaxBackgroundTileWritesPerFrame + capabilities.MaxAttributeWritesPerFrame));
+        var edgeSlotsBytes = checked(2 * RetroSharp.NES.NesPackedCameraBudget.EdgeSlotBytes);
         var tileIndexUsed = checked(inspection.FirstGeneratedTileId + inspection.GeneratedBackgroundTiles);
         return Create(
             "nes",
@@ -279,7 +278,7 @@ public static class WorldBudgetReportFactory
             evaluatedProfile: "nes-mapper-0-current",
             tileWrites: capabilities.MaxBackgroundTileWritesPerFrame,
             attributeWrites: capabilities.MaxAttributeWritesPerFrame,
-            commitShape: "32 tile writes or one of four 8-tile row phases, followed by a 9-attribute phase",
+            commitShape: "up to 40 column tiles or one of four 8-tile row phases, followed by up to 11 attributes",
             ["nes-mapper-0-current", "nes-mmc3-tvrom-v1-accepted-future"]);
     }
 

@@ -43,6 +43,7 @@ internal sealed partial class NesSdkOperationLowerer
     private NesCameraConfig? cameraConfig;
     private RuntimeIndexedFieldCursor? activeRuntimeIndexedFieldCursor;
 
+
     public NesSdkOperationLowerer(
         PrgBuilder builder,
         NesVideoProgram program,
