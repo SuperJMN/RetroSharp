@@ -246,6 +246,7 @@ internal sealed class GameBoyTestCpu
         0x09 or 0x19 or 0x29 => 8,                       // ADD HL,rr
         0x12 or 0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x72 or 0x7E => 8, // LD (DE),A / LD A,(rr)/(HL) loads/stores
         0x46 or 0x4E or 0x56 or 0x5E => 8,               // LD r,(HL)
+        0xA6 or 0xAE or 0xB6 => 8,                       // AND/XOR/OR (HL)
         0xE2 or 0xF2 => 8,                               // LDH (C),A / LDH A,(C)
         0xCB => 8,                                       // CB-prefixed (SWAP/SRL on A)
         _ => 4,                                          // reg-reg LD, ALU r, INC/DEC r, NOP, DI, CPL
@@ -752,13 +753,29 @@ internal sealed class GameBoyTestCpu
             case 0x3C: a = Inc(a); break;                       // INC A
             case 0xA0: a = And(b); break;                       // AND B
             case 0xA1: a = And(c); break;                       // AND C
+            case 0xA2: a = And(d); break;                       // AND D
+            case 0xA3: a = And(e); break;                       // AND E
+            case 0xA4: a = And(h); break;                       // AND H
+            case 0xA5: a = And(l); break;                       // AND L
+            case 0xA6: a = And(ReadByte(Hl)); break;            // AND (HL)
+            case 0xA7: a = And(a); break;                       // AND A
             case 0xE6: a = And(NextByte()); break;              // AND n
             case 0xB0: a = Or(b); break;                        // OR B
             case 0xB1: a = Or(c); break;                        // OR C
+            case 0xB2: a = Or(d); break;                        // OR D
             case 0xB3: a = Or(e); break;                        // OR E
+            case 0xB4: a = Or(h); break;                        // OR H
+            case 0xB5: a = Or(l); break;                        // OR L
+            case 0xB6: a = Or(ReadByte(Hl)); break;             // OR (HL)
+            case 0xB7: a = Or(a); break;                        // OR A
             case 0xF6: a = Or(NextByte()); break;               // OR n
             case 0xA8: a = Xor(b); break;                       // XOR B
             case 0xA9: a = Xor(c); break;                       // XOR C
+            case 0xAA: a = Xor(d); break;                       // XOR D
+            case 0xAB: a = Xor(e); break;                       // XOR E
+            case 0xAC: a = Xor(h); break;                       // XOR H
+            case 0xAD: a = Xor(l); break;                       // XOR L
+            case 0xAE: a = Xor(ReadByte(Hl)); break;            // XOR (HL)
             case 0xAF: a = Xor(a); break;                       // XOR A
             case 0xEE: a = Xor(NextByte()); break;              // XOR n
             case 0xB8: Sub(a, b); break;                        // CP B
