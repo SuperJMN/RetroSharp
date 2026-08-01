@@ -2,8 +2,8 @@
 
 Status: **transparent MBC1 foundation with multi-bank code/data/audio overlays landed.**
 This document records what is known, what is done, and the remaining limits for
-transparent MBC1 banking. The current implementation lets large programs such as
-`samples/runner/runner.retrosharp.json` build as an MBC1 ROM without source banking calls.
+transparent MBC1 banking. The current implementation lets programs that outgrow
+ROM-only capacity build as an MBC1 ROM without source banking calls.
 Multi-bank subroutine bodies, read-only data, and banked music are handled by the
 generated runtime; linear main-flow fall-through across switchable program banks
 is handled by compiler-inserted continuations.
@@ -15,7 +15,7 @@ the known limits below.
 
 ## 1. Problem statement
 
-`samples/runner/runner.retrosharp.json` no longer fits a 32 KiB ROM-only cartridge and could not
+Programs can outgrow a 32 KiB ROM-only cartridge and previously could not
 be banked by the original music-only banking. Measured payload at roadmap creation
 (GB target, delight music):
 
@@ -99,9 +99,9 @@ pointers in section 6 when extending that landed design.
   selected music bank, read or initialize music state, restore the program bank, and return, so
   RetroSharp source never needs manual bank switching even when the call site lives in
   `$4000-$7FFF`.
-- **Validation:** `GameBoyBankingRoadmapTests` are un-skipped, the runner builds as a 64 KiB MBC1
-  ROM, the test CPU supports `CALL`/`RET`, and Game Boy execution tests cross the bank boundary
-  without faulting.
+- **Validation:** `GameBoyBankingRoadmapTests` are un-skipped, dedicated fixtures build as MBC1
+  ROMs, the test CPU supports `CALL`/`RET`, and Game Boy execution tests cross the bank boundary
+  without faulting. The current runner fits ROM-only capacity because its BGM is smaller.
 
 ## 4. Known limits and follow-ups
 

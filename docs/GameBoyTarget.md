@@ -466,12 +466,12 @@ LW-2.5 proves this path against the complete 156x20 authored `stage1` through
 a non-destructive test fixture. The fixture copies and normalizes the map,
 tileset, and PNG only in a temporary directory, redirects the composed runner
 source and its 312x40 constants in memory, and leaves the shared runner
-manifest, `World.Load(...)` input, sources, and tracked ROMs unchanged. The
-real runner final link selects the 128 KiB MBC1 profile and contains the exact
-2,550-byte pack, 11,614-byte BGM, 28-byte SFX, and 2,368 resident art bytes with
-no duplicate legacy world rows. A smaller full-stage traversal probe remains
-ROM-only, demonstrating that final-link output, not
-`--world-budget-report`, owns profile selection.
+manifest, `World.Load(...)` input, sources, and tracked ROMs unchanged. At
+LW-2.5 acceptance, the then-current runner selected the 128 KiB MBC1 profile
+with its larger BGM. The current compact BGM lets the same complete runner fit a
+32 KiB ROM-only cartridge; dedicated fixtures continue to cover the MBC1 path.
+This demonstrates that final-link output, not `--world-budget-report`, owns
+profile selection.
 
 The focused acceptance reconstructs all 60 runtime visual/collision chunks,
 checks the Y=304 / `FFFF` collision ABI, traverses the whole horizontal range
