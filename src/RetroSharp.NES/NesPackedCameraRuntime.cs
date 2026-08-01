@@ -4,6 +4,21 @@ internal static class NesPackedCameraRuntime
 {
     internal const int SlotMetadataBytes = 16;
 
+    // A streamed column restores every world row the camera can reveal, because a
+    // world band that fits the four-screen height keeps a static row-to-nametable
+    // mapping and therefore never streams rows. Forty rows is the tallest band a
+    // single VBlank can publish alongside OAM DMA.
+    internal const int MaximumColumnPayloadLength = 40;
+    internal const int RowPayloadLength = 32;
+
+    // Attribute bytes follow the tile payload at a fixed staging offset so both
+    // axes share one edge slot layout.
+    internal const int AttributeStagingOffset = MaximumColumnPayloadLength;
+    internal const int MaximumAttributeBytes = 11;
+
+    internal const int NameTableRows = 30;
+    internal const int FourScreenRows = 60;
+
     internal const int StateOffset = 0;
     internal const int AxisOffset = 1;
     internal const int DirectionOffset = 2;
@@ -37,6 +52,31 @@ internal static class NesPackedCameraRuntime
     internal const byte RetryAfterApply = 0x40;
     internal static readonly byte PrefetchSlot1 = 0x80;
 
+    // A column prepare walks the payload in slices so it never monopolises a frame, and the
+    // camera must see the finished column before it needs the next one. At two pixels per
+    // frame a new column enters every four frames, so the slice is the smallest power of two
+    // that finishes any band within that budget: eight cells for the classic <=32-row window,
+    // sixteen for a 40-row static band. Widening it further would lengthen a single call for
+    // no deadline gain.
+    internal const int MaximumColumnPrepareCalls = 4;
+
+    internal static int ColumnPrepareSliceCells(int payloadLength)
+    {
+        var slice = 8;
+        while ((payloadLength + slice - 1) / slice > MaximumColumnPrepareCalls)
+        {
+            slice *= 2;
+        }
+
+        return slice;
+    }
+
+    internal static int ColumnPrepareCalls(int payloadLength)
+    {
+        var slice = ColumnPrepareSliceCells(payloadLength);
+        return (payloadLength + slice - 1) / slice;
+    }
+
     internal static ushort SlotMetadata(int slot) => slot switch
     {
         0 => NesRuntimeMemoryLayout.PackedCamera.Slot0,
@@ -51,11 +91,92 @@ internal static class NesPackedCameraRuntimeEmitter
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
         int rowTileWritesPerPhase,
-        int rowAttributePhase)
+        int rowAttributePhase,
+        NesPackedColumnCommit columnCommit)
     {
-        EmitPrepareEdge(builder, plan);
-        EmitCommitEdge(builder, plan, rowTileWritesPerPhase, rowAttributePhase);
+        EmitPrepareEdge(builder, plan, columnCommit);
+        EmitCommitEdge(builder, plan, rowTileWritesPerPhase, rowAttributePhase, columnCommit);
         EmitReleaseReversedEdges(builder);
+    }
+
+    // A static column band always publishes the same nametable rows, so the number of
+    // attribute bytes it touches is fixed while emitting. Camera-relative bands keep the
+    // run-time split of the payload across the global four-row grouping.
+    private static void EmitLoadColumnAttributeCount(PrgBuilder builder, NesPackedColumnCommit columnCommit)
+    {
+        if (columnCommit.FixedStart is not null)
+        {
+            builder.LoadAImmediate(checked((byte)columnCommit.AttributeCount));
+            return;
+        }
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
+        builder.AndImmediate(0x03);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
+        builder.AddImmediate(3);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+    }
+
+    private static void EmitLoadAxisAttributeCount(PrgBuilder builder, NesPackedColumnCommit columnCommit)
+    {
+        if (columnCommit.FixedStart is null)
+        {
+            EmitLoadColumnAttributeCount(builder, columnCommit);
+            return;
+        }
+
+        var rowAxis = builder.CreateLabel("nes_packed_attrs_count_row");
+        var countReady = builder.CreateLabel("nes_packed_attrs_count_ready");
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.CompareImmediate(NesPackedCameraRuntime.Column);
+        builder.JumpIf(0xD0, rowAxis);
+        EmitLoadColumnAttributeCount(builder, columnCommit);
+        builder.JumpAbsolute(countReady);
+        builder.Label(rowAxis);
+        EmitLoadColumnAttributeCount(builder, new NesPackedColumnCommit(null, columnCommit.Length));
+        builder.Label(countReady);
+    }
+
+    // Attribute rows restart their four-row grouping at every physical nametable, so a
+    // band that spans both nametables steps 28 -> 30 instead of 28 -> 32.
+    private static void EmitAdvanceColumnAttributeCursor(
+        PrgBuilder builder,
+        NesPackedColumnCommit columnCommit,
+        string release)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        if (columnCommit.FixedStart is null)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(4);
+            builder.CompareImmediate(NesPackedCameraRuntime.FourScreenRows);
+            builder.JumpIf(0x90, release);
+            builder.SetCarry();
+            builder.SubtractImmediate(NesPackedCameraRuntime.FourScreenRows);
+            return;
+        }
+
+        var bottomNameTable = builder.CreateLabel("nes_packed_commit_column_attr_bottom");
+        var clampToBoundary = builder.CreateLabel("nes_packed_commit_column_attr_clamp");
+        builder.CompareImmediate(NesPackedCameraRuntime.NameTableRows);
+        builder.JumpIf(0xB0, bottomNameTable);
+        builder.ClearCarry();
+        builder.AddImmediate(4);
+        builder.CompareImmediate(NesPackedCameraRuntime.NameTableRows + 1);
+        builder.JumpIf(0x90, release);
+        builder.JumpAbsolute(clampToBoundary);
+        builder.Label(bottomNameTable);
+        builder.ClearCarry();
+        builder.AddImmediate(4);
+        builder.CompareImmediate(NesPackedCameraRuntime.FourScreenRows);
+        builder.JumpIf(0x90, release);
+        builder.SetCarry();
+        builder.SubtractImmediate(NesPackedCameraRuntime.FourScreenRows);
+        builder.JumpAbsolute(release);
+        builder.Label(clampToBoundary);
+        builder.LoadAImmediate(NesPackedCameraRuntime.NameTableRows);
     }
 
     private static void EmitReleaseReversedEdges(PrgBuilder builder)
@@ -92,15 +213,157 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(done);
     }
 
-    private static void EmitCommitEdge(
+    // Camera-relative column commit: the destination nametable rows follow the camera, so
+    // the payload is split across physical nametables at run time.
+    // Static column band commit. The band always lands on the same nametable rows, so both
+    // the nametable split and the attribute rows are known while emitting: the payload is
+    // unrolled straight into PPUDATA, which is what keeps a full-height column inside the
+    // NMI-to-pre-render window instead of spilling past it.
+    private static void EmitCommitStaticColumnBand(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
-        int rowTileWritesPerPhase,
-        int rowAttributePhase)
+        int bandStart,
+        NesPackedColumnCommit columnCommit)
     {
-        var invalid = builder.CreateLabel("nes_packed_commit_invalid");
-        var column = builder.CreateLabel("nes_packed_commit_column");
-        var row = builder.CreateLabel("nes_packed_commit_row");
+        var slot1 = builder.CreateLabel("nes_packed_band_slot_1");
+        var slotReady = builder.CreateLabel("nes_packed_band_slot_ready");
+        var slot0Start = plan.Layout.EdgeSlots[0].Start;
+        var slotStride = checked((byte)(plan.Layout.EdgeSlots[1].Start - slot0Start));
+
+        EmitSetSelectedState(builder, NesPackedCameraRuntime.Committing);
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
+        builder.CompareImmediate(1);
+        builder.JumpIf(0xF0, slot1);
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(slotReady);
+        builder.Label(slot1);
+        builder.LoadAImmediate(slotStride);
+        builder.Label(slotReady);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
+
+        builder.LoadAAbsolute(0x2002); // Reset the shared PPUSCROLL/PPUADDR write latch.
+        builder.LoadAImmediate(0x84);  // NMI enabled, PPUDATA increments vertically by 32.
+        builder.StoreAAbsolute(0x2000);
+
+        var staged = 0;
+        var cursor = bandStart;
+        while (staged < columnCommit.Length)
+        {
+            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
+            var segment = Math.Min(
+                columnCommit.Length - staged,
+                nameTableTop + NesPackedCameraRuntime.NameTableRows - cursor);
+            EmitSetPpuTileAddressForRow(builder, cursor, $"nes_packed_band_tiles_{cursor}");
+            builder.LoadXZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
+            for (var offset = 0; offset < segment; offset++)
+            {
+                builder.LoadAAbsoluteX(checked((ushort)(slot0Start + staged + offset)));
+                builder.StoreAAbsolute(0x2007);
+            }
+
+            staged += segment;
+            cursor = (cursor + segment) % NesPackedCameraRuntime.FourScreenRows;
+        }
+
+        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+
+        // Each tile PPUADDR pair leaves the shared PPUSCROLL/PPUADDR latch in its
+        // first-write phase, so the attribute stream can continue without a
+        // second PPUSTATUS read.
+        builder.LoadAImmediate(0x80);  // Restore horizontal PPUDATA increment before sparse attributes.
+        builder.StoreAAbsolute(0x2000);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.AndImmediate(0x0F);
+        builder.PushA();
+        builder.AndImmediate(0x07);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.PullA();
+        builder.AndImmediate(0x08);
+        builder.ShiftRightA();
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+
+        var attributeIndex = 0;
+        var covered = 0;
+        cursor = bandStart;
+        while (covered < columnCommit.Length)
+        {
+            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
+            var groupEnd = Math.Min(
+                nameTableTop + NesPackedCameraRuntime.NameTableRows,
+                nameTableTop + (cursor - nameTableTop) / 4 * 4 + 4);
+            builder.LoadXImmediate(checked((byte)cursor));
+            builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressHighLabel);
+            builder.ClearCarry();
+            builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+            builder.StoreAAbsolute(0x2006);
+            builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressLowLabel);
+            builder.ClearCarry();
+            builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+            builder.StoreAAbsolute(0x2006);
+            builder.LoadXZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
+            builder.LoadAAbsoluteX(
+                checked((ushort)(slot0Start + NesPackedCameraRuntime.AttributeStagingOffset + attributeIndex)));
+            builder.StoreAAbsolute(0x2007);
+
+            attributeIndex++;
+            covered += groupEnd - cursor;
+            cursor = groupEnd % NesPackedCameraRuntime.FourScreenRows;
+        }
+
+        builder.LoadAImmediate(checked((byte)attributeIndex));
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+
+        EmitCopyFrameToSelectedMetadata(builder, resident: false, commit: true);
+        EmitSetSelectedState(builder, NesPackedCameraRuntime.Released);
+        EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.CommitCount);
+        EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.ReleaseCount);
+        builder.LoadAImmediate(NesPackedCameraRuntime.Row);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.NextAxis);
+        EmitClearPendingAxis(builder, NesPackedCameraRuntime.Column);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
+        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.Return();
+    }
+
+    // Same PPUADDR pair as the camera-relative path, but the nametable row is a constant.
+    private static void EmitSetPpuTileAddressForRow(PrgBuilder builder, int row, string labelPrefix)
+    {
+        var leftNameTable = builder.CreateLabel($"{labelPrefix}_left_nt");
+        var highReady = builder.CreateLabel($"{labelPrefix}_high_ready");
+        builder.LoadXImmediate(checked((byte)row));
+        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressHighLabel);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.CompareImmediate(32);
+        builder.JumpIf(0x90, leftNameTable);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.ClearCarry();
+        builder.AddImmediate(4);
+        builder.JumpAbsolute(highReady);
+        builder.Label(leftNameTable);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.Label(highReady);
+        builder.StoreAAbsolute(0x2006);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.AndImmediate(0x1F);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.LoadXImmediate(checked((byte)row));
+        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressLowLabel);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.StoreAAbsolute(0x2006);
+    }
+
+    private static void EmitCommitCameraRelativeColumn(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        NesPackedColumnCommit columnCommit)
+    {
         var slot1Payload = builder.CreateLabel("nes_packed_commit_slot_1_payload");
         var payloadReady = builder.CreateLabel("nes_packed_commit_payload_ready");
         var columnSegment = builder.CreateLabel("nes_packed_commit_column_segment");
@@ -113,29 +376,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var columnAttributes = builder.CreateLabel("nes_packed_commit_column_attributes");
         var columnAttributeLoop = builder.CreateLabel("nes_packed_commit_column_attribute_loop");
         var columnRelease = builder.CreateLabel("nes_packed_commit_column_release");
-        var rowSlot1Payload = builder.CreateLabel("nes_packed_row_slot_1_payload");
-        var rowPayloadReady = builder.CreateLabel("nes_packed_row_payload_ready");
-        var rowSlot1Phase = builder.CreateLabel("nes_packed_row_slot_1_phase");
-        var rowPhaseReady = builder.CreateLabel("nes_packed_row_phase_ready");
-        var rowAttributes = builder.CreateLabel("nes_packed_row_attributes");
-        var rowTileLoop = builder.CreateLabel("nes_packed_row_tile_loop");
-        var rowPhaseDone = builder.CreateLabel("nes_packed_row_phase_done");
-        var rowAttributeLoop = builder.CreateLabel("nes_packed_row_attribute_loop");
-        var rowRelease = builder.CreateLabel("nes_packed_row_release");
 
-        builder.Label(NesRomBuilder.WorldPackCommitEdgeLabel);
-        EmitSelectSlotForCommit(builder, invalid);
-        EmitLoadPendingExpectedTags(builder);
-        EmitValidateSelectedSlot(builder, invalid);
-        EmitValidatePayloadLength(builder, invalid);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
-        builder.CompareImmediate(NesPackedCameraRuntime.Column);
-        builder.JumpIf(0xF0, column);
-        builder.CompareImmediate(NesPackedCameraRuntime.Row);
-        builder.JumpIf(0xF0, row);
-        builder.JumpAbsolute(invalid);
-
-        builder.Label(column);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Committing);
         builder.LoadAImmediate(1);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
@@ -223,16 +464,10 @@ internal static class NesPackedCameraRuntimeEmitter
         // prevents the final attribute byte from reaching the pre-render line.
         builder.LoadAImmediate(0x80);  // Restore horizontal PPUDATA increment before sparse attributes.
         builder.StoreAAbsolute(0x2000);
-        // Attributes are staged at a fixed +32 offset even when a short world
-        // column streams fewer than 32 tile rows.
-        builder.LoadYImmediate(32);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-        builder.AndImmediate(0x03);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-        builder.AddImmediate(3);
-        builder.ShiftRightA();
-        builder.ShiftRightA();
+        // Attributes are staged at a fixed offset past the widest column payload
+        // even when a short world column streams fewer tile rows.
+        builder.LoadYImmediate(NesPackedCameraRuntime.AttributeStagingOffset);
+        EmitLoadColumnAttributeCount(builder, columnCommit);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
@@ -255,13 +490,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.StoreAAbsolute(0x2007);
         builder.IncrementY();
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.ClearCarry();
-        builder.AddImmediate(4);
-        builder.CompareImmediate(60);
-        builder.JumpIf(0x90, columnRelease);
-        builder.SetCarry();
-        builder.SubtractImmediate(60);
+        EmitAdvanceColumnAttributeCursor(builder, columnCommit, columnRelease);
         builder.Label(columnRelease);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
         builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
@@ -279,6 +508,50 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
         builder.LoadAImmediate((byte)NesWorldPackResult.Success);
         builder.Return();
+
+    }
+
+    private static void EmitCommitEdge(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        int rowTileWritesPerPhase,
+        int rowAttributePhase,
+        NesPackedColumnCommit columnCommit)
+    {
+        var invalid = builder.CreateLabel("nes_packed_commit_invalid");
+        var column = builder.CreateLabel("nes_packed_commit_column");
+        var row = builder.CreateLabel("nes_packed_commit_row");
+        var rowSlot1Payload = builder.CreateLabel("nes_packed_row_slot_1_payload");
+        var rowPayloadReady = builder.CreateLabel("nes_packed_row_payload_ready");
+        var rowSlot1Phase = builder.CreateLabel("nes_packed_row_slot_1_phase");
+        var rowPhaseReady = builder.CreateLabel("nes_packed_row_phase_ready");
+        var rowAttributes = builder.CreateLabel("nes_packed_row_attributes");
+        var rowTileLoop = builder.CreateLabel("nes_packed_row_tile_loop");
+        var rowPhaseDone = builder.CreateLabel("nes_packed_row_phase_done");
+        var rowAttributeLoop = builder.CreateLabel("nes_packed_row_attribute_loop");
+        var rowRelease = builder.CreateLabel("nes_packed_row_release");
+
+        builder.Label(NesRomBuilder.WorldPackCommitEdgeLabel);
+        EmitSelectSlotForCommit(builder, invalid);
+        EmitLoadPendingExpectedTags(builder);
+        EmitValidateSelectedSlot(builder, invalid);
+        EmitValidatePayloadLength(builder, invalid);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.CompareImmediate(NesPackedCameraRuntime.Column);
+        builder.JumpIf(0xF0, column);
+        builder.CompareImmediate(NesPackedCameraRuntime.Row);
+        builder.JumpIf(0xF0, row);
+        builder.JumpAbsolute(invalid);
+
+        builder.Label(column);
+        if (columnCommit.FixedStart is { } bandStart)
+        {
+            EmitCommitStaticColumnBand(builder, plan, bandStart, columnCommit);
+        }
+        else
+        {
+            EmitCommitCameraRelativeColumn(builder, plan, new NesPackedColumnCommit(null, columnCommit.Length));
+        }
 
         builder.Label(row);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Committing);
@@ -348,7 +621,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Return();
 
         builder.Label(rowAttributes);
-        builder.LoadAImmediate(32);
+        builder.LoadAImmediate(NesPackedCameraRuntime.AttributeStagingOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
         builder.AndImmediate(0x03);
@@ -585,7 +858,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpIf(0xD0, invalid);
     }
 
-    private static void EmitPrepareEdge(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    private static void EmitPrepareEdge(PrgBuilder builder, NesWorldPackRuntimePlan plan, NesPackedColumnCommit columnCommit)
     {
         var selectSlot0 = builder.CreateLabel("nes_packed_edge_select_slot_0");
         var selectSlot1 = builder.CreateLabel("nes_packed_edge_select_slot_1");
@@ -732,7 +1005,8 @@ internal static class NesPackedCameraRuntimeEmitter
 
         builder.Label(columnAdvance);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
-        builder.AndImmediate(0x07);
+        builder.AndImmediate(checked((byte)(
+            NesPackedCameraRuntime.ColumnPrepareSliceCells(columnCommit.Length) - 1)));
         builder.JumpIf(0xF0, columnSlicePending);
         EmitAdvancePreparedColumnCoordinate(builder, plan.Pack.Descriptor, plan.UsesFastLookup);
         builder.Label(columnLookup);
@@ -740,7 +1014,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(store);
 
         builder.Label(attributes);
-        EmitPrepareAttributes(builder, plan);
+        EmitPrepareAttributes(builder, plan, columnCommit);
         builder.JumpAbsolute(success);
 
         builder.Label(columnSlicePending);
@@ -804,6 +1078,8 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PrefetchedColumnDirection);
     }
 
+    // The bound is the edge slot capacity, not the configured band: a request is rejected
+    // only when it cannot physically be staged.
     private static void EmitValidatePayloadLength(PrgBuilder builder, string invalid)
     {
         var column = builder.CreateLabel("nes_packed_payload_column");
@@ -812,14 +1088,14 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.CompareImmediate(NesPackedCameraRuntime.Column);
         builder.JumpIf(0xF0, column);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-        builder.CompareImmediate(32);
+        builder.CompareImmediate(NesPackedCameraRuntime.RowPayloadLength);
         builder.JumpIf(0xD0, invalid);
         builder.JumpAbsolute(done);
 
         builder.Label(column);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
         builder.JumpIf(0xF0, invalid);
-        builder.CompareImmediate(33);
+        builder.CompareImmediate(NesPackedCameraRuntime.MaximumColumnPayloadLength + 1);
         builder.JumpIf(0xB0, invalid);
         builder.Label(done);
     }
@@ -1011,7 +1287,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(done);
     }
 
-    private static void EmitPrepareAttributes(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    private static void EmitPrepareAttributes(PrgBuilder builder, NesWorldPackRuntimePlan plan, NesPackedColumnCommit columnCommit)
     {
         var coordinatesReady = builder.CreateLabel("nes_packed_attrs_coordinates_ready");
         var multiplyLoop = builder.CreateLabel("nes_packed_attrs_multiply_loop");
@@ -1069,15 +1345,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(multiplyLoop);
 
         builder.Label(multiplyDone);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
-        builder.AndImmediate(0x03);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-        builder.AddImmediate(3);
-        builder.ShiftRightA();
-        builder.ShiftRightA();
+        EmitLoadAxisAttributeCount(builder, columnCommit);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
-        builder.LoadAImmediate(32);
+        builder.LoadAImmediate(NesPackedCameraRuntime.AttributeStagingOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
 
         builder.Label(copyLoop);

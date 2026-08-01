@@ -294,8 +294,8 @@ internal static class NesRuntimeMemoryLayout
 
     internal static class WorldPack
     {
-        internal const int CurrentStagingBytes = 338;
-        internal const int MaximumStagingBytes = 594;
+        internal const int CurrentStagingBytes = 358;
+        internal const int MaximumStagingBytes = 614;
         internal const ushort StagingStart = 0x0400;
         internal const byte PointerLow = 0xE8;
         internal const byte PointerHigh = 0xE9;

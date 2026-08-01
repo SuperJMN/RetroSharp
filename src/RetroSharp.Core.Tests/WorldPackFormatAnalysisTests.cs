@@ -81,15 +81,15 @@ public sealed class WorldPackFormatAnalysisTests
 
         var decodedChunkSlotsForOneByteIds = eightByEight.DecodedSlotBytes;
         Assert.Equal(298, decodedChunkSlotsForOneByteIds + 2 * 21);
-        Assert.Equal(338, decodedChunkSlotsForOneByteIds + 2 * (32 + 9));
+        Assert.Equal(358, decodedChunkSlotsForOneByteIds + 2 * (40 + 11));
         Assert.Equal(554, decodedChunkSlotsForOneByteIds * 2 + 2 * 21);
-        Assert.Equal(594, decodedChunkSlotsForOneByteIds * 2 + 2 * (32 + 9));
+        Assert.Equal(614, decodedChunkSlotsForOneByteIds * 2 + 2 * (40 + 11));
 
         var adr = File.ReadAllText(RepositoryFile("docs/WorldPackFormatV1.md"));
         Assert.Contains("7,712", adr, StringComparison.Ordinal);
         Assert.Contains("7,924", adr, StringComparison.Ordinal);
         Assert.Contains("298 bytes", adr, StringComparison.Ordinal);
-        Assert.Contains("338 bytes", adr, StringComparison.Ordinal);
+        Assert.Contains("358 bytes", adr, StringComparison.Ordinal);
         Assert.Contains("21,722", adr, StringComparison.Ordinal);
         Assert.Contains("13,358", adr, StringComparison.Ordinal);
         Assert.Contains("16,414", adr, StringComparison.Ordinal);

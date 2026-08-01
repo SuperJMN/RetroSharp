@@ -1,0 +1,34 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-stage1-diagonal-speed-sweep-nes-functional",
+  "sampleId": "tiled-stage1-diagonal-speed-sweep",
+  "target": "nes",
+  "warmUpFrames": 840,
+  "observationFrames": 80,
+  "inputs": [],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "797baa3857c1b3522538096f50e48d3dfb51fb63",
+    "hardwareTimingRationale": "NTSC NES provides one physical frame per gameplay tick. Diagonal packed-camera requests must keep both streamed edges coherent while all PPU publication remains inside VBlank.",
+    "productionTraceRationale": "The exact production ROM starts at (0, 0), waits 120 VBlanks, and then advances one pixel every two VBlanks while bouncing through Y=0..80. After replaying the complete lead-in, the retained frame 841..920 window covers the original first mismatch at frame 849 and the rest of the third downward traversal, while comparing every visible tile and palette against the authored stage1.tmx map."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

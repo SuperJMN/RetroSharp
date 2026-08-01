@@ -342,8 +342,8 @@ without changing the pack topology.
 | Two visual slots + two collision slots | 256 bytes | 512 bytes |
 | Two Game Boy edge slots | 42 bytes | 42 bytes |
 | **Game Boy total** | **298 bytes** | **554 bytes** |
-| Two NES edge slots | 82 bytes | 82 bytes |
-| **NES total** | **338 bytes** | **594 bytes** |
+| Two NES edge slots | 102 bytes | 102 bytes |
+| **NES total** | **358 bytes** | **614 bytes** |
 
 The totals are the complete pack payload/edge buffers. Small target-owned
 control fields (slot state/progress plus the two-byte logical edge coordinates

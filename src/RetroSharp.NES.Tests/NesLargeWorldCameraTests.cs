@@ -262,7 +262,7 @@ public sealed class NesLargeWorldCameraTests
         var attributeColumn = 53 / 4;
         Assert.Equal(
             Enumerable.Range(0, 8).Select(row => runtime.Attributes.Bytes[row * runtime.Attributes.Columns + attributeColumn]),
-            Enumerable.Range(0, 8).Select(index => cpu.Ram((ushort)(edge.Start + 32 + index))));
+            Enumerable.Range(0, 8).Select(index => cpu.Ram((ushort)(edge.Start + NesPackedCameraRuntime.AttributeStagingOffset + index))));
     }
 
     [Fact]
@@ -346,7 +346,7 @@ public sealed class NesLargeWorldCameraTests
         }
         Assert.Equal(
             Enumerable.Repeat((byte)0x55, 9),
-            Enumerable.Range(0, 9).Select(index => cpu.Ram((ushort)(edge.Start + 32 + index))));
+            Enumerable.Range(0, 9).Select(index => cpu.Ram((ushort)(edge.Start + NesPackedCameraRuntime.AttributeStagingOffset + index))));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
         var prepareBankWrites = cpu.R6BankWrites.Skip(bankWritesBeforePrepare).ToArray();
@@ -422,7 +422,8 @@ public sealed class NesLargeWorldCameraTests
             expectedAttributeAddresses.Select(address => (ushort?)address),
             ppuDataWrites.Skip(32).Select(write => write.VramAddress));
         Assert.Equal(
-            Enumerable.Range(32, 8).Select(index => cpu.Ram((ushort)(runtime.Layout.EdgeSlots[0].Start + index))),
+            Enumerable.Range(NesPackedCameraRuntime.AttributeStagingOffset, 8)
+                .Select(index => cpu.Ram((ushort)(runtime.Layout.EdgeSlots[0].Start + index))),
             ppuDataWrites.Skip(32).Select(write => write.Value));
         Assert.Equal(new byte[] { 0x84, 0x80 }, cpu.PpuWrites.Where(write => write.Register == 0x2000).Select(write => write.Value));
         Assert.Single(cpu.PpuStatusReadCycles);
@@ -618,7 +619,7 @@ public sealed class NesLargeWorldCameraTests
         var edge = runtime.Layout.EdgeSlots[0];
         for (var attribute = 0; attribute < 9; attribute++)
         {
-            cpu.SetRam((ushort)(edge.Start + 32 + attribute), (byte)(0x10 + attribute));
+            cpu.SetRam((ushort)(edge.Start + NesPackedCameraRuntime.AttributeStagingOffset + attribute), (byte)(0x10 + attribute));
         }
         var bankWritesBeforeCommit = cpu.R6BankWrites.Count;
 
@@ -729,7 +730,7 @@ public sealed class NesLargeWorldCameraTests
         for (var index = 0; index < shortColumnAttributes.Length; index++)
         {
             cpu.SetRam((ushort)(runtime.Layout.EdgeSlots[0].Start + 8 + index), (byte)(0xE1 + index));
-            cpu.SetRam((ushort)(runtime.Layout.EdgeSlots[0].Start + 32 + index), shortColumnAttributes[index]);
+            cpu.SetRam((ushort)(runtime.Layout.EdgeSlots[0].Start + NesPackedCameraRuntime.AttributeStagingOffset + index), shortColumnAttributes[index]);
         }
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
@@ -846,12 +847,17 @@ public sealed class NesLargeWorldCameraTests
                      && (write.Value & Column) != 0
                      && write.Cycle >= latchWrite.Cycle);
         Assert.Equal(8, cpu.ScrollX);
-        Assert.Equal(1, cpu.Ram(RequestCount));
-        Assert.Equal(1, cpu.Ram(PrepareCount));
         Assert.Equal(1, cpu.Ram(ResidentCount));
         Assert.Equal(1, cpu.Ram(CommitCount));
         Assert.Equal(1, cpu.Ram(ReleaseCount));
         Assert.Equal(0, cpu.Ram(PendingAxes));
+
+        // Committing a full 40-row band costs one more frame than a 30-row window, so the
+        // camera sits at fine X seven for one Apply and legitimately starts prefetching the
+        // next column. Requests may therefore run one in-flight edge ahead of residency, but
+        // never further, and every request must reach a prepare.
+        Assert.Equal(cpu.Ram(RequestCount), cpu.Ram(PrepareCount));
+        Assert.InRange(cpu.Ram(RequestCount) - cpu.Ram(ResidentCount), 0, 1);
     }
 
     [Fact]
@@ -901,7 +907,7 @@ public sealed class NesLargeWorldCameraTests
 
     [Theory]
     [InlineData(Column, 0)]
-    [InlineData(Column, 33)]
+    [InlineData(Column, (byte)(NesPackedCameraRuntime.MaximumColumnPayloadLength + 1))]
     [InlineData(Row, 31)]
     public void Packed_prepare_rejects_malformed_payload_lengths_before_claiming_a_slot(byte axis, byte payloadLength)
     {
@@ -1161,17 +1167,16 @@ public sealed class NesLargeWorldCameraTests
 
     private static NesRoutineResult[] RunResumableColumnPrepare(NesTestCpu cpu, ushort prepareEntry)
     {
-        var slices = Enumerable.Range(0, 4)
+        var calls = NesPackedCameraRuntime.ColumnPrepareCalls(cpu.Ram(CommitPayloadLength));
+        var slices = Enumerable.Range(0, calls)
             .Select(_ => cpu.RunRoutine(prepareEntry, maxInstructions: 5_000_000))
             .ToArray();
         Assert.Equal(
-            new byte[]
-            {
-                NesPackedCameraRuntime.PreparePending,
-                NesPackedCameraRuntime.PreparePending,
-                NesPackedCameraRuntime.PreparePending,
-                (byte)NesWorldPackResult.Success,
-            },
+            Enumerable.Range(0, calls)
+                .Select(index => index == calls - 1
+                    ? (byte)NesWorldPackResult.Success
+                    : NesPackedCameraRuntime.PreparePending)
+                .ToArray(),
             slices.Select(slice => slice.A).ToArray());
         return slices;
     }

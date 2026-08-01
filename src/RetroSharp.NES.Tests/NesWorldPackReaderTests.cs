@@ -27,7 +27,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.Equal(2, layout.EdgeSlots.Count);
         Assert.All(layout.VisualSlots, slot => Assert.Equal(64 * visualIdBytes, slot.Length));
         Assert.All(layout.CollisionSlots, slot => Assert.Equal(64 * collisionIdBytes, slot.Length));
-        Assert.All(layout.EdgeSlots, slot => Assert.Equal(41, slot.Length));
+        Assert.All(layout.EdgeSlots, slot => Assert.Equal(NesPackedCameraBudget.EdgeSlotBytes, slot.Length));
         Assert.Equal(expectedBytes, layout.TotalBytes);
         Assert.All(slots.Zip(slots.Skip(1)), pair => Assert.True(pair.First.EndExclusive <= pair.Second.Start));
         Assert.InRange(slots[0].Start, NesRuntimeMemoryLayout.WorldPackStaging.Start, NesRuntimeMemoryLayout.WorldPackStaging.EndInclusive);

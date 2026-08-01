@@ -18,6 +18,54 @@ internal readonly record struct NesCameraConfig(
     internal bool CanStreamColumns => UseFourScreenNametables ? MapWidth > 64 : MapWidth > 32;
 
     internal bool CanStreamRows => UseFourScreenNametables && MapHeight > 60;
+
+    // A band that starts at the top of the buffer and fits the hardware height keeps a
+    // static world-row-to-nametable-row mapping: vertical scrolling never invalidates a
+    // cell, so rows are never streamed and every streamed column must instead restore the
+    // whole band. Taller bands keep the camera-relative window and stream both axes.
+    internal bool UsesStaticColumnBand =>
+        !CanStreamRows
+        && StreamY == 0
+        && StreamHeight <= NesPackedCameraRuntime.MaximumColumnPayloadLength;
+
+    internal int ColumnPayloadLength => UsesStaticColumnBand
+        ? StreamHeight
+        : Math.Min(NesTarget.Capabilities.ScreenTiles.Height, StreamHeight);
+
+    internal NesPackedColumnCommit ColumnCommit => new(
+        UsesStaticColumnBand ? StreamY : null,
+        ColumnPayloadLength);
+}
+
+// Shape of a packed background column commit. A static band publishes a fixed nametable
+// row range, so its attribute grouping is known while emitting; otherwise the commit
+// follows the camera row at run time.
+internal readonly record struct NesPackedColumnCommit(int? FixedStart, int Length)
+{
+    internal int AttributeCount => FixedStart is { } start
+        ? PhysicalAttributeRows(start, Length)
+        : (3 + Length + 3) / 4;
+
+    // NES nametables restart their attribute grouping every 30 tile rows, so a band that
+    // crosses that boundary needs one extra partial group instead of a global row/4 split.
+    internal static int PhysicalAttributeRows(int start, int length)
+    {
+        var rows = 0;
+        var cursor = start;
+        var remaining = length;
+        while (remaining > 0)
+        {
+            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
+            var groupEnd = Math.Min(
+                nameTableTop + NesPackedCameraRuntime.NameTableRows,
+                nameTableTop + (cursor - nameTableTop) / 4 * 4 + 4);
+            rows++;
+            remaining -= groupEnd - cursor;
+            cursor = groupEnd % NesPackedCameraRuntime.FourScreenRows;
+        }
+
+        return rows;
+    }
 }
 
 internal enum NesPendingCameraStream : byte
@@ -63,6 +111,7 @@ internal sealed class NesPhysicalFrameScheduler
     private readonly NesFramePlan plan;
     private readonly NesOamPublicationSchedule? oamPublicationSchedule;
     private readonly NesStagedFrameWork? cameraRowStaging;
+    private NesPackedColumnCommit? packedColumnCommit;
 
     internal NesPhysicalFrameScheduler(PrgBuilder builder, NesFramePlan plan)
     {
@@ -265,6 +314,11 @@ internal sealed class NesPhysicalFrameScheduler
         builder.Label(doneLabel);
     }
 
+    internal void ConfigurePackedColumnBand(NesCameraConfig config)
+    {
+        packedColumnCommit = config.ColumnCommit;
+    }
+
     internal void EmitPackedCameraRuntime(NesWorldPackRuntimePlan runtimePlan)
     {
         ArgumentNullException.ThrowIfNull(runtimePlan);
@@ -272,7 +326,8 @@ internal sealed class NesPhysicalFrameScheduler
             builder,
             runtimePlan,
             plan.CameraRowTileWritesPerFrame,
-            CameraRowAttributePhase);
+            CameraRowAttributePhase,
+            packedColumnCommit ?? new NesPackedColumnCommit(null, NesTarget.Capabilities.ScreenTiles.Height));
     }
 
     private int CameraRowAttributePhase =>

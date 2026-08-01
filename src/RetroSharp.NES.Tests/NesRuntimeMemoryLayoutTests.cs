@@ -24,7 +24,7 @@ public sealed class NesRuntimeMemoryLayoutTests
                 ("mapper bank shadows", (ushort)0x0324, 0x0002),
                 ("WorldPack scalar state", (ushort)0x0326, 0x0048),
                 ("packed camera and WorldPack auxiliary state", (ushort)0x036E, 0x0092),
-                ("WorldPack staging", (ushort)0x0400, 0x0252),
+                ("WorldPack staging", (ushort)0x0400, 0x0266),
                 ("CPU RAM mirror 1", (ushort)0x0800, 0x0800),
                 ("CPU RAM mirror 2", (ushort)0x1000, 0x0800),
                 ("CPU RAM mirror 3", (ushort)0x1800, 0x0800),
@@ -111,11 +111,11 @@ public sealed class NesRuntimeMemoryLayoutTests
         var maximum = NesRuntimeMemoryLayout.ValidateWorldPackStagingBytes(
             NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
 
-        Assert.Equal(338, current.Length);
-        Assert.Equal((ushort)0x0651, maximum.EndInclusive);
+        Assert.Equal(358, current.Length);
+        Assert.Equal((ushort)0x0665, maximum.EndInclusive);
         var exception = Assert.Throws<InvalidOperationException>(() =>
             NesRuntimeMemoryLayout.ValidateWorldPackStagingBytes(
                 NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes + 1));
-        Assert.Contains("1..594 bytes", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("1..614 bytes", exception.Message, StringComparison.Ordinal);
     }
 }
