@@ -23,25 +23,15 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitCopyWordOrZeroHigh(GameBoyRuntimeMemoryLayout.Camera.TopSourceRow, null, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         if (ProgramQueuesDiagonalStreaming())
         {
-            var shiftUp = builder.CreateLabel("packed_camera_column_vertical_shift_up");
-            var shiftDown = builder.CreateLabel("packed_camera_column_vertical_shift_down");
-            var startReady = builder.CreateLabel("packed_camera_column_vertical_start_ready");
-            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
-            builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
-            builder.JumpAbsolute(0xCA, shiftUp);
-            builder.CompareImmediate(GameBoyPackedCameraRuntime.Positive);
-            builder.JumpAbsolute(0xCA, shiftDown);
-            builder.JumpAbsolute(startReady);
-            // Match the column's vertical span to the row that the diagonal prefetch will expose.
-            // Otherwise the bottom-right or top-right corner falls outside both prepared edges.
-            builder.Label(shiftUp);
-            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
-            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
-            builder.JumpAbsolute(startReady);
-            builder.Label(shiftDown);
-            EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
-            EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
-            builder.Label(startReady);
+            // A diagonal column becomes visible a few frames after it is prepared, so the camera can
+            // cross up to DiagonalColumnRowSlack rows in either direction meanwhile. Anchoring the
+            // span at the preparation-time top row leaves zero slack and strands a stale tile at the
+            // leading corner, so anchor the span DiagonalColumnRowSlack rows above it instead.
+            for (var i = 0; i < GameBoyWorldPackRuntimeEmitter.DiagonalColumnRowSlack; i++)
+            {
+                EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
+                EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
+            }
         }
 
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);

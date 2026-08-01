@@ -177,8 +177,13 @@ internal sealed record GameBoyWorldPackRuntimePlan(
 internal static class GameBoyWorldPackRuntimeEmitter
 {
     private const int PackedColumnPayloadTiles = 19;
-    // Keep both column endpoints around the prefetched diagonal row in the same resident edge.
-    private const int PackedColumnPayloadTilesWithPrefetchedRow = PackedColumnPayloadTiles + 2;
+    // A diagonal column is prepared a few frames before it becomes visible, so the camera can cross
+    // up to DiagonalColumnRowSlack rows in either direction meanwhile. The span is anchored that
+    // many rows above the preparation-time top row and widened by twice that, so both endpoints
+    // stay resident whichever way the camera drifts.
+    internal const int DiagonalColumnRowSlack = 1;
+    private const int PackedColumnPayloadTilesWithVerticalSlack =
+        PackedColumnPayloadTiles + (2 * DiagonalColumnRowSlack);
 
     private sealed record DecoderLabels(
         string Raw,
@@ -272,7 +277,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
             }
 
             GameBoyPackedCameraRuntimeEmitter.EmitWaitIfInVBlankRoutine(builder, enablePackedAudioService);
-            EmitEdgePreparationRuntime(builder, plan, layout, enablePackedAudioService);
+            EmitEdgePreparationRuntime(builder, plan, layout, enablePackedAudioService, enableDiagonalVisualCache);
         }
         builder.Label(runtimeDirectory);
         builder.Emit(plan.RuntimeDirectoryBytes);
@@ -282,7 +287,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
         GbBuilder builder,
         GameBoyWorldPackRuntimePlan plan,
         GameBoyRomLayout layout,
-        bool enablePackedAudioService)
+        bool enablePackedAudioService,
+        bool diagonalStreaming)
     {
         var selectSlot0 = builder.CreateLabel("worldpack_edge_select_slot_0");
         var selectSlot1 = builder.CreateLabel("worldpack_edge_select_slot_1");
@@ -349,7 +355,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 0,
                 plan.Pack.Descriptor.HardwareHeight,
                 columnPlaneBounds);
-            EmitLoadPackedColumnPayloadLength(builder);
+            EmitLoadPackedColumnPayloadLength(builder, diagonalStreaming);
             builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
             EmitStoreSelectedSlotPayloadLength(builder);
             EmitColumnPlaneCopy(
@@ -357,6 +363,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 plan.Pack.Descriptor.HardwareHeight,
                 columnPlanePlacement,
                 enablePackedAudioService,
+                diagonalStreaming,
                 success);
             builder.Label(columnPlaneBounds);
             builder.Emit(0x06, (byte)GameBoyWorldPackResult.BoundsError);
@@ -409,7 +416,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var rowLength = builder.CreateLabel("worldpack_edge_row_length");
         var lengthReady = builder.CreateLabel("worldpack_edge_length_ready");
         builder.JumpAbsolute(0xCA, rowLength);
-        EmitLoadPackedColumnPayloadLength(builder);
+        EmitLoadPackedColumnPayloadLength(builder, diagonalStreaming);
         builder.JumpAbsolute(lengthReady);
         builder.Label(rowLength);
         builder.LoadAImmediate(21);
@@ -536,6 +543,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         int hardwareHeight,
         GameBoyWorldPackColumnPlanePlacement placement,
         bool enablePackedAudioService,
+        bool diagonalStreaming,
         string success)
     {
         var noWrap = builder.CreateLabel("worldpack_column_plane_no_wrap");
@@ -543,7 +551,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var countsReady = builder.CreateLabel("worldpack_column_plane_counts_ready");
         var noSecondBlock = builder.CreateLabel("worldpack_column_plane_no_second_block");
         var copied = builder.CreateLabel("worldpack_column_plane_copied");
-        var lastNonWrappingStartRow = Math.Max(0, hardwareHeight - PackedColumnPayloadTilesWithPrefetchedRow);
+        var maximumPayloadTiles = MaximumColumnPayloadTiles(diagonalStreaming);
+        var lastNonWrappingStartRow = Math.Max(0, hardwareHeight - maximumPayloadTiles);
 
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         builder.LoadCFromA();
@@ -568,7 +577,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadAImmediate(placement.Bank);
         GameBoyRomBuilder.EmitSelectRomBankFromA(builder);
 
-        if (hardwareHeight < PackedColumnPayloadTilesWithPrefetchedRow)
+        if (hardwareHeight < maximumPayloadTiles)
         {
             builder.JumpAbsolute(wraps);
         }
@@ -728,19 +737,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(ready);
     }
 
-    private static void EmitLoadPackedColumnPayloadLength(GbBuilder builder)
-    {
-        var normal = builder.CreateLabel("worldpack_column_normal_payload_length");
-        var ready = builder.CreateLabel("worldpack_column_payload_length_ready");
-        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, normal);
-        builder.LoadAImmediate(PackedColumnPayloadTilesWithPrefetchedRow);
-        builder.JumpAbsolute(ready);
-        builder.Label(normal);
-        builder.LoadAImmediate(PackedColumnPayloadTiles);
-        builder.Label(ready);
-    }
+    internal static int MaximumColumnPayloadTiles(bool diagonalStreaming) =>
+        diagonalStreaming ? PackedColumnPayloadTilesWithVerticalSlack : PackedColumnPayloadTiles;
+
+    internal const int MaximumColumnPayloadTilesForDiagonal = PackedColumnPayloadTilesWithVerticalSlack;
+
+    private static void EmitLoadPackedColumnPayloadLength(GbBuilder builder, bool diagonalStreaming) =>
+        builder.LoadAImmediate(checked((byte)MaximumColumnPayloadTiles(diagonalStreaming)));
 
     private static void EmitAdvanceRowPlaneIterator(GbBuilder builder, int hardwareWidth)
     {
@@ -3943,7 +3946,7 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
     int TotalBytes)
 {
     private const int ChunkCells = 64;
-    private const int EdgeBytes = 21;
+    private const int EdgeBytes = 19 + (2 * GameBoyWorldPackRuntimeEmitter.DiagonalColumnRowSlack);
     internal const int CollisionMemoEntryBytes = 3;
     internal const int CollisionMemoEntryCount = 64;
 

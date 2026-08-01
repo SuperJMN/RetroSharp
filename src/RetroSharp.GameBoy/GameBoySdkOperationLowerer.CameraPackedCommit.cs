@@ -362,16 +362,16 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadAFromL();
             builder.AddAImmediate(32);
             builder.LoadLFromA();
-            builder.JumpAbsolute(0xD2, noCarry);
+            builder.JumpRelative(0x30, noCarry); // JR NC
             builder.Emit(0x24); // INC H
             builder.LoadAFromH();
             builder.CompareImmediate(0x9C);
-            builder.JumpAbsolute(0xC2, noWrap);
+            builder.JumpRelative(0x20, noWrap); // JR NZ
             builder.LoadHImmediate(0x98);
             builder.Label(noWrap);
             builder.Label(noCarry);
             builder.Emit(0x05); // DEC B
-            builder.JumpAbsolute(0xC2, loop);
+            builder.JumpRelative(0x20, loop); // JR NZ
             builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         }
         else

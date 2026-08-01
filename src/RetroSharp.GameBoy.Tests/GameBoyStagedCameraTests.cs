@@ -22,6 +22,12 @@ public sealed class GameBoyStagedCameraTests
     private const byte Positive = 2;
     private const byte Negative = 1;
 
+    // Diagonal programs stream a vertically slacked column so a row crossing between preparation
+    // and visibility cannot leave a stale tile at the top or bottom of the freshly entered column.
+    private const int DiagonalColumnRowSlack = GameBoyWorldPackRuntimeEmitter.DiagonalColumnRowSlack;
+    private const int DiagonalColumnPayloadTiles =
+        GameBoyWorldPackRuntimeEmitter.MaximumColumnPayloadTilesForDiagonal;
+
     [Fact]
     public void Resident_column_at_LY145_commits_in_the_current_vblank_without_losing_source_cadence()
     {
@@ -89,8 +95,8 @@ public sealed class GameBoyStagedCameraTests
         Assert.Equal(1, cpu.Wram(PackedCameraMemory.ResidentCount));
         Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
         Assert.Equal(1, cpu.Wram(PackedCameraMemory.ReleaseCount));
-        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
-        Assert.Equal(19, cpu.VramWrites.Count - vramWritesBefore);
+        Assert.Equal(DiagonalColumnPayloadTiles, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
+        Assert.Equal(DiagonalColumnPayloadTiles, cpu.VramWrites.Count - vramWritesBefore);
         Assert.All(cpu.VramWrites.Skip(vramWritesBefore), write =>
         {
             Assert.True(write.Applied);
@@ -110,7 +116,7 @@ public sealed class GameBoyStagedCameraTests
     [InlineData(255)]
     [InlineData(256)]
     [InlineData(311)]
-    public void Packed_column_plane_copies_nineteen_tiles_contiguously_with_wrapped_y_and_one_table_bank_selection(int worldX)
+    public void Packed_column_plane_copies_the_slacked_span_contiguously_with_wrapped_y_and_one_table_bank_selection(int worldX)
     {
         var directory = FullStage1ValidationFixture.Directory;
         const string source = """
@@ -170,7 +176,7 @@ public sealed class GameBoyStagedCameraTests
         cpu.SetWram(CameraMemory.TopBackgroundRow, 3);
         cpu.SetWram(PackedCameraMemory.WaitAudioEnabled, 0);
         cpu.SetWram(PackedCameraMemory.PreparedSlot, GameBoyPackedCameraRuntime.NoSlot);
-        // The rightward column edge is now prefetched mid-tile (fine-X >= 2), so start a couple of
+        // The rightward column edge is prefetched mid-tile, so start a couple of
         // pixels before the boundary with the prefetch latch cleared and let the walk cross it.
         cpu.SetWram(PackedCameraMemory.DiagonalColumnPrefetchLatch, 0);
         cpu.Held.Add("right");
@@ -180,16 +186,16 @@ public sealed class GameBoyStagedCameraTests
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ResidentCount, 1, 50_000_000);
         cpu.RunUntilWramEquals(PackedCameraMemory.PreparedSlot, 0, 50_000_000);
-        var expected = Enumerable.Range(0, 19)
-            .Select(offset => HardwareTileAt(canonical.Pack, worldX, (35 + offset) % 40))
+        var expected = Enumerable.Range(0, DiagonalColumnPayloadTiles)
+            .Select(offset => HardwareTileAt(canonical.Pack, worldX, (35 - DiagonalColumnRowSlack + offset + 40) % 40))
             .ToArray();
-        var payload = Enumerable.Range(0, 19)
+        var payload = Enumerable.Range(0, DiagonalColumnPayloadTiles)
             .Select(offset => cpu.Wram(checked((ushort)(plan.Layout.EdgeSlots[0].Start + offset))))
             .ToArray();
         var preparationBankWrites = cpu.RomBankWrites.Skip(bankWritesBefore).ToArray();
 
         Assert.Equal(expected, payload);
-        Assert.Equal(19, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.PayloadLengthOffset));
+        Assert.Equal(DiagonalColumnPayloadTiles, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.PayloadLengthOffset));
         Assert.True(
             preparationBankWrites.Count(write => write.SelectedBank == planeSegment.Bank) == 1,
             $"Expected one table-bank selection; writes={string.Join(",", preparationBankWrites.Select(write => $"{write.SelectedBank}@{write.ProgramCounter:X4}"))}.");
@@ -203,7 +209,7 @@ public sealed class GameBoyStagedCameraTests
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1, 50_000_000);
         Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
-        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
+        Assert.Equal(DiagonalColumnPayloadTiles, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
@@ -392,7 +398,7 @@ public sealed class GameBoyStagedCameraTests
         Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
         Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(8, cpu.Wram(0xC14F));
-        Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
+        Assert.Equal(DiagonalColumnPayloadTiles, cpu.VramWrites.Count - writesBeforeColumn);
         Assert.Equal(2, cpu.Wram(PackedCameraMemory.ResidentCount));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
         Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
