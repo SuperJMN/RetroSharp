@@ -80,6 +80,21 @@ public sealed class CrossTargetFrontendPreparationTests
             """
             import RetroSharp.Portable2D;
 
+            static class Viewport
+            {
+                const i16 Width = 32;
+            }
+
+            void Main() {
+                Video.Init();
+            }
+            """,
+            "'Viewport.Width' is a reserved constant provided by the target; remove the source declaration."
+        },
+        {
+            """
+            import RetroSharp.Portable2D;
+
             pure void draw() {
                 Video.Init();
             }
@@ -131,6 +146,38 @@ public sealed class CrossTargetFrontendPreparationTests
     }
 
     [Fact]
+    public void Target_viewport_constants_fold_to_the_screen_size_of_each_target()
+    {
+        const string source = """
+            import RetroSharp.Portable2D;
+
+            static class Follow
+            {
+                const i16 Left = Viewport.Width / 4;
+                const i16 Top = Viewport.Height / 4;
+            }
+
+            void Main() {
+                Video.Init();
+                World.Column(0, 1, 2);
+                World.Column(1, 2, 3);
+                World.Map(2, 0, 2);
+                Camera.Init(2, 0, 2);
+                while (true) {
+                    Video.WaitVBlank();
+                    let inside = Camera.ScreenAabbTiles(Follow.Left, Follow.Top, 8, 8, 1);
+                }
+            }
+            """;
+
+        AssertScreenAabbOrigin(GbCompiler.CollectSdkOperations(source), 40, 36);
+        AssertScreenAabbOrigin(NesCompiler.CollectSdkOperations(source), 64, 60);
+
+        _ = GbCompiler.CompileSource(source);
+        _ = NesCompiler.CompileSource(source);
+    }
+
+    [Fact]
     public void Window_hud_remains_a_target_specific_diagnostic_after_shared_preparation()
     {
         const string source = """
@@ -154,6 +201,13 @@ public sealed class CrossTargetFrontendPreparationTests
                 string.Equals(expected, exception.Message, StringComparison.Ordinal),
                 $"{entryPath} produced '{exception.Message}' instead of '{expected}'.");
         }
+    }
+
+    private static void AssertScreenAabbOrigin(IEnumerable<Sdk2DOperation> operations, int expectedX, int expectedY)
+    {
+        var query = Assert.Single(operations.OfType<Sdk2DOperation.CameraScreenAabbTiles>());
+        Assert.Equal(expectedX, Assert.IsType<SdkByteExpression.Constant>(query.ScreenX).Value);
+        Assert.Equal(expectedY, Assert.IsType<SdkByteExpression.Constant>(query.ScreenY).Value);
     }
 
     private static IReadOnlyList<(string Name, Action<string> Invoke)> EntryPaths()
