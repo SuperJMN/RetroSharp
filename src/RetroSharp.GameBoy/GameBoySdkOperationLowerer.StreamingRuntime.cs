@@ -91,12 +91,46 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.Emit(0xCB, 0x1B); // RR E
         }
 
+        EmitShiftDiagonalRowAnchorLeft(GameBoyWorldPackRuntimeEmitter.DiagonalRowColumnSlack);
         builder.LoadAFromE();
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.AndImmediate(31);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
         builder.LoadAFromD();
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
+    }
+
+    // The row payload carries GameBoyWorldPackRuntimeEmitter.DiagonalRowColumnSlack columns of slack on
+    // each side, so its anchor moves that far left. The world does not extend past column zero, and the
+    // camera cannot show anything left of it, so the anchor clamps there instead of wrapping.
+    private void EmitShiftDiagonalRowAnchorLeft(int slack)
+    {
+        var borrowSafe = builder.CreateLabel("packed_camera_row_anchor_borrow_safe");
+        var clampZero = builder.CreateLabel("packed_camera_row_anchor_clamp_zero");
+        var done = builder.CreateLabel("packed_camera_row_anchor_done");
+
+        builder.LoadAFromD();
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, borrowSafe); // JP NZ
+        builder.LoadAFromE();
+        builder.CompareImmediate(slack);
+        builder.JumpAbsolute(0xDA, clampZero); // JP C
+
+        builder.Label(borrowSafe);
+        builder.LoadAFromE();
+        builder.SubtractAImmediate(slack);
+        builder.LoadEFromA();
+        builder.JumpAbsolute(0xD2, done); // JP NC
+        builder.LoadAFromD();
+        builder.SubtractAImmediate(1);
+        builder.LoadDFromA();
+        builder.JumpAbsolute(done);
+
+        builder.Label(clampZero);
+        builder.XorA();
+        builder.LoadEFromA();
+        builder.LoadDFromA();
+        builder.Label(done);
     }
 
     private void EmitStoreAddressWithDeltaModulo(ushort source, int modulo, int delta, ushort target)

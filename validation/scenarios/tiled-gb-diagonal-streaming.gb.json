@@ -7,9 +7,9 @@
   "observationFrames": 360,
   "inputs": [],
   "checkpoints": [
-    { "id": "forward-diagonal-chunk-window", "frame": 160, "expectedSignals": { "user0": 152, "user1": 152, "user2": 1, "visibleCameraX": 151, "visibleCameraY": 151, "commitCount": 38 } },
-    { "id": "reversed-diagonal-window", "frame": 200, "expectedSignals": { "user0": 133, "user1": 133, "user2": 0, "visibleCameraX": 134, "visibleCameraY": 134, "commitCount": 49 } },
-    { "id": "origin-crossed-and-forward-again", "frame": 360, "expectedSignals": { "user0": 20, "user1": 20, "user2": 1, "visibleCameraX": 19, "visibleCameraY": 19, "commitCount": 87 } }
+    { "id": "forward-diagonal-chunk-window", "frame": 160, "expectedSignals": { "user0": 153, "user1": 153, "user2": 1, "visibleCameraX": 152, "visibleCameraY": 152, "commitCount": 38 } },
+    { "id": "reversed-diagonal-window", "frame": 200, "expectedSignals": { "user0": 130, "user1": 130, "user2": 0, "visibleCameraX": 131, "visibleCameraY": 131, "commitCount": 50 } },
+    { "id": "origin-crossed-and-forward-again", "frame": 360, "expectedSignals": { "user0": 25, "user1": 25, "user2": 1, "visibleCameraX": 24, "visibleCameraY": 24, "commitCount": 88 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

@@ -28,6 +28,16 @@ public sealed class GameBoyStagedCameraTests
     private const int DiagonalColumnPayloadTiles =
         GameBoyWorldPackRuntimeEmitter.MaximumColumnPayloadTilesForDiagonal;
 
+    // Diagonal rows carry the mirrored horizontal slack so a column crossing between preparation and
+    // visibility cannot leave a stale tile at either end of the freshly entered row.
+    private const int DiagonalRowPayloadTiles =
+        GameBoyWorldPackRuntimeEmitter.PackedRowPayloadTilesForDiagonal;
+
+    // Vertical-only programs never drift horizontally between preparation and commit, so their rows
+    // keep the unslacked span.
+    private static readonly int VerticalRowPayloadTiles =
+        GameBoyWorldPackRuntimeEmitter.RowPayloadTiles(diagonalStreaming: false);
+
     [Fact]
     public void Resident_column_at_LY145_commits_in_the_current_vblank_without_losing_source_cadence()
     {
@@ -390,7 +400,7 @@ public sealed class GameBoyStagedCameraTests
         Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
         Assert.Equal(7, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(8, cpu.Wram(0xC14F));
-        Assert.Equal(21, cpu.VramWrites.Count - writesBeforeRow);
+        Assert.Equal(DiagonalRowPayloadTiles, cpu.VramWrites.Count - writesBeforeRow);
         var writesBeforeColumn = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
@@ -819,14 +829,14 @@ public sealed class GameBoyStagedCameraTests
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
         Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
-        Assert.Equal(21, cpu.VramWrites.Count - beforeFirst);
+        Assert.Equal(VerticalRowPayloadTiles, cpu.VramWrites.Count - beforeFirst);
         Assert.Equal(8, cpu.Wram(0xC14F));
         var beforeSecond = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
 
         Assert.Equal(20, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
-        Assert.Equal(21, cpu.VramWrites.Count - beforeSecond);
+        Assert.Equal(VerticalRowPayloadTiles, cpu.VramWrites.Count - beforeSecond);
         Assert.Equal(16, cpu.Wram(0xC14F));
     }
 

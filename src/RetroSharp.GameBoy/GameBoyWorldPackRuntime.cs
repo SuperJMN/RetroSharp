@@ -185,6 +185,17 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private const int PackedColumnPayloadTilesWithVerticalSlack =
         PackedColumnPayloadTiles + (2 * DiagonalColumnRowSlack);
 
+    private const int PackedRowPayloadTiles = 21;
+    // A diagonal row is prefetched several frames before its crossing, anchored on the camera column
+    // of its preparation frame. The camera can drift either way meanwhile, so the span is anchored
+    // that many columns to the left and widened by twice that, mirroring the column's row slack.
+    internal const int DiagonalRowColumnSlack = 1;
+    internal const int PackedRowPayloadTilesForDiagonal =
+        PackedRowPayloadTiles + (2 * DiagonalRowColumnSlack);
+
+    internal static int RowPayloadTiles(bool diagonalStreaming) =>
+        diagonalStreaming ? PackedRowPayloadTilesForDiagonal : PackedRowPayloadTiles;
+
     private sealed record DecoderLabels(
         string Raw,
         string Rle,
@@ -389,9 +400,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow,
                 GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh,
                 0,
-                plan.Pack.Descriptor.HardwareWidth - 20,
+                plan.Pack.Descriptor.HardwareWidth - (RowPayloadTiles(diagonalStreaming) - 1),
                 genericPreparation);
-            builder.LoadAImmediate(21);
+            builder.LoadAImmediate((byte)RowPayloadTiles(diagonalStreaming));
             builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
             EmitStoreSelectedSlotPayloadLength(builder);
             EmitRowPlaneCopy(
@@ -400,6 +411,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 plan.Pack.Descriptor.HardwareHeight,
                 columnPlanePlacement,
                 enablePackedAudioService,
+                diagonalStreaming,
                 success);
             builder.Label(rowPlaneBounds);
             builder.Emit(0x06, (byte)GameBoyWorldPackResult.BoundsError);
@@ -419,7 +431,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         EmitLoadPackedColumnPayloadLength(builder, diagonalStreaming);
         builder.JumpAbsolute(lengthReady);
         builder.Label(rowLength);
-        builder.LoadAImmediate(21);
+        builder.LoadAImmediate((byte)RowPayloadTiles(diagonalStreaming));
         builder.Label(lengthReady);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         EmitStoreSelectedSlotPayloadLength(builder);
@@ -648,6 +660,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         int hardwareHeight,
         GameBoyWorldPackColumnPlanePlacement placement,
         bool enablePackedAudioService,
+        bool diagonalStreaming,
         string success)
     {
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
@@ -678,7 +691,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadDFromA();
         builder.LoadBc(checked((ushort)hardwareHeight));
 
-        for (var cell = 0; cell < 21; cell++)
+        for (var cell = 0; cell < RowPayloadTiles(diagonalStreaming); cell++)
         {
             builder.LoadAFromHl();
             builder.Emit(0x12); // LD (DE),A
@@ -3946,7 +3959,9 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
     int TotalBytes)
 {
     private const int ChunkCells = 64;
-    private const int EdgeBytes = 19 + (2 * GameBoyWorldPackRuntimeEmitter.DiagonalColumnRowSlack);
+    // The edge slot must hold the widest payload either axis can request; the diagonal row is now
+    // wider than the vertically slacked column.
+    private const int EdgeBytes = GameBoyWorldPackRuntimeEmitter.PackedRowPayloadTilesForDiagonal;
     internal const int CollisionMemoEntryBytes = 3;
     internal const int CollisionMemoEntryCount = 64;
 

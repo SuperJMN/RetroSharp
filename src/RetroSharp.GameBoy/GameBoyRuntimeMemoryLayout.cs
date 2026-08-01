@@ -367,8 +367,10 @@ internal static class GameBoyRuntimeMemoryLayout
 
     internal static class WorldPack
     {
-        internal const int CurrentStagingBytes = 362;
-        internal const int MaximumStagingBytes = 554;
+        internal const int CurrentStagingBytes = 366;
+        // Two edge slots carry the diagonal row payload, whose horizontal slack widened it by one tile
+        // per side; the pair accounts for the four bytes over the previous 554-byte ceiling.
+        internal const int MaximumStagingBytes = 558;
         // Decoder scratch is shared by mutually exclusive WorldPack routines; staging payloads live in
         // WorldPackStaging and are sized through ValidateWorldPackStagingBytes.
         internal const ushort ScratchPacketCount = 0xC1F0;

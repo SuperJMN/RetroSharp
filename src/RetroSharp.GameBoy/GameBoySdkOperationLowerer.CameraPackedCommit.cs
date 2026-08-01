@@ -379,25 +379,45 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
             builder.LoadCFromA();
             EmitBackgroundTileAddressToHl(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
-            builder.Emit(0x06, 21); // LD B,21
-            var wrap = builder.CreateLabel("packed_camera_row_target_wrap");
-            var next = builder.CreateLabel("packed_camera_row_target_next");
+            // The tilemap row wraps at most once per commit, so testing every tile for the wrap wastes
+            // VBlank cycles. Split the payload into the run up to column 31 and the remainder, and copy
+            // each as a straight block.
+            var secondRun = builder.CreateLabel("packed_camera_row_second_run");
+            var runsReady = builder.CreateLabel("packed_camera_row_runs_ready");
+            var done = builder.CreateLabel("packed_camera_row_copy_done");
+            builder.LoadAImmediate(32);
+            builder.Emit(0x91); // SUB C
+            builder.LoadBFromA();
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
+            builder.Emit(0xB8); // CP B
+            builder.JumpRelative(0x30, runsReady); // JR NC
+            builder.LoadBFromA();
+            builder.Label(runsReady);
+            builder.Emit(0x90); // SUB B
+            builder.LoadCFromA();
+
             builder.Label(loop);
             builder.Emit(0x1A); // LD A,(DE)
             builder.Emit(0x22); // LD (HL+),A
             builder.Emit(0x13); // INC DE
-            builder.Emit(0x0C); // INC C
-            builder.Emit(0x79); // LD A,C
-            builder.CompareImmediate(32);
-            builder.JumpRelative(0x28, wrap); // JR Z,wrap
-            builder.JumpRelative(0x18, next); // JR next
-            builder.Label(wrap);
-            builder.Emit(0x0E, 0x00); // LD C,0
-            EmitBackgroundTileAddressToHl(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
-            builder.Label(next);
             builder.Emit(0x05); // DEC B
             builder.JumpRelative(0x20, loop); // JR NZ,loop
-            builder.LoadAImmediate(21);
+
+            builder.LoadAFromC();
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xCA, done); // JP Z,done
+            builder.LoadBFromA();
+            builder.Emit(0x0E, 0x00); // LD C,0
+            EmitBackgroundTileAddressToHl(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget);
+            builder.Label(secondRun);
+            builder.Emit(0x1A); // LD A,(DE)
+            builder.Emit(0x22); // LD (HL+),A
+            builder.Emit(0x13); // INC DE
+            builder.Emit(0x05); // DEC B
+            builder.JumpRelative(0x20, secondRun); // JR NZ,secondRun
+
+            builder.Label(done);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         }
 
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.LastCommitVramWrites);
