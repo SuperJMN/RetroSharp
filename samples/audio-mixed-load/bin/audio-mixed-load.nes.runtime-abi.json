@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "c5c1237fdc5994143c6b7b17fcc43368610ea26818a800e8fa22e79077076595",
-  "romSha256": "98480214ccb56b6f8a6c9b7023d8f4071db00f1e09f40644a5702836ccb77a64",
+  "abiFingerprint": "c74eac0d4528d4d58813596c6cc181a9cb93f99fcba03d0fe74f23ed636ce874",
+  "romSha256": "1f21c204c72ec77f084fd4423dbfc2c2e29f301a7ad220a0c100658772e1f97d",
   "ranges": [
     {
       "id": "UserLocals",
@@ -87,7 +87,7 @@
       "id": "WorldPackStaging",
       "name": "WorldPack staging",
       "start": 1024,
-      "length": 594
+      "length": 614
     },
     {
       "id": "CpuRamMirror1",
@@ -1598,11 +1598,15 @@
   "constants": [
     {
       "name": "WorldPack.CurrentStagingBytes",
-      "value": 338
+      "value": 358
     },
     {
       "name": "WorldPack.MaximumStagingBytes",
-      "value": 594
+      "value": 614
+    },
+    {
+      "name": "packed camera.AttributeStagingOffset",
+      "value": 40
     },
     {
       "name": "packed camera.AxisOffset",
@@ -1627,6 +1631,26 @@
     {
       "name": "packed camera.Empty",
       "value": 0
+    },
+    {
+      "name": "packed camera.FourScreenRows",
+      "value": 60
+    },
+    {
+      "name": "packed camera.MaximumAttributeBytes",
+      "value": 11
+    },
+    {
+      "name": "packed camera.MaximumColumnPayloadLength",
+      "value": 40
+    },
+    {
+      "name": "packed camera.MaximumColumnPrepareCalls",
+      "value": 4
+    },
+    {
+      "name": "packed camera.NameTableRows",
+      "value": 30
     },
     {
       "name": "packed camera.Negative",
@@ -1695,6 +1719,10 @@
     {
       "name": "packed camera.Row",
       "value": 2
+    },
+    {
+      "name": "packed camera.RowPayloadLength",
+      "value": 32
     },
     {
       "name": "packed camera.SlotMetadataBytes",
@@ -1773,13 +1801,13 @@
     {
       "name": "WorldPack.EdgeSlot0",
       "start": 1536,
-      "length": 41,
+      "length": 51,
       "owner": "WorldPackStaging"
     },
     {
       "name": "WorldPack.EdgeSlot1",
-      "start": 1577,
-      "length": 41,
+      "start": 1587,
+      "length": 51,
       "owner": "WorldPackStaging"
     }
   ],
