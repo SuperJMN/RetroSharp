@@ -84,6 +84,7 @@ internal static class TargetFrontendPreparation
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
+        targetProgram = TargetViewportConstants.Inject(targetProgram, options.Capabilities);
         SdkImportResolver.ValidateImports(targetProgram, libraryRegistry);
         var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(
             targetProgram,

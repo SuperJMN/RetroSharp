@@ -19,8 +19,8 @@ static class Player
 
 static class DeadZone
 {
-    const i16 Left = 64;
-    const i16 Right = 96;
+    const i16 Left = Viewport.Width / 4;
+    const i16 Right = Viewport.Width * 3 / 8;
     const i16 Top = 56;
     const i16 Bottom = 88;
 }

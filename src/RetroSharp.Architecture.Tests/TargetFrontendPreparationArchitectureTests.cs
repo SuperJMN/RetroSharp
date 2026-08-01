@@ -14,6 +14,7 @@ public sealed class TargetFrontendPreparationArchitectureTests
         "RetroSharp.Sdk.SdkLibrarySource",
         "RetroSharp.Parser.SomeParser",
         "RetroSharp.Sdk.TargetProgramSelector",
+        "RetroSharp.Sdk.TargetViewportConstants",
         "RetroSharp.Sdk.SdkImportResolver",
         "RetroSharp.Sdk.ActorFrameworkLowerer",
         "RetroSharp.Sdk.SdkSourcePackageFacadeLowerer",

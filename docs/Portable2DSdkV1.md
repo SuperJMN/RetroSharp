@@ -38,6 +38,30 @@ file. `using` is compile-time name resolution only; it does not inject library
 source, which should come from the manifest-level library selection or the
 explicit source-level `import` transition path.
 
+### Target constants
+
+| Name | Semantics |
+| --- | --- |
+| `Viewport.Width` | Visible screen width in pixels for the active target (`160` on Game Boy, `256` on NES). |
+| `Viewport.Height` | Visible screen height in pixels for the active target (`144` on Game Boy, `240` on NES). |
+
+The frontend publishes these from the target capability model as ordinary compile-time constants
+before constant folding, so they work anywhere a constant does, including `const` initializers and
+constant arithmetic. They fold to literals and cost nothing at runtime, and unlike the value
+intrinsics they are not limited to the 8-bit intrinsic return channel. Use them to express
+viewport-relative game policy such as camera dead-zone edges instead of hardcoding pixel values
+tuned for a single target:
+
+```csharp
+static class DeadZone
+{
+    const i16 Left = Viewport.Width / 4;
+    const i16 Right = Viewport.Width * 3 / 8;
+}
+```
+
+`Viewport.Width` and `Viewport.Height` are reserved: declaring either name in source is an error.
+
 ### Frame and input
 
 | Signature | Semantics |

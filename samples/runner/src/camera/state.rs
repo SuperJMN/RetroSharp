@@ -222,6 +222,19 @@ class CameraState
         }
     }
 
+    inline void CatchUpToDeadZone(PlayerState player)
+    {
+        // Running right from a spawn that starts ahead of the dead-zone would keep that offset
+        // forever, because the camera otherwise advances exactly one pixel per moved pixel.
+        if (moving && direction == Direction.Right)
+        {
+            if (ScreenX(player) > DeadZone.Right)
+            {
+                x += 1;
+            }
+        }
+    }
+
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)
     {
         i16 wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
@@ -239,5 +252,6 @@ class CameraState
         UpdateIntent(desiredDirection, player.grounded);
         UpdateFacing(player, desiredDirection);
         ApplyMotion(player, wallProbeY);
+        CatchUpToDeadZone(player);
     }
 }
