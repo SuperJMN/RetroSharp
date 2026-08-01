@@ -24,7 +24,7 @@ public sealed class GameBoyRuntimeMemoryLayoutTests
                 ("WorldPack scalar and collision state", (ushort)0xC1F0, 0x0020),
                 ("audio channel-1 shadow", (ushort)0xC210, 0x0005),
                 ("collision memo state", (ushort)0xC220, 0x00C0),
-                ("WorldPack staging", (ushort)0xC300, 0x022A),
+                ("WorldPack staging", (ushort)0xC300, 0x022E),
                 ("sprite OAM shadow", (ushort)0xC600, 0x00A0),
                 ("WRAM echo", (ushort)0xE000, 0x1E00),
                 ("OAM DMA HRAM routine", (ushort)0xFF80, 0x000A),
@@ -80,11 +80,11 @@ public sealed class GameBoyRuntimeMemoryLayoutTests
         var maximum = GameBoyRuntimeMemoryLayout.ValidateWorldPackStagingBytes(
             GameBoyRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
 
-        Assert.Equal(362, current.Length);
-        Assert.Equal((ushort)0xC529, maximum.EndInclusive);
+        Assert.Equal(366, current.Length);
+        Assert.Equal((ushort)0xC52D, maximum.EndInclusive);
         var exception = Assert.Throws<InvalidOperationException>(() =>
             GameBoyRuntimeMemoryLayout.ValidateWorldPackStagingBytes(
                 GameBoyRuntimeMemoryLayout.WorldPack.MaximumStagingBytes + 1));
-        Assert.Contains("1..554 bytes", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("1..558 bytes", exception.Message, StringComparison.Ordinal);
     }
 }

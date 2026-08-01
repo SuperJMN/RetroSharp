@@ -26,16 +26,16 @@ public sealed class GameBoyWorldPackReaderTests
             enableDiagonalVisualCache: true);
 
         Assert.Equal(2, direct.Layout.VisualSlots.Count);
-        Assert.Equal(298, direct.Layout.TotalBytes);
+        Assert.Equal(302, direct.Layout.TotalBytes);
         Assert.Equal(3, packed.Layout.VisualSlots.Count);
-        Assert.Equal(362, packed.Layout.TotalBytes);
+        Assert.Equal(366, packed.Layout.TotalBytes);
         Assert.Equal(6, diagonal.Layout.VisualSlots.Count);
-        Assert.Equal(554, diagonal.Layout.TotalBytes);
+        Assert.Equal(558, diagonal.Layout.TotalBytes);
     }
 
     [Theory]
-    [InlineData(1, 1, 298, 0xC300, 0xC340, 0xC380, 0xC3C0, 0xC400, 0xC415)]
-    [InlineData(2, 2, 554, 0xC300, 0xC380, 0xC400, 0xC480, 0xC500, 0xC515)]
+    [InlineData(1, 1, 302, 0xC300, 0xC340, 0xC380, 0xC3C0, 0xC400, 0xC417)]
+    [InlineData(2, 2, 558, 0xC300, 0xC380, 0xC400, 0xC480, 0xC500, 0xC517)]
     public void Runtime_layout_keeps_two_visual_and_two_collision_slots_separate(
         int visualIdBytes,
         int collisionIdBytes,
@@ -839,7 +839,7 @@ public sealed class GameBoyWorldPackReaderTests
     }
 
     [Fact]
-    public void Two_byte_visual_and_collision_ids_use_the_declared_554_byte_maximum()
+    public void Two_byte_visual_and_collision_ids_use_the_declared_558_byte_maximum()
     {
         var fixture = CreateTwoByteFixture();
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
@@ -858,7 +858,7 @@ public sealed class GameBoyWorldPackReaderTests
             chunkIndex: 0,
             slot: 1);
 
-        Assert.Equal(554, layout.TotalBytes);
+        Assert.Equal(558, layout.TotalBytes);
         Assert.Equal(GameBoyWorldPackResult.Success, visualStatus);
         Assert.Equal(GameBoyWorldPackResult.Success, collisionStatus);
         Assert.Equal(

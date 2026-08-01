@@ -26,7 +26,7 @@ internal sealed partial class GameBoySdkOperationLowerer
     private const byte DiagonalRowPreparationEmitted = 2;
     // Prefetch the next column edge two pixels into each tile, so the freshly revealed column is
     // already resident and the camera never has to stall at the tile boundary.
-    private const byte DiagonalColumnPrefetchFineOffset = 2;
+    private const byte DiagonalColumnPrefetchFineOffset = 4;
 
     private void EmitStreamMapColumn(Sdk2DOperation.StreamMapColumn operation)
     {

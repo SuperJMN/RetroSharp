@@ -103,6 +103,24 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "tiled-gb-fast-diagonal",
+      "path": "samples/tiled-gb-fast-diagonal/fast-diagonal.rs",
+      "readme": "samples/tiled-gb-fast-diagonal/README.md",
+      "layer": "target-acceptance",
+      "targets": [
+        "gb"
+      ]
+    },
+    {
+      "id": "tiled-gb-irregular-diagonal",
+      "path": "samples/tiled-gb-irregular-diagonal/irregular-diagonal.rs",
+      "readme": "samples/tiled-gb-irregular-diagonal/README.md",
+      "layer": "target-acceptance",
+      "targets": [
+        "gb"
+      ]
+    },
+    {
       "id": "tiled-gb-diagonal-streaming",
       "path": "samples/tiled-gb-diagonal-streaming/diagonal-streaming.rs",
       "readme": "samples/tiled-gb-diagonal-streaming/README.md",

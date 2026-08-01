@@ -1,0 +1,31 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-gb-fast-diagonal-gb-functional",
+  "sampleId": "tiled-gb-fast-diagonal",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 520,
+  "inputs": [],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "a4b2ba4aa377a96adcd7a4b6f8f6175a4b58b844",
+    "hardwareTimingRationale": "Two pixels per frame on both axes is the fastest diagonal cadence the packed camera supports; each column edge is prepared outside VBlank and commits at most 21 tile bytes.",
+    "productionTraceRationale": "The window covers a full vertical bounce plus the horizontal reversal, so every diagonal quadrant streams a freshly entered column while the camera crosses a tile row. On the pre-fix runtime this window shows stale tiles from frame 152."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 2,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

@@ -23,25 +23,15 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitCopyWordOrZeroHigh(GameBoyRuntimeMemoryLayout.Camera.TopSourceRow, null, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         if (ProgramQueuesDiagonalStreaming())
         {
-            var shiftUp = builder.CreateLabel("packed_camera_column_vertical_shift_up");
-            var shiftDown = builder.CreateLabel("packed_camera_column_vertical_shift_down");
-            var startReady = builder.CreateLabel("packed_camera_column_vertical_start_ready");
-            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalRowPrefetchLatch);
-            builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
-            builder.JumpAbsolute(0xCA, shiftUp);
-            builder.CompareImmediate(GameBoyPackedCameraRuntime.Positive);
-            builder.JumpAbsolute(0xCA, shiftDown);
-            builder.JumpAbsolute(startReady);
-            // Match the column's vertical span to the row that the diagonal prefetch will expose.
-            // Otherwise the bottom-right or top-right corner falls outside both prepared edges.
-            builder.Label(shiftUp);
-            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
-            EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
-            builder.JumpAbsolute(startReady);
-            builder.Label(shiftDown);
-            EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
-            EmitIncrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
-            builder.Label(startReady);
+            // A diagonal column becomes visible a few frames after it is prepared, so the camera can
+            // cross up to DiagonalColumnRowSlack rows in either direction meanwhile. Anchoring the
+            // span at the preparation-time top row leaves zero slack and strands a stale tile at the
+            // leading corner, so anchor the span DiagonalColumnRowSlack rows above it instead.
+            for (var i = 0; i < GameBoyWorldPackRuntimeEmitter.DiagonalColumnRowSlack; i++)
+            {
+                EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, 32);
+                EmitDecrementAddressModulo(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, config.SourceHeight);
+            }
         }
 
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
@@ -101,12 +91,46 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.Emit(0xCB, 0x1B); // RR E
         }
 
+        EmitShiftDiagonalRowAnchorLeft(GameBoyWorldPackRuntimeEmitter.DiagonalRowColumnSlack);
         builder.LoadAFromE();
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.AndImmediate(31);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
         builder.LoadAFromD();
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
+    }
+
+    // The row payload carries GameBoyWorldPackRuntimeEmitter.DiagonalRowColumnSlack columns of slack on
+    // each side, so its anchor moves that far left. The world does not extend past column zero, and the
+    // camera cannot show anything left of it, so the anchor clamps there instead of wrapping.
+    private void EmitShiftDiagonalRowAnchorLeft(int slack)
+    {
+        var borrowSafe = builder.CreateLabel("packed_camera_row_anchor_borrow_safe");
+        var clampZero = builder.CreateLabel("packed_camera_row_anchor_clamp_zero");
+        var done = builder.CreateLabel("packed_camera_row_anchor_done");
+
+        builder.LoadAFromD();
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, borrowSafe); // JP NZ
+        builder.LoadAFromE();
+        builder.CompareImmediate(slack);
+        builder.JumpAbsolute(0xDA, clampZero); // JP C
+
+        builder.Label(borrowSafe);
+        builder.LoadAFromE();
+        builder.SubtractAImmediate(slack);
+        builder.LoadEFromA();
+        builder.JumpAbsolute(0xD2, done); // JP NC
+        builder.LoadAFromD();
+        builder.SubtractAImmediate(1);
+        builder.LoadDFromA();
+        builder.JumpAbsolute(done);
+
+        builder.Label(clampZero);
+        builder.XorA();
+        builder.LoadEFromA();
+        builder.LoadDFromA();
+        builder.Label(done);
     }
 
     private void EmitStoreAddressWithDeltaModulo(ushort source, int modulo, int delta, ushort target)
