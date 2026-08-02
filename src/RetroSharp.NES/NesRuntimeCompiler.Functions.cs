@@ -11,7 +11,7 @@ internal sealed partial class NesRuntimeCompiler
 {
     private void EmitCall(FunctionCall call)
     {
-        if (IsResourceDeclarationCall(call))
+        if (TryEmitResourceDeclarationCall(call))
         {
             return;
         }
@@ -19,7 +19,7 @@ internal sealed partial class NesRuntimeCompiler
         switch (call.Name)
         {
             case "tilemap_set":
-                NesVideoProgram.RequireArity(call, 3);
+                EmitRuntimeTilemapSet(call);
                 break;
             case "tilemap_fill":
                 NesVideoProgram.RequireArity(call, 5);
@@ -48,10 +48,80 @@ internal sealed partial class NesRuntimeCompiler
         }
     }
 
-    private bool IsResourceDeclarationCall(FunctionCall call)
+    private bool TryEmitResourceDeclarationCall(FunctionCall call)
     {
-        return program.Functions.TryGetValue(call.Name, out var function)
-               && SdkResourceDeclarationResolver.TryResolve(function, out _, program.ResourceDeclarations);
+        if (!program.Functions.TryGetValue(call.Name, out var function)
+            || !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor, program.ResourceDeclarations))
+        {
+            return false;
+        }
+
+        if (descriptor.Kind == SdkResourceDeclarationKind.TilemapSet
+            && call.Parameters.Any(parameter => !TryConst(parameter, out _)))
+        {
+            EmitRuntimeTilemapSet(call);
+        }
+
+        return true;
+    }
+
+    private void EmitRuntimeTilemapSet(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 3);
+        var args = call.Parameters.ToList();
+        ValidateRuntimeTilemapArgument(args[0], 31, "x");
+        ValidateRuntimeTilemapArgument(args[1], 29, "y");
+        ValidateRuntimeTilemapArgument(args[2], 255, "tile");
+
+        EmitExpressionToA(args[2]);
+        builder.PushA();
+        EmitExpressionToA(args[0]);
+        builder.PushA();
+
+        EmitExpressionToA(args[1]);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ClearCarry();
+        builder.AddImmediate(0x20);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
+
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        for (var shift = 0; shift < 5; shift++)
+        {
+            builder.ShiftLeftA();
+        }
+
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        builder.PullA();
+        builder.ClearCarry();
+        builder.AddZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+
+        builder.LoadAAbsolute(0x2002); // reset the PPU address/scroll latch
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
+        builder.StoreAAbsolute(0x2006);
+        builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        builder.StoreAAbsolute(0x2006);
+        builder.PullA();
+        builder.StoreAAbsolute(0x2007);
+
+        // The runtime fixed-screen tile write is an escape hatch. Restore a zero scroll after
+        // touching PPUADDR so the following visible frame starts with a coherent latch.
+        builder.LoadAAbsolute(0x2002);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(0x2005);
+        builder.StoreAAbsolute(0x2005);
+    }
+
+    private void ValidateRuntimeTilemapArgument(ExpressionSyntax expression, int max, string name)
+    {
+        if (TryConst(expression, out var value) && (value < 0 || value > max))
+        {
+            throw new InvalidOperationException(
+                $"NES runtime tilemap_set {name} must be between 0 and {max}, got {value}.");
+        }
     }
 
     private bool TryEmitUserFunction(FunctionCall call)

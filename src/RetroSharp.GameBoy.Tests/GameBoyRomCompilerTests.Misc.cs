@@ -12,6 +12,37 @@ using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 public partial class GameBoyRomCompilerTests
 {
     [Fact]
+    public void Runtime_tilemap_set_updates_the_requested_background_cell_during_vblank()
+    {
+        const string source = """
+                              import RetroSharp.Portable2D;
+
+                              void Main() {
+                                  Video.Init();
+                                  u8 x = 3;
+                                  u8 y = 2;
+                                  u8 tile = 5;
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Tilemap.Set(x, y, tile);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+
+        cpu.RunFrames(3);
+
+        Assert.Equal(5, cpu.Vram(0x9843));
+        Assert.DoesNotContain(cpu.VramWrites, write => write.LcdEnabled && !write.Applied);
+    }
+
+    [Fact]
     public void Runtime_struct_array_addressing_does_not_repeat_stride_proportional_addition()
     {
         const string source = """

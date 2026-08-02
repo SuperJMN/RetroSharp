@@ -10,6 +10,37 @@ using static RetroSharp.NES.Tests.NesTestAssets;
 public partial class NesRomCompilerTests
 {
     [Fact]
+    public void Runtime_tilemap_set_updates_the_requested_background_cell_during_vblank()
+    {
+        const string source = """
+                              import RetroSharp.Portable2D;
+
+                              void Main() {
+                                  Video.Init();
+                                  u8 x = 3;
+                                  u8 y = 2;
+                                  u8 tile = 5;
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Tilemap.Set(x, y, tile);
+                                  }
+                              }
+                              """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(source);
+        var cpu = new NesTestCpu(rom);
+
+        cpu.RunFrames(4);
+
+        Assert.Equal(5, cpu.PpuVram(0x2043));
+        Assert.All(
+            cpu.PpuWrites.Where(write => write.Register == 0x2007 && write.RenderingEnabled),
+            write => Assert.Equal("vblank", cpu.PpuTiming(write.Cycle, write.RenderingEnabled).Phase));
+        Assert.Equal(0, cpu.ScrollX);
+        Assert.Equal(0, cpu.ScrollY);
+    }
+
+    [Fact]
     public void Bool_flags_lower_like_int_flags_with_explicit_comparisons()
     {
         const string intSource = """
