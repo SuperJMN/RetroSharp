@@ -39,8 +39,8 @@ public sealed class GameBoyFallingBlocksSmokeTests
             AssertNextPiecePreviewUpdates(cpu, symbolsPath);
             cpu.SetWram(SymbolAddress(symbolsPath, "board[0]"), 1);
             cpu.SetWram(SymbolAddress(symbolsPath, "redrawRow"), 0);
-            cpu.SetWram(SymbolAddress(symbolsPath, "dirtyCell"), 0);
-            cpu.SetWram(SymbolAddress(symbolsPath, "lineCount"), 1);
+            cpu.SetWram(SymbolAddress(symbolsPath, "redrawCell"), 0);
+            cpu.SetWram(SymbolAddress(symbolsPath, "game.lineCount"), 1);
             var redrawWritesBefore = cpu.VramWrites.Count;
 
             cpu.RunAdditionalFrames(40);
@@ -83,7 +83,7 @@ public sealed class GameBoyFallingBlocksSmokeTests
         string symbolsPath)
     {
         var boardAddress = SymbolAddress(symbolsPath, "board[0]");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
 
         for (ushort x = 3; x <= 6; x++)
         {
@@ -109,9 +109,9 @@ public sealed class GameBoyFallingBlocksSmokeTests
         cpu.RunAdditionalFrames(40);
 
         Assert.Equal(0, cpu.Wram(gameOverAddress));
-        Assert.Equal(8, cpu.Wram(SymbolAddress(symbolsPath, "pieceBase")));
+        Assert.Equal(8, cpu.Wram(SymbolAddress(symbolsPath, "active.shapeOffset")));
         Assert.Equal(0, cpu.Wram(SymbolAddress(symbolsPath, "nextBase")));
-        Assert.Equal(0, cpu.Wram(SymbolAddress(symbolsPath, "lineCount")));
+        Assert.Equal(0, cpu.Wram(SymbolAddress(symbolsPath, "game.lineCount")));
         Assert.All(
             Enumerable.Range(0, BoardWidth * BoardHeight),
             index => Assert.Equal(0, cpu.Wram((ushort)(boardAddress + index))));
@@ -127,12 +127,12 @@ public sealed class GameBoyFallingBlocksSmokeTests
         GameBoyTestCpu cpu,
         string symbolsPath)
     {
-        var pieceBaseAddress = SymbolAddress(symbolsPath, "pieceBase");
-        var rotationAddress = SymbolAddress(symbolsPath, "rotation");
-        var pieceXAddress = SymbolAddress(symbolsPath, "pieceX");
-        var pieceYAddress = SymbolAddress(symbolsPath, "pieceY");
-        var fallCounterAddress = SymbolAddress(symbolsPath, "fallCounter");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var pieceBaseAddress = SymbolAddress(symbolsPath, "active.shapeOffset");
+        var rotationAddress = SymbolAddress(symbolsPath, "active.rotation");
+        var pieceXAddress = SymbolAddress(symbolsPath, "active.x");
+        var pieceYAddress = SymbolAddress(symbolsPath, "active.y");
+        var fallCounterAddress = SymbolAddress(symbolsPath, "game.fallCounter");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
         var signatures = new List<string>();
 
         for (byte pieceBase = 0; pieceBase < 28; pieceBase += 4)
@@ -172,12 +172,12 @@ public sealed class GameBoyFallingBlocksSmokeTests
 
     private static void AssertAllRotationsReachLeftWall(GameBoyTestCpu cpu, string symbolsPath)
     {
-        var pieceBaseAddress = SymbolAddress(symbolsPath, "pieceBase");
-        var rotationAddress = SymbolAddress(symbolsPath, "rotation");
-        var pieceXAddress = SymbolAddress(symbolsPath, "pieceX");
-        var pieceYAddress = SymbolAddress(symbolsPath, "pieceY");
-        var fallCounterAddress = SymbolAddress(symbolsPath, "fallCounter");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var pieceBaseAddress = SymbolAddress(symbolsPath, "active.shapeOffset");
+        var rotationAddress = SymbolAddress(symbolsPath, "active.rotation");
+        var pieceXAddress = SymbolAddress(symbolsPath, "active.x");
+        var pieceYAddress = SymbolAddress(symbolsPath, "active.y");
+        var fallCounterAddress = SymbolAddress(symbolsPath, "game.fallCounter");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
 
         cpu.SetWram(pieceBaseAddress, 0);
         cpu.SetWram(rotationAddress, 1);

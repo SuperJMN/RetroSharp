@@ -35,11 +35,11 @@ public sealed class NesFallingBlocksSmokeTests
             AssertNextPiecePreviewUpdates(cpu, symbolsPath);
             var boardAddress = SymbolAddress(symbolsPath, "board[0]");
             var redrawRowAddress = SymbolAddress(symbolsPath, "redrawRow");
-            var dirtyCellAddress = SymbolAddress(symbolsPath, "dirtyCell");
+            var redrawCellAddress = SymbolAddress(symbolsPath, "redrawCell");
             cpu.SetRam(boardAddress, 1);
             cpu.SetRam(redrawRowAddress, 0);
-            cpu.SetRam(dirtyCellAddress, 0);
-            cpu.SetRam(SymbolAddress(symbolsPath, "lineCount"), 1);
+            cpu.SetRam(redrawCellAddress, 0);
+            cpu.SetRam(SymbolAddress(symbolsPath, "game.lineCount"), 1);
             var redrawWritesBefore = cpu.PpuWrites.Count;
 
             cpu.RunFrames(cpu.PhysicalFrames + 40);
@@ -48,7 +48,7 @@ public sealed class NesFallingBlocksSmokeTests
                 cpu.PpuVram(0x2001) == 6,
                 $"board={cpu.Ram(boardAddress)}, "
                 + $"redrawRow={cpu.Ram(redrawRowAddress)}, "
-                + $"dirtyCell={cpu.Ram(dirtyCellAddress)}"
+                + $"redrawCell={cpu.Ram(redrawCellAddress)}"
                 + Environment.NewLine
                 + string.Join(
                     Environment.NewLine,
@@ -102,7 +102,7 @@ public sealed class NesFallingBlocksSmokeTests
         string symbolsPath)
     {
         var boardAddress = SymbolAddress(symbolsPath, "board[0]");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
 
         for (ushort x = 3; x <= 6; x++)
         {
@@ -128,9 +128,9 @@ public sealed class NesFallingBlocksSmokeTests
         cpu.RunFrames(cpu.PhysicalFrames + 40);
 
         Assert.Equal(0, cpu.Ram(gameOverAddress));
-        Assert.Equal(8, cpu.Ram(SymbolAddress(symbolsPath, "pieceBase")));
+        Assert.Equal(8, cpu.Ram(SymbolAddress(symbolsPath, "active.shapeOffset")));
         Assert.Equal(0, cpu.Ram(SymbolAddress(symbolsPath, "nextBase")));
-        Assert.Equal(0, cpu.Ram(SymbolAddress(symbolsPath, "lineCount")));
+        Assert.Equal(0, cpu.Ram(SymbolAddress(symbolsPath, "game.lineCount")));
         Assert.All(
             Enumerable.Range(0, BoardWidth * BoardHeight),
             index => Assert.Equal(0, cpu.Ram((ushort)(boardAddress + index))));
@@ -146,12 +146,12 @@ public sealed class NesFallingBlocksSmokeTests
         NesTestCpu cpu,
         string symbolsPath)
     {
-        var pieceBaseAddress = SymbolAddress(symbolsPath, "pieceBase");
-        var rotationAddress = SymbolAddress(symbolsPath, "rotation");
-        var pieceXAddress = SymbolAddress(symbolsPath, "pieceX");
-        var pieceYAddress = SymbolAddress(symbolsPath, "pieceY");
-        var fallCounterAddress = SymbolAddress(symbolsPath, "fallCounter");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var pieceBaseAddress = SymbolAddress(symbolsPath, "active.shapeOffset");
+        var rotationAddress = SymbolAddress(symbolsPath, "active.rotation");
+        var pieceXAddress = SymbolAddress(symbolsPath, "active.x");
+        var pieceYAddress = SymbolAddress(symbolsPath, "active.y");
+        var fallCounterAddress = SymbolAddress(symbolsPath, "game.fallCounter");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
         var signatures = new List<string>();
 
         for (byte pieceBase = 0; pieceBase < 28; pieceBase += 4)
@@ -191,12 +191,12 @@ public sealed class NesFallingBlocksSmokeTests
 
     private static void AssertAllRotationsReachLeftWall(NesTestCpu cpu, string symbolsPath)
     {
-        var pieceBaseAddress = SymbolAddress(symbolsPath, "pieceBase");
-        var rotationAddress = SymbolAddress(symbolsPath, "rotation");
-        var pieceXAddress = SymbolAddress(symbolsPath, "pieceX");
-        var pieceYAddress = SymbolAddress(symbolsPath, "pieceY");
-        var fallCounterAddress = SymbolAddress(symbolsPath, "fallCounter");
-        var gameOverAddress = SymbolAddress(symbolsPath, "gameOver");
+        var pieceBaseAddress = SymbolAddress(symbolsPath, "active.shapeOffset");
+        var rotationAddress = SymbolAddress(symbolsPath, "active.rotation");
+        var pieceXAddress = SymbolAddress(symbolsPath, "active.x");
+        var pieceYAddress = SymbolAddress(symbolsPath, "active.y");
+        var fallCounterAddress = SymbolAddress(symbolsPath, "game.fallCounter");
+        var gameOverAddress = SymbolAddress(symbolsPath, "game.gameOver");
 
         cpu.SetRam(pieceBaseAddress, 0);
         cpu.SetRam(rotationAddress, 1);

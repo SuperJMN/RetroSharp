@@ -30,13 +30,17 @@ far right grows with cleared lines. Every orientation is normalized to its
 visible left edge, so even the vertical I piece can occupy the board's leftmost
 column without wall kicks.
 
-The board is a fixed `u8[160]`; no heap, object identity, virtual dispatch, or
-runtime allocation is involved. Line compaction updates logical storage first,
-then redraws each 10-cell row across two VBlanks so the visible update remains
-inside the Game Boy write budget.
-The four active blocks and four preview blocks use eight explicit
+The board is a fixed `u8[160]`; the shape table uses an initializer-inferred
+fixed length, and restart clears the board through `countof(board)`. Piece,
+cell-position, and game state use restricted class values plus receiver methods,
+which lower to the same flat fixed storage and direct operations: there is no
+heap, object identity, virtual dispatch, or runtime allocation. Line compaction
+updates logical storage first, then redraws each 10-cell row across two VBlanks
+so the visible update remains inside the Game Boy write budget.
+The four active blocks and four preview blocks keep eight explicit
 `Sprite.Draw(...)` call sites because each call site owns a fixed OAM slot on
-the cartridge targets.
+the cartridge targets; receiver helpers prepare each slot without duplicating
+the coordinate and tile-to-pixel logic.
 As the sample has no generated background tiles and `block` is its first sprite
 asset, settled cells reuse cartridge tile `6`; this keeps their 2bpp pattern and
 logical palette identical to the falling blocks.

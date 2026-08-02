@@ -9,51 +9,9 @@ void SetupVideo()
 void SetupField()
 {
     Tilemap.Fill(0, 0, 20, Board.Height, Tile.Empty);
-
-    Tilemap.Set(0, 0, Tile.Landed);
-    Tilemap.Set(11, 0, Tile.Landed);
-    Tilemap.Set(0, 1, Tile.Landed);
-    Tilemap.Set(11, 1, Tile.Landed);
-    Tilemap.Set(0, 2, Tile.Landed);
-    Tilemap.Set(11, 2, Tile.Landed);
-    Tilemap.Set(0, 3, Tile.Landed);
-    Tilemap.Set(11, 3, Tile.Landed);
-    Tilemap.Set(0, 4, Tile.Landed);
-    Tilemap.Set(11, 4, Tile.Landed);
-    Tilemap.Set(0, 5, Tile.Landed);
-    Tilemap.Set(11, 5, Tile.Landed);
-    Tilemap.Set(0, 6, Tile.Landed);
-    Tilemap.Set(11, 6, Tile.Landed);
-    Tilemap.Set(0, 7, Tile.Landed);
-    Tilemap.Set(11, 7, Tile.Landed);
-    Tilemap.Set(0, 8, Tile.Landed);
-    Tilemap.Set(11, 8, Tile.Landed);
-    Tilemap.Set(0, 9, Tile.Landed);
-    Tilemap.Set(11, 9, Tile.Landed);
-    Tilemap.Set(0, 10, Tile.Landed);
-    Tilemap.Set(11, 10, Tile.Landed);
-    Tilemap.Set(0, 11, Tile.Landed);
-    Tilemap.Set(11, 11, Tile.Landed);
-    Tilemap.Set(0, 12, Tile.Landed);
-    Tilemap.Set(11, 12, Tile.Landed);
-    Tilemap.Set(0, 13, Tile.Landed);
-    Tilemap.Set(11, 13, Tile.Landed);
-    Tilemap.Set(0, 14, Tile.Landed);
-    Tilemap.Set(11, 14, Tile.Landed);
-    Tilemap.Set(0, 15, Tile.Landed);
-    Tilemap.Set(11, 15, Tile.Landed);
-    Tilemap.Set(0, 16, Tile.Landed);
-    Tilemap.Set(11, 16, Tile.Landed);
-    Tilemap.Set(1, 16, Tile.Landed);
-    Tilemap.Set(2, 16, Tile.Landed);
-    Tilemap.Set(3, 16, Tile.Landed);
-    Tilemap.Set(4, 16, Tile.Landed);
-    Tilemap.Set(5, 16, Tile.Landed);
-    Tilemap.Set(6, 16, Tile.Landed);
-    Tilemap.Set(7, 16, Tile.Landed);
-    Tilemap.Set(8, 16, Tile.Landed);
-    Tilemap.Set(9, 16, Tile.Landed);
-    Tilemap.Set(10, 16, Tile.Landed);
+    Tilemap.Fill(Board.LeftWallX, 0, 1, Board.Height + 1, Tile.Landed);
+    Tilemap.Fill(Board.RightWallX, 0, 1, Board.Height + 1, Tile.Landed);
+    Tilemap.Fill(Board.LeftWallX, Board.Height, Board.RightWallX + 1, 1, Tile.Landed);
 }
 
 void Main()
@@ -61,8 +19,8 @@ void Main()
     SetupVideo();
     SetupField();
 
-    u8 board[160];
-    u8 shapes[28] = [
+    u8 board[Board.CellCount];
+    u8 shapes[] = [
         4, 5, 6, 7,
         1, 2, 5, 6,
         4, 5, 6, 1,
@@ -71,40 +29,27 @@ void Main()
         0, 4, 5, 6,
         2, 4, 5, 6
     ];
-    u8 piece = Piece.T;
-    u8 pieceBase = 8;
+    PiecePose active;
+    PiecePose candidate;
+    PiecePose landed;
+    CellPosition position;
+    GameState game;
     u8 nextPiece = Piece.I;
     u8 nextBase = 0;
-    u8 rotation = 0;
-    u8 pieceX = 3;
-    u8 pieceY = 0;
-    u8 dirtyBase = 8;
-    u8 dirtyRotation = 0;
-    u8 dirtyX = 3;
-    u8 dirtyY = 0;
-    u8 dirtyCell = 4;
-    u8 candidateRotation = 0;
-    u8 candidateX = 3;
-    u8 candidateY = 0;
+    u8 redrawCell = Pieces.CellCount;
+    u8 redrawRow = Board.NoRedraw;
     u8 cell = 0;
-    u8 cellX = 0;
-    u8 cellY = 0;
     u8 index = 0;
     u8 copy = 0;
-    u8 fallCounter = 0;
-    u8 fallDelay = Timing.InitialFallDelay;
-    u8 horizontalCooldown = 0;
     u8 row = 0;
     u8 column = 0;
     u8 shiftRow = 0;
-    u8 redrawRow = 255;
-    u8 lineCount = 0;
     bool blocked = false;
-    bool full = false;
     bool lockRequested = false;
-    bool gameOver = false;
     bool attempt = false;
-    bool fallDue = false;
+
+    active.Spawn(Piece.T);
+    game.Reset();
 
     while (true)
     {
@@ -112,33 +57,28 @@ void Main()
 
         if (redrawRow < Board.Height)
         {
-            column = 0;
-            index = Board.Index(dirtyCell, redrawRow);
-            while (column < 5)
+            index = Board.Index(redrawCell, redrawRow);
+            for (column = 0; column < Board.RedrawBatchSize; column++)
             {
                 copy = board[index] == 0 ? Tile.Empty : Tile.Landed;
-                Tilemap.Set(
-                    Board.OriginX + dirtyCell,
-                    redrawRow,
-                    copy);
-                column += 1;
-                dirtyCell += 1;
-                index += 1;
+                Tilemap.Set(Board.OriginX + redrawCell, redrawRow, copy);
+                redrawCell++;
+                index++;
             }
 
-            if (dirtyCell == Board.Width)
+            if (redrawCell == Board.Width)
             {
                 Tilemap.Set(
                     Board.MeterX,
                     redrawRow,
-                    redrawRow + lineCount >= Board.Height ? Tile.Meter : Tile.Empty);
+                    redrawRow + game.lineCount >= Board.Height ? Tile.Meter : Tile.Empty);
 
-                dirtyCell = 0;
-                redrawRow += 1;
+                redrawCell = 0;
+                redrawRow++;
                 if (redrawRow == Board.Height)
                 {
-                    redrawRow = 255;
-                    dirtyCell = 4;
+                    redrawRow = Board.NoRedraw;
+                    redrawCell = Pieces.CellCount;
                 }
             }
 
@@ -146,265 +86,178 @@ void Main()
             continue;
         }
 
-        if (dirtyCell < 4)
+        if (redrawCell < Pieces.CellCount)
         {
-            index = dirtyBase + dirtyCell;
+            index = landed.CodeIndex(redrawCell);
             copy = shapes[index];
-            cellX = dirtyX + Pieces.X(dirtyBase, dirtyRotation, dirtyCell, copy);
-            cellY = dirtyY + Pieces.Y(dirtyBase, dirtyRotation, dirtyCell, copy);
-            Tilemap.Set(Board.OriginX + cellX, cellY, Tile.Landed);
-            dirtyCell += 1;
+            position.Locate(landed, redrawCell, copy);
+            Tilemap.Set(Board.OriginX + position.x, position.y, Tile.Landed);
+            redrawCell++;
         }
 
-        index = pieceBase;
-        copy = shapes[index];
-        cellX = pieceX + Pieces.X(pieceBase, rotation, 0, copy);
-        cellY = pieceY + Pieces.Y(pieceBase, rotation, 0, copy);
-        cellX += Board.OriginX;
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.Present(
+            piece: active,
+            cell: 0,
+            code: shapes[active.CodeIndex(0)],
+            originX: Board.OriginX,
+            originY: 0,
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        index = pieceBase + 1;
-        copy = shapes[index];
-        cellX = pieceX + Pieces.X(pieceBase, rotation, 1, copy);
-        cellY = pieceY + Pieces.Y(pieceBase, rotation, 1, copy);
-        cellX += Board.OriginX;
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.Present(
+            piece: active,
+            cell: 1,
+            code: shapes[active.CodeIndex(1)],
+            originX: Board.OriginX,
+            originY: 0,
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        index = pieceBase + 2;
-        copy = shapes[index];
-        cellX = pieceX + Pieces.X(pieceBase, rotation, 2, copy);
-        cellY = pieceY + Pieces.Y(pieceBase, rotation, 2, copy);
-        cellX += Board.OriginX;
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.Present(
+            piece: active,
+            cell: 2,
+            code: shapes[active.CodeIndex(2)],
+            originX: Board.OriginX,
+            originY: 0,
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        index = pieceBase + 3;
-        copy = shapes[index];
-        cellX = pieceX + Pieces.X(pieceBase, rotation, 3, copy);
-        cellY = pieceY + Pieces.Y(pieceBase, rotation, 3, copy);
-        cellX += Board.OriginX;
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.Present(
+            piece: active,
+            cell: 3,
+            code: shapes[active.CodeIndex(3)],
+            originX: Board.OriginX,
+            originY: 0,
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        index = nextBase;
-        copy = shapes[index];
-        cellX = Preview.OriginX + Pieces.X(nextBase, 0, 0, copy);
-        if (nextBase != 0)
-        {
-            cellX += 1;
-        }
+        position.PresentPreview(
+            shapeOffset: nextBase,
+            cell: 0,
+            code: shapes[nextBase],
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        cellY = Preview.OriginY + Pieces.Y(nextBase, 0, 0, copy);
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.PresentPreview(
+            shapeOffset: nextBase,
+            cell: 1,
+            code: shapes[nextBase + 1],
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        index = nextBase + 1;
-        copy = shapes[index];
-        cellX = Preview.OriginX + Pieces.X(nextBase, 0, 1, copy);
-        if (nextBase != 0)
-        {
-            cellX += 1;
-        }
+        position.PresentPreview(
+            shapeOffset: nextBase,
+            cell: 2,
+            code: shapes[nextBase + 2],
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
-        cellY = Preview.OriginY + Pieces.Y(nextBase, 0, 1, copy);
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
-
-        index = nextBase + 2;
-        copy = shapes[index];
-        cellX = Preview.OriginX + Pieces.X(nextBase, 0, 2, copy);
-        if (nextBase != 0)
-        {
-            cellX += 1;
-        }
-
-        cellY = Preview.OriginY + Pieces.Y(nextBase, 0, 2, copy);
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
-
-        index = nextBase + 3;
-        copy = shapes[index];
-        cellX = Preview.OriginX + Pieces.X(nextBase, 0, 3, copy);
-        if (nextBase != 0)
-        {
-            cellX += 1;
-        }
-
-        cellY = Preview.OriginY + Pieces.Y(nextBase, 0, 3, copy);
-        cellX += cellX;
-        cellX += cellX;
-        cellX += cellX;
-        cellY += cellY;
-        cellY += cellY;
-        cellY += cellY;
-        cellY = gameOver ? SpriteLayout.HiddenY : cellY;
-        Sprite.Draw(block, cellX, cellY, 0, false, 0);
+        position.PresentPreview(
+            shapeOffset: nextBase,
+            cell: 3,
+            code: shapes[nextBase + 3],
+            hidden: game.gameOver);
+        Sprite.Draw(block, position.x, position.y, 0, false, 0);
 
         Input.Poll();
 
-        if (gameOver)
+        if (game.gameOver)
         {
             if (Input.WasPressed(Button.Start))
             {
-                index = 0;
-                while (index < Board.CellCount)
+                for (index = 0; index < countof(board); index++)
                 {
                     board[index] = 0;
-                    index += 1;
                 }
 
-                piece = Piece.T;
-                pieceBase = 8;
+                active.Spawn(Piece.T);
                 nextPiece = Piece.I;
                 nextBase = 0;
-                rotation = 0;
-                pieceX = 3;
-                pieceY = 0;
-                fallCounter = 0;
-                fallDelay = Timing.InitialFallDelay;
-                horizontalCooldown = 0;
-                lineCount = 0;
+                game.Reset();
                 redrawRow = 0;
-                dirtyCell = 0;
-                gameOver = false;
+                redrawCell = 0;
             }
 
             continue;
         }
 
-        candidateX = pieceX;
-        candidateY = pieceY;
-        candidateRotation = rotation;
+        candidate.CopyFrom(active);
         attempt = false;
 
         if (Input.WasPressed(Button.A))
         {
-            candidateRotation += 1;
-            if (candidateRotation == 4)
-            {
-                candidateRotation = 0;
-            }
-
+            candidate.RotateClockwise();
             attempt = true;
         }
         else if (Input.WasPressed(Button.B))
         {
-            candidateRotation = candidateRotation == 0 ? 3 : candidateRotation - 1;
+            candidate.RotateCounterClockwise();
             attempt = true;
         }
         else if (Input.IsDown(Button.Left))
         {
-            if (Input.WasPressed(Button.Left) || horizontalCooldown == 0)
+            if (Input.WasPressed(Button.Left) || game.horizontalCooldown == 0)
             {
-                if (pieceX > 0)
+                if (active.x > 0)
                 {
-                    candidateX -= 1;
+                    candidate.x--;
                     attempt = true;
                 }
 
-                horizontalCooldown = Input.WasPressed(Button.Left)
+                game.horizontalCooldown = Input.WasPressed(Button.Left)
                     ? Timing.InitialHorizontalDelay
                     : Timing.RepeatHorizontalDelay;
             }
             else
             {
-                horizontalCooldown -= 1;
+                game.horizontalCooldown--;
             }
         }
         else if (Input.IsDown(Button.Right))
         {
-            if (Input.WasPressed(Button.Right) || horizontalCooldown == 0)
+            if (Input.WasPressed(Button.Right) || game.horizontalCooldown == 0)
             {
-                candidateX += 1;
+                candidate.x++;
                 attempt = true;
-                horizontalCooldown = Input.WasPressed(Button.Right)
+                game.horizontalCooldown = Input.WasPressed(Button.Right)
                     ? Timing.InitialHorizontalDelay
                     : Timing.RepeatHorizontalDelay;
             }
             else
             {
-                horizontalCooldown -= 1;
+                game.horizontalCooldown--;
             }
         }
         else
         {
-            horizontalCooldown = 0;
+            game.horizontalCooldown = 0;
         }
 
         if (attempt)
         {
             blocked = false;
-            cell = 0;
-            while (cell < 4 && !blocked)
+            for (cell = 0; cell < Pieces.CellCount && !blocked; cell++)
             {
-                index = pieceBase + cell;
+                index = candidate.CodeIndex(cell);
                 copy = shapes[index];
-                cellX = candidateX + Pieces.X(pieceBase, candidateRotation, cell, copy);
-                cellY = candidateY + Pieces.Y(pieceBase, candidateRotation, cell, copy);
-                if (cellX >= Board.Width || cellY >= Board.Height)
+                position.Locate(candidate, cell, copy);
+                if (position.x >= Board.Width || position.y >= Board.Height)
                 {
                     blocked = true;
                 }
                 else
                 {
-                    index = Board.Index(cellX, cellY);
+                    index = Board.Index(position.x, position.y);
                     if (board[index] != 0)
                     {
                         blocked = true;
                     }
                 }
-
-                cell += 1;
             }
 
             if (!blocked)
             {
-                pieceX = candidateX;
-                rotation = candidateRotation;
+                active.CopyFrom(candidate);
             }
         }
 
@@ -413,29 +266,26 @@ void Main()
         {
             while (!lockRequested)
             {
-                candidateY = pieceY + 1;
+                candidate.CopyFrom(active);
+                candidate.y++;
                 blocked = false;
-                cell = 0;
-                while (cell < 4 && !blocked)
+                for (cell = 0; cell < Pieces.CellCount && !blocked; cell++)
                 {
-                    index = pieceBase + cell;
+                    index = candidate.CodeIndex(cell);
                     copy = shapes[index];
-                    cellX = pieceX + Pieces.X(pieceBase, rotation, cell, copy);
-                    cellY = candidateY + Pieces.Y(pieceBase, rotation, cell, copy);
-                    if (cellX >= Board.Width || cellY >= Board.Height)
+                    position.Locate(candidate, cell, copy);
+                    if (position.x >= Board.Width || position.y >= Board.Height)
                     {
                         blocked = true;
                     }
                     else
                     {
-                        index = Board.Index(cellX, cellY);
+                        index = Board.Index(position.x, position.y);
                         if (board[index] != 0)
                         {
                             blocked = true;
                         }
                     }
-
-                    cell += 1;
                 }
 
                 if (blocked)
@@ -444,53 +294,37 @@ void Main()
                 }
                 else
                 {
-                    pieceY = candidateY;
+                    active.CopyFrom(candidate);
                 }
             }
         }
         else
         {
-            fallCounter += 1;
-            fallDue = false;
-            if (Input.IsDown(Button.Down))
+            game.fallCounter++;
+            copy = Input.IsDown(Button.Down) ? Timing.SoftDropDelay : game.fallDelay;
+            if (game.fallCounter >= copy)
             {
-                if (fallCounter >= Timing.SoftDropDelay)
-                {
-                    fallCounter = 0;
-                    fallDue = true;
-                }
-            }
-            else if (fallCounter >= fallDelay)
-            {
-                fallCounter = 0;
-                fallDue = true;
-            }
-
-            if (fallDue)
-            {
-                candidateY = pieceY + 1;
+                game.fallCounter = 0;
+                candidate.CopyFrom(active);
+                candidate.y++;
                 blocked = false;
-                cell = 0;
-                while (cell < 4 && !blocked)
+                for (cell = 0; cell < Pieces.CellCount && !blocked; cell++)
                 {
-                    index = pieceBase + cell;
+                    index = candidate.CodeIndex(cell);
                     copy = shapes[index];
-                    cellX = pieceX + Pieces.X(pieceBase, rotation, cell, copy);
-                    cellY = candidateY + Pieces.Y(pieceBase, rotation, cell, copy);
-                    if (cellX >= Board.Width || cellY >= Board.Height)
+                    position.Locate(candidate, cell, copy);
+                    if (position.x >= Board.Width || position.y >= Board.Height)
                     {
                         blocked = true;
                     }
                     else
                     {
-                        index = Board.Index(cellX, cellY);
+                        index = Board.Index(position.x, position.y);
                         if (board[index] != 0)
                         {
                             blocked = true;
                         }
                     }
-
-                    cell += 1;
                 }
 
                 if (blocked)
@@ -499,7 +333,7 @@ void Main()
                 }
                 else
                 {
-                    pieceY = candidateY;
+                    active.CopyFrom(candidate);
                 }
             }
         }
@@ -509,77 +343,55 @@ void Main()
             continue;
         }
 
-        cell = 0;
-        while (cell < 4)
+        for (cell = 0; cell < Pieces.CellCount; cell++)
         {
-            index = pieceBase + cell;
+            index = active.CodeIndex(cell);
             copy = shapes[index];
-            cellX = pieceX + Pieces.X(pieceBase, rotation, cell, copy);
-            cellY = pieceY + Pieces.Y(pieceBase, rotation, cell, copy);
-            index = Board.Index(cellX, cellY);
+            position.Locate(active, cell, copy);
+            index = Board.Index(position.x, position.y);
             board[index] = 1;
-            cell += 1;
         }
 
-        dirtyBase = pieceBase;
-        dirtyRotation = rotation;
-        dirtyX = pieceX;
-        dirtyY = pieceY;
-        dirtyCell = 0;
+        landed.CopyFrom(active);
+        redrawCell = 0;
 
         row = Board.Height - 1;
         while (true)
         {
-            full = true;
-            column = 0;
-            while (column < Board.Width)
+            for (column = 0; column < Board.Width; column++)
             {
                 index = Board.Index(column, row);
                 if (board[index] == 0)
                 {
-                    full = false;
+                    break;
                 }
-
-                column += 1;
             }
 
-            if (full)
+            if (column == Board.Width)
             {
-                if (lineCount < Board.Height)
-                {
-                    lineCount += 1;
-                }
-
-                if (fallDelay > Timing.MinimumFallDelay)
-                {
-                    fallDelay -= 1;
-                }
+                game.RegisterClearedLine();
 
                 shiftRow = row;
                 while (shiftRow > 0)
                 {
-                    candidateY = shiftRow - 1;
-                    column = 0;
-                    while (column < Board.Width)
+                    candidate.y = shiftRow - 1;
+                    for (column = 0; column < Board.Width; column++)
                     {
                         index = Board.Index(column, shiftRow);
-                        copy = board[Board.Index(column, candidateY)];
+                        copy = board[Board.Index(column, candidate.y)];
                         board[index] = copy;
-                        column += 1;
                     }
 
-                    shiftRow -= 1;
+                    shiftRow--;
                 }
 
-                column = 0;
-                while (column < Board.Width)
+                for (column = 0; column < Board.Width; column++)
                 {
                     board[Board.Index(column, 0)] = 0;
-                    column += 1;
                 }
 
                 redrawRow = 0;
-                dirtyCell = 0;
+                redrawCell = 0;
             }
             else if (row == 0)
             {
@@ -587,58 +399,39 @@ void Main()
             }
             else
             {
-                row -= 1;
+                row--;
             }
         }
 
-        piece = nextPiece;
-        pieceBase = 0;
-        cell = piece;
-        while (cell > 0)
-        {
-            pieceBase += 4;
-            cell -= 1;
-        }
+        active.Spawn(nextPiece);
 
         nextPiece += 3;
-        if (nextPiece >= 7)
+        if (nextPiece >= Pieces.Count)
         {
-            nextPiece -= 7;
+            nextPiece -= Pieces.Count;
         }
 
-        nextBase = 0;
-        cell = nextPiece;
-        while (cell > 0)
-        {
-            nextBase += 4;
-            cell -= 1;
-        }
-
-        rotation = 0;
-        pieceX = 3;
-        pieceY = 0;
-        fallCounter = 0;
+        nextBase = nextPiece;
+        nextBase += nextBase;
+        nextBase += nextBase;
+        game.fallCounter = 0;
 
         blocked = false;
-        cell = 0;
-        while (cell < 4 && !blocked)
+        for (cell = 0; cell < Pieces.CellCount && !blocked; cell++)
         {
-            index = pieceBase + cell;
+            index = active.CodeIndex(cell);
             copy = shapes[index];
-            cellX = pieceX + Pieces.X(pieceBase, rotation, cell, copy);
-            cellY = pieceY + Pieces.Y(pieceBase, rotation, cell, copy);
-            index = Board.Index(cellX, cellY);
+            position.Locate(active, cell, copy);
+            index = Board.Index(position.x, position.y);
             if (board[index] != 0)
             {
                 blocked = true;
             }
-
-            cell += 1;
         }
 
         if (blocked)
         {
-            gameOver = true;
+            game.gameOver = true;
         }
     }
 }
