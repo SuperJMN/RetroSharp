@@ -116,6 +116,51 @@ public sealed class NesSdkSpriteLoweringTests
         Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x8D, 0x14, 0x40]), "sprite_draw should DMA the OAM shadow page after writing logical sprites.");
     }
 
+    [Fact]
+    public void Dynamic_multitile_sprite_draw_keeps_one_frame_selection_across_all_oam_pieces()
+    {
+        var rows = string.Join(",", Enumerable.Repeat("\"1111111111111111\"", 16));
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            "{\"platforms\":{\"nes\":{\"frames\":[[" + rows + "],[" + rows + "]]}}}");
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
+                                  u8 frame = 0;
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, frame, false, 0);
+                                      frame ^= 1;
+                                  }
+                              }
+                              """;
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var cpu = new NesTestCpu(rom);
+
+        cpu.RunFrames(8);
+
+        var publishedTiles = cpu.OamDmaTransfers
+            .Select(transfer => new[]
+            {
+                transfer.SourceSnapshot[1],
+                transfer.SourceSnapshot[5],
+                transfer.SourceSnapshot[9],
+                transfer.SourceSnapshot[13],
+            })
+            .Where(tiles => tiles[0] != 0xFF)
+            .ToArray();
+        Assert.NotEmpty(publishedTiles);
+        Assert.All(
+            publishedTiles,
+            tiles => Assert.Equal(
+                Enumerable.Range(0, tiles.Length).Select(offset => (byte)(tiles[0] + offset)),
+                tiles));
+        var frameBases = publishedTiles.Select(tiles => tiles[0]).Distinct().Order().ToArray();
+        Assert.Equal(2, frameBases.Length);
+        Assert.Equal(4, frameBases[1] - frameBases[0]);
+    }
+
 
     [Fact]
     public void Rejects_png_overlay_draw_when_base_palette_slot_has_no_overlay_slot()

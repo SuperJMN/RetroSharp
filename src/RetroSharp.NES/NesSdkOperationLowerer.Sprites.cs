@@ -159,6 +159,12 @@ internal sealed partial class NesSdkOperationLowerer
 
         try
         {
+            var cacheDynamicTileBase = operation.Frame is not SdkByteExpression.Constant && asset.Pieces.Count > 1;
+            if (cacheDynamicTileBase)
+            {
+                EmitSpriteTileBase(operation.Frame, asset);
+            }
+
             for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
             {
                 var piece = asset.Pieces[pieceIndex];
@@ -166,7 +172,7 @@ internal sealed partial class NesSdkOperationLowerer
 
                 EmitSpriteDrawY(operation.Y, piece.YOffset, oamAddress);
 
-                EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
+                EmitSpriteTile(operation.Frame, asset, piece.TileOffset, cacheDynamicTileBase);
                 EmitStoreOamByte((ushort)(oamAddress + 1));
 
                 EmitSpriteDrawAttributes(operation.FlipX, physicalPaletteSlot + piece.PaletteSlotOffset, (ushort)(oamAddress + 2));
@@ -208,7 +214,19 @@ internal sealed partial class NesSdkOperationLowerer
         EmitStoreOamByte(oamAddress);
     }
 
-    private void EmitSpriteTile(SdkByteExpression frameExpression, NesCompiledSpriteAsset asset, int pieceTileOffset)
+    private void EmitSpriteTileBase(SdkByteExpression frameExpression, NesCompiledSpriteAsset asset)
+    {
+        EmitSdkByteExpressionToA(frameExpression);
+        EmitMultiplyAByConstant(asset.TilesPerFrame);
+        EmitAddSignedImmediate(asset.FirstTile);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch);
+    }
+
+    private void EmitSpriteTile(
+        SdkByteExpression frameExpression,
+        NesCompiledSpriteAsset asset,
+        int pieceTileOffset,
+        bool cachedDynamicTileBase)
     {
         if (frameExpression is SdkByteExpression.Constant constant)
         {
@@ -218,6 +236,13 @@ internal sealed partial class NesSdkOperationLowerer
             }
 
             builder.LoadAImmediate(asset.FirstTile + constant.Value * asset.TilesPerFrame + pieceTileOffset);
+            return;
+        }
+
+        if (cachedDynamicTileBase)
+        {
+            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch);
+            EmitAddSignedImmediate(pieceTileOffset);
             return;
         }
 
