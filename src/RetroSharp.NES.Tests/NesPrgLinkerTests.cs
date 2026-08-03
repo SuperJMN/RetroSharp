@@ -168,13 +168,14 @@ public sealed class NesPrgLinkerTests
     }
 
     [Fact]
-    public void Program_capacity_failure_is_deterministic()
+    public void Program_capacity_failure_reports_the_complete_deterministic_deficit()
     {
         static PrgBuilder OversizedProgram()
         {
             var builder = CreateBuilder();
             using (builder.EnterSection(NesPrgResidence.ProgramR6))
             {
+                builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 3).ToArray());
                 builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 3).ToArray());
                 builder.Emit(0xEA, 0xEA, 0xEA, 0xEA);
             }
@@ -185,12 +186,13 @@ public sealed class NesPrgLinkerTests
         var firstBuilder = OversizedProgram();
         var secondBuilder = OversizedProgram();
         var first = Assert.Throws<NesProgramBankCapacityException>(
-            () => Link(firstBuilder, checked((ushort)firstBuilder.CurrentAddress), ProgramBank(0)));
+            () => Link(firstBuilder, checked((ushort)firstBuilder.CurrentAddress)));
         var second = Assert.Throws<NesProgramBankCapacityException>(
-            () => Link(secondBuilder, checked((ushort)secondBuilder.CurrentAddress), ProgramBank(0)));
+            () => Link(secondBuilder, checked((ushort)secondBuilder.CurrentAddress)));
 
-        Assert.Equal(2, first.RequiredBanks);
-        Assert.Equal(1, first.AvailableBanks);
+        Assert.Equal(3, first.RequiredBanks);
+        Assert.Equal(0, first.AvailableBanks);
+        Assert.Equal((2 * ProgramBankSize) + 4, first.ProgramBytes);
         Assert.Equal(first.ProgramBytes, second.ProgramBytes);
         Assert.Equal(first.RequiredBanks, second.RequiredBanks);
         Assert.Equal(first.AvailableBanks, second.AvailableBanks);

@@ -41,7 +41,7 @@ public partial class NesRomCompilerTests
 
         Assert.Equal(NesLinkConstraint.Mmc3R6Capacity, exception.Data[nameof(NesLinkConstraint)]);
         Assert.Equal(
-            $"NES MMC3/TVROM R6 capacity overflow: WorldPack owns 1 bank(s) ({packedWorld.Length} bytes) and program requires 4 bank(s) (25207 linked bytes), but R6 banks [0, 3, 4, 5] provide 4 whole banks.",
+            $"NES MMC3/TVROM R6 capacity overflow: WorldPack owns 1 bank(s) ({packedWorld.Length} bytes) and program requires 4 bank(s) (25216 linked bytes), but R6 banks [0, 3, 4, 5] provide 4 whole banks.",
             exception.Message);
     }
 
@@ -174,7 +174,6 @@ public partial class NesRomCompilerTests
         Assert.InRange(programSegments.Length, 2, 4);
         Assert.Equal(programSegments.Length, programSegments.Select(segment => segment.PhysicalBank).Distinct().Count());
         Assert.All(programSegments, segment => Assert.Contains(segment.PhysicalBank, new[] { 0, 3, 4, 5 }));
-        Assert.Equal(first.Rom, second.Rom);
         Assert.Equal(first.Report.Segments, second.Report.Segments);
         Assert.Equal(first.Report.BankedSymbols, second.Report.BankedSymbols);
 

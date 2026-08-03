@@ -105,7 +105,7 @@ internal static class NesPrgLinker
         IReadOnlyDictionary<string, ResolvedSymbol> symbols;
         while (true)
         {
-            placement = PlaceProgram(mutableAtoms, programSection.Bytes.Length, layout.ProgramBanks.Count);
+            placement = PlaceProgram(mutableAtoms);
             symbols = ResolveSymbols(emission, placement, layout);
             var grew = false;
             for (var index = 0; index < mutableAtoms.Length; index++)
@@ -135,6 +135,15 @@ internal static class NesPrgLinker
             {
                 break;
             }
+        }
+
+        var linkedProgramBytes = placement.UsedBytesByBank.Sum();
+        if (placement.RequiredBanks > layout.ProgramBanks.Count)
+        {
+            throw new NesProgramBankCapacityException(
+                linkedProgramBytes,
+                placement.RequiredBanks,
+                layout.ProgramBanks.Count);
         }
 
         var veneerTargets = CollectVeneerTargets(emission, placement, symbols, layout);
@@ -256,10 +265,7 @@ internal static class NesPrgLinker
         }
     }
 
-    private static ProgramPlacement PlaceProgram(
-        IReadOnlyList<MutableAtom> atoms,
-        int originalProgramBytes,
-        int availableBanks)
+    private static ProgramPlacement PlaceProgram(IReadOnlyList<MutableAtom> atoms)
     {
         if (atoms.Count == 0)
         {
@@ -289,15 +295,6 @@ internal static class NesPrgLinker
                 used.Add(offset + FallthroughJumpSize);
                 bankIndex++;
                 offset = 0;
-            }
-
-            if (bankIndex >= availableBanks)
-            {
-                var linkedBytes = placed.Sum(item => item.Length) + length + bankIndex * FallthroughJumpSize;
-                throw new NesProgramBankCapacityException(
-                    Math.Max(originalProgramBytes, linkedBytes),
-                    bankIndex + 1,
-                    availableBanks);
             }
 
             placed.Add(new PlacedAtom(atom, bankIndex, offset, length));
@@ -356,13 +353,15 @@ internal static class NesPrgLinker
                     $"NES banked program label '{pair.Key}' at source offset {definition.Offset} does not lie on an atom boundary.");
             }
 
-            var bank = layout.ProgramBanks[location.BankIndex];
+            var bank = location.BankIndex < layout.ProgramBanks.Count
+                ? layout.ProgramBanks[location.BankIndex]
+                : null;
             resolved[pair.Key] = new ResolvedSymbol(
                 NesPrgResidence.ProgramR6,
                 location.BankIndex,
-                bank.PhysicalBank,
+                bank?.PhysicalBank,
                 checked((ushort)(ProgramCpuBaseAddress + location.Offset)),
-                checked(bank.PhysicalOffset + location.Offset));
+                bank is null ? -1 : checked(bank.PhysicalOffset + location.Offset));
         }
 
         return resolved;
