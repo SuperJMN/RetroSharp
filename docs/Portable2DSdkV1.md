@@ -540,7 +540,7 @@ Calls that expose raw hardware state are outside SDK v1. They can remain availab
 | --- | --- | --- |
 | `Scroll.Set(...)` | Target-intrinsic scroll-register escape hatch. | Use `Camera.SetPosition(...)` and `Camera.Apply()` for position-based camera movement. |
 | `Sprite.Set(...)` | Target-intrinsic OAM escape hatch. | Use `Sprite.Asset(...)` and `Sprite.Draw(...)` for logical sprites. |
-| `Tilemap.Set(...)` / `Tilemap.Fill(...)` | Target-intrinsic static background setup helpers. | Use `World.Load(...)` or `World.Column(...)` / `World.Map(...)` plus camera/world APIs. |
+| `Tilemap.Set(...)` / `Tilemap.Fill(...)` | Target-intrinsic static background setup helpers. `Tilemap.Set(...)` also has a transitional fixed-screen runtime form on GB/NES when called immediately after `Video.WaitVBlank()`; runtime coordinates are source-owned and NES restores zero scroll after each write. | Use `World.Load(...)` or `World.Column(...)` / `World.Map(...)` plus camera/world APIs for scrolling scenes; a future capability-gated background-update operation should replace the runtime escape hatch. |
 | `tilemap_fill_column(...)` | Transitional runtime tilemap-write primitive. | Keep as backend/runtime implementation detail; camera streaming should come from `Camera.SetPosition(...)` / `Camera.Apply()`. |
 | `map_stream_column(...)` | Transitional explicit streaming helper. | Keep as a compiler-emitted camera-stream operation or migrate behind a narrower target intrinsic. |
 | `Palette.Set(...)` / `ObjectPalette.Set(...)` | Target-intrinsic palette-register or palette-RAM setup. | Use `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations. |

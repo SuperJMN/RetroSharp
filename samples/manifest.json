@@ -23,6 +23,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "falling-blocks",
+      "path": "samples/falling-blocks/falling-blocks.retrosharp.json",
+      "readme": "samples/falling-blocks/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "static-drawing",
       "path": "samples/static-drawing/drawing.rs",
       "readme": "samples/static-drawing/README.md",

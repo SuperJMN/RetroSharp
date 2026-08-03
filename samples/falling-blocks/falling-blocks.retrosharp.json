@@ -1,0 +1,15 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/falling-blocks.gb",
+    "nes": "bin/falling-blocks.nes"
+  },
+  "rootNamespace": "FallingBlocks",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": [
+    "src/rules.rs",
+    "src/main.rs"
+  ]
+}

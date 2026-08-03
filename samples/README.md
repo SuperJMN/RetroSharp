@@ -50,6 +50,15 @@ portable source-library sample: the project loads `Acme.Timing` from
 `samples/source-library-package/lib` and proves that local source-only packages
 compile for Game Boy and NES without adding compiler plugins.
 
+`samples/falling-blocks/falling-blocks.retrosharp.json` is a shared Game
+Boy/NES `target-acceptance` game with all seven tetrominoes, rotation, collision,
+soft/hard drop, line compaction, increasing speed, game over, and restart. Its
+fixed 10x16 board stays within the cartridge targets' local-storage budget, and
+its side panel previews the next piece. Its bounded row redraw demonstrates the
+transitional runtime form of `Tilemap.Set(...)` on a fixed screen immediately
+after VBlank. A blocked spawn hides the active and preview pieces; `Start`
+clears the board and restores the initial game state.
+
 `samples/static-drawing/drawing.rs` is the canonical static-rendering identity
 for both cartridge targets. Private compile-time target variants in that one
 source retain each original raw palette/tilemap fixture and its exact visible

@@ -12,13 +12,16 @@ internal sealed partial class GameBoyRuntimeCompiler
 {
     private void EmitCall(FunctionCall call)
     {
-        if (IsResourceDeclarationCall(call))
+        if (TryEmitResourceDeclarationCall(call))
         {
             return;
         }
 
         switch (call.Name)
         {
+            case "tilemap_set":
+                EmitRuntimeTilemapSet(call);
+                break;
             case "hud_set_tile":
                 _ = ConsumeSdkOperation<Sdk2DOperation.SetHudTile>(call.Name);
                 break;
@@ -55,10 +58,63 @@ internal sealed partial class GameBoyRuntimeCompiler
         }
     }
 
-    private bool IsResourceDeclarationCall(FunctionCall call)
+    private bool TryEmitResourceDeclarationCall(FunctionCall call)
     {
-        return program.Functions.TryGetValue(call.Name, out var function)
-               && SdkResourceDeclarationResolver.TryResolve(function, out _, program.ResourceDeclarations);
+        if (!program.Functions.TryGetValue(call.Name, out var function)
+            || !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor, program.ResourceDeclarations))
+        {
+            return false;
+        }
+
+        if (descriptor.Kind == SdkResourceDeclarationKind.TilemapSet
+            && call.Parameters.Any(parameter => !TryConst(parameter, out _)))
+        {
+            EmitRuntimeTilemapSet(call);
+        }
+
+        return true;
+    }
+
+    private void EmitRuntimeTilemapSet(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 3);
+        var args = call.Parameters.ToList();
+        ValidateRuntimeTilemapArgument(args[0], 31, "x");
+        ValidateRuntimeTilemapArgument(args[1], 31, "y");
+        ValidateRuntimeTilemapArgument(args[2], 255, "tile");
+
+        EmitExpressionToA(args[1]);
+        builder.LoadLFromA();
+        builder.LoadHImmediate(0);
+        for (var shift = 0; shift < 5; shift++)
+        {
+            builder.Emit(0x29); // ADD HL,HL
+        }
+
+        builder.PushHl();
+        EmitExpressionToA(args[0]);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.PopHl();
+        builder.AddHlDe();
+        builder.LoadDe(0x9800);
+        builder.AddHlDe();
+
+        builder.PushHl();
+        EmitExpressionToA(args[2]);
+        builder.LoadBFromA();
+        builder.PopHl();
+        builder.LoadAFromB();
+        builder.StoreHlA();
+    }
+
+    private void ValidateRuntimeTilemapArgument(ExpressionSyntax expression, int max, string name)
+    {
+        if (TryConst(expression, out var value) && (value < 0 || value > max))
+        {
+            throw new InvalidOperationException(
+                $"Game Boy runtime tilemap_set {name} must be between 0 and {max}, got {value}.");
+        }
     }
 
     private void EmitSdkOperation(Sdk2DOperation operation)
