@@ -10,6 +10,7 @@ void SetupVideo()
     Palette.Sprite(0, 0, 0, 1, 3);
     Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
     Animation.Clip(run, 1, 48, 48, 48);
+    Sprite.Asset(goomba, "assets/goomba.png", 16, 16);
 }
 
 void SetupAudio()
@@ -35,6 +36,10 @@ void Main()
     PlayerState player;
     CameraState view;
     FrameState frame;
+    u8 goombaX = 176;
+    u8 goombaY = Viewport.Height - 32;
+    u8 goombaFrame = 0;
+    bool goombaAdvance;
 
     view.ResetMotion();
     view.y = Camera.VerticalScrollMax();
@@ -48,10 +53,27 @@ void Main()
         Video.WaitVBlank();
         Camera.Apply();
         PresentFrame(player, view);
+        Sprite.Draw(goomba, goombaX, goombaY, goombaFrame, false, 0);
         Audio.Update();
         Input.Poll();
 
         SimulatePlayer(player, view, frame);
+        goombaAdvance = !goombaAdvance;
+        if (goombaAdvance)
+        {
+            if (goombaX == 0)
+            {
+                goombaY = Viewport.Height;
+            }
+            else
+            {
+                goombaX -= 1;
+                if ((goombaX & 15) == 0)
+                {
+                    goombaFrame ^= 1;
+                }
+            }
+        }
     }
 }
 
