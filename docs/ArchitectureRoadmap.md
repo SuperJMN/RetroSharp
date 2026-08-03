@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-07-17.
+Last updated: 2026-08-03.
 
 Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.
 
@@ -25,6 +25,11 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
 Iteration 15, scalable large-world assets and banked streaming, is complete through joint acceptance. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and full-`stage1` acceptance. NES `LW-3.1` through `LW-3.4` prove the target-private MMC3/TVROM fixed-runtime foundation, mapper-0-first final-link selection, canonical ordered multi-R6 placement, the fixed-bank `WorldPack` reader, exact R6 restoration, and bounded four-screen streaming. `LW-3.5` migrated the shared runner and regenerated both tracked ROMs from the complete map. The complete task graph lives in `docs/history/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
+
+NES executable banking is a later target-private extension, owned by
+[`NesCodeBankingV1.md`](NesCodeBankingV1.md). It reuses only whole R6 banks
+left after `WorldPack`, keeps fixed runtime and data ownership intact, and adds
+no language, portable SDK, manifest, or public mapper-selection surface.
 
 Iteration 16 addresses measured generated-code performance cliffs without
 changing the public actor API. The discovery baseline falls from 100/100 to
@@ -1220,9 +1225,10 @@ issues; this architecture section records only the durable boundary:
 - a CPU-visible bank window is not the maximum logical `WorldPack` size;
   target-private ordered continuation segments preserve the canonical bytes
   and 32-bit pack-relative offsets across physical-bank boundaries;
-- Large Worlds v1 banks world/data only on NES: executable code, handlers,
-  DPCM, helpers, and vectors remain fixed, and automatic code banking is a
-  separate future architecture decision;
+- Large Worlds v1 banks world/data only on NES: its executable code, handlers,
+  DPCM, helpers, and vectors remain fixed. The later executable-banking profile
+  is a separate target-linker contract in `NesCodeBankingV1.md` and does not
+  revise the completed epic;
 - small ROM-only Game Boy and mapper-0 NES outputs remain stable when they fit;
 - no heap, GC, RTTI, virtual dispatch, delegates, closures, or unbounded runtime
   collections are introduced.

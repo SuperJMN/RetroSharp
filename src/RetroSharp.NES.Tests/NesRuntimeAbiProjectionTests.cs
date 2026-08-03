@@ -8,6 +8,40 @@ using Xunit;
 public sealed class NesRuntimeAbiProjectionTests
 {
     [Fact]
+    public void Codebank_link_keeps_the_public_runtime_abi_at_v1_without_linker_symbols()
+    {
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            NesCodeBankingValidationFixture.Source,
+            NesCodeBankingValidationFixture.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+
+        using var document = JsonDocument.Parse(SerializeProjection(result));
+        var root = document.RootElement;
+
+        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal("retrosharp.nes.runtime-abi", root.GetProperty("contract").GetString());
+        Assert.Equal(1, root.GetProperty("version").GetInt32());
+        string[] expectedProperties =
+        [
+            "contract",
+            "version",
+            "target",
+            "abiFingerprint",
+            "romSha256",
+            "ranges",
+            "addresses",
+            "rangeAliases",
+            "addressAliases",
+            "constants",
+            "runtimeRegions",
+            "userVariables",
+        ];
+        Assert.Equal(
+            expectedProperties,
+            root.EnumerateObject().Select(property => property.Name).ToArray());
+    }
+
+    [Fact]
     public void Projection_is_complete_versioned_and_deterministic()
     {
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(

@@ -9,6 +9,11 @@ intentionally revised.
 link program that were current when the fixture was created. Tests that need a
 complete stage must use this copy instead of `samples/runner`.
 
+`nes-code-banking-v1` freezes a compact but linker-large NES program together
+with a small Tiled world and pinned music. It is the stable canary for automatic
+program R6 allocation, cross-bank control flow, WorldPack-first ownership, and
+R7/fixed-runtime coexistence.
+
 Normal runner edits never update fixtures or baselines. Add a new versioned
 fixture when a contract needs a materially different stable input; do not
 silently replace an existing version.

@@ -46,6 +46,7 @@ public static class NesRomCompiler
             sdkLibraryImports,
             sdkPluginRegistry,
             forcedCartridgeProfile: null,
+            forcedProgramLinkMode: null,
             packedWorldOverride,
             worldPackProbe,
             generatedRomTablesOverride);
@@ -86,6 +87,31 @@ public static class NesRomCompiler
             sdkLibraryImports,
             sdkPluginRegistry,
             NesCartridgeProfile.Mmc3Tvrom,
+            NesProgramLinkMode.Fixed,
+            packedWorldOverride,
+            worldPackProbe,
+            generatedRomTablesOverride: null);
+    }
+
+    internal static NesRomBuildResult CompileSourceForMmc3TvromCodeBankTestsWithReport(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null,
+        byte[]? packedWorldOverride = null,
+        NesWorldPackProbe? worldPackProbe = null)
+    {
+        return CompileSourceCore(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry,
+            NesCartridgeProfile.Mmc3Tvrom,
+            NesProgramLinkMode.BankedR6,
             packedWorldOverride,
             worldPackProbe,
             generatedRomTablesOverride: null);
@@ -99,6 +125,7 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports,
         SdkPluginRegistry? sdkPluginRegistry,
         NesCartridgeProfile? forcedCartridgeProfile,
+        NesProgramLinkMode? forcedProgramLinkMode,
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe,
         IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride)
@@ -131,7 +158,8 @@ public static class NesRomCompiler
             useFourScreenNametables,
             forcedCartridgeProfile,
             packedWorldOverride,
-            worldPackProbe);
+            worldPackProbe,
+            forcedProgramLinkMode);
     }
 
     private static bool RequiresLegacyWorldData(Sdk2DOperation operation) => operation is

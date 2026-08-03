@@ -4,6 +4,20 @@ using Xunit;
 
 public sealed class NesTestCpuTimingTests
 {
+    [Fact]
+    public void Php_and_plp_restore_status_and_charge_stack_cycles()
+    {
+        var rom = CreateRom();
+        Write(rom, 0x8000, [0x38, 0x08, 0x18, 0x28, 0x60]);
+        var cpu = new NesTestCpu(rom);
+
+        var result = cpu.RunRoutine(0x8000);
+
+        Assert.True(result.Carry);
+        Assert.Equal((byte)0x31, cpu.Ram(0x01FB));
+        Assert.Equal(17, result.Cycles);
+    }
+
     [Theory]
     [InlineData(false, 12)]
     [InlineData(true, 13)]

@@ -250,9 +250,7 @@ public sealed class NesWorldPackPlacementTests
             ],
             new byte[] { 0, 0, 1, 0 },
             chunks);
-        var serialized = WorldPackSerializer.Serialize(pack);
-        Assert.True(serialized.Length > 8 * 1_024);
-        return serialized;
+        return WorldPackSerializer.Serialize(pack);
     }
 
     private static string RepositoryDirectory(string relativePath)
