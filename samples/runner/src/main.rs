@@ -11,12 +11,14 @@ void SetupVideo()
     Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
     Animation.Clip(run, 1, 48, 48, 48);
     Sprite.Asset(goomba, "assets/goomba.png", 16, 16);
+    Animation.Clip(goomba_walk, 0, 16, 16);
 }
 
 void SetupAudio()
 {
     Music.Asset(runner_theme, "assets/music/runner.vgz");
     Sfx.Asset(jump_sfx, "assets/sfx/smb-jump.vgm");
+    Sfx.Asset(squish_sfx, "assets/sfx/squish.vgm");
     Audio.Init();
     Music.Play(runner_theme);
 }
@@ -32,13 +34,12 @@ void Main()
     SetupAudio();
     LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
+    Actors.Pool(enemies, 1);
+    Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, hp: 1, cooldown: 255, hitboxWidth: 16, hitboxHeight: 16, defeatedFrame: 2);
 
     PlayerState player;
     CameraState view;
     FrameState frame;
-    u8 goombaX = 176;
-    u8 goombaY = Viewport.Height - 32;
-    u8 goombaFrame = 0;
     bool goombaAdvance;
 
     view.ResetMotion();
@@ -50,28 +51,44 @@ void Main()
     {
         // Commit the prepared camera edge at the start of VBlank, then present
         // the frame simulated last tick before servicing audio and input.
+        u8 playerScreenX = (u8)view.ScreenX(player);
+        u8 playerScreenY = (u8)view.ScreenY(player);
         Video.WaitVBlank();
         Camera.Apply();
-        PresentFrame(player, view);
-        Sprite.Draw(goomba, goombaX, goombaY, goombaFrame, false, 0);
+        PresentFrame(player, playerScreenX, playerScreenY);
+        if (enemies[0].health != 0)
+        {
+            enemies[0].state = 0;
+        }
+        enemies.DrawAndTouchPlayerTop(playerScreenX, playerScreenY, 18, 32, 8);
         Audio.Update();
         Input.Poll();
 
+        if (enemies[0].health != 0 && player.velocityY > 0 && enemies[0].state != 0)
+        {
+            enemies[0].health = 0;
+            Sfx.Play(squish_sfx);
+            player.BounceAfterStomp(Input.IsDown(Button.A));
+        }
         SimulatePlayer(player, view, frame);
+        Actors.SpawnWindow(enemies, "assets/maps/stage1.tmx", "actors", 0, 192);
         goombaAdvance = !goombaAdvance;
         if (goombaAdvance)
         {
-            if (goombaX == 0)
+            if (enemies[0].health == 0)
             {
-                goombaY = Viewport.Height;
+                if (enemies[0].active != 0)
+                {
+                    enemies[0].state += 1;
+                    if (enemies[0].state == GoombaDeath.SquashedUpdates)
+                    {
+                        enemies[0].active = 0;
+                    }
+                }
             }
             else
             {
-                goombaX -= 1;
-                if ((goombaX & 15) == 0)
-                {
-                    goombaFrame ^= 1;
-                }
+                enemies.Update();
             }
         }
     }

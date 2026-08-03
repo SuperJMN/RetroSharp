@@ -193,6 +193,47 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Singleton_actor_spawn_avoids_generic_scan_and_slot_search_loops()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 176, "y": 288, "properties": [
+                { "name": "facing", "type": "int", "value": 1 }
+              ] }
+            ]
+            """);
+        const string source = """
+                              void Main() {
+                                  World.Column(0, 0, 0);
+                                  World.Map(156, 0, 2);
+                                  Camera.Init(156, 0, 2);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Patrol, speed: 1, cooldown: 255);
+                                  Actors.SpawnWindow(enemies, "level.tmj", "actors", 0, 192);
+                              }
+                              """;
+        var prepared = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            source,
+            baseDirectory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null);
+        var lowered = Compact(PrintedFunction(prepared, "Main"));
+
+        Assert.DoesNotContain("for(u8__enemies_spawn_0_call0_recycle_i", lowered);
+        Assert.DoesNotContain("for(u8__enemies_spawn_0_call0_i", lowered);
+        Assert.DoesNotContain("for(u8__enemies_spawn_0_call0_slot", lowered);
+        Assert.Contains("if(enemies[0].active!=0)", lowered);
+        Assert.Contains("if(__enemies_spawn_0_used[0]==0)", lowered);
+        Assert.Contains("enemies[0].x=176", lowered);
+        Assert.Contains("enemies[0].yHi=1", lowered);
+        Assert.Contains("enemies[0].facing=1", lowered);
+        Assert.Contains("__enemies_spawn_0_used[0]=1", lowered);
+    }
+
+    [Fact]
     public void Banked_spawn_rom_table_lookup_restores_the_actual_visible_bank()
     {
         var table = new CompilerGeneratedRomTable("lookup", [0x10, 0x20, 0x30, 0x40]);

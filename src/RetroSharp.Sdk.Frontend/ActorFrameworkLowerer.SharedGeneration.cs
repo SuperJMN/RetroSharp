@@ -132,6 +132,25 @@ public static partial class ActorFrameworkLowerer
             int screenHeight,
             int margin = 0,
             string? cameraPhase = null)
+        => BuildPooledScreenProjection(
+            arrayName,
+            new IdentifierSyntax(indexName),
+            poolName,
+            phase,
+            screenWidth,
+            screenHeight,
+            margin,
+            cameraPhase);
+
+    private static ActorScreenProjection BuildPooledScreenProjection(
+            string arrayName,
+            ExpressionSyntax index,
+            string poolName,
+            string phase,
+            int screenWidth,
+            int screenHeight,
+            int margin = 0,
+            string? cameraPhase = null)
     {
         var cameraVariablePhase = cameraPhase ?? phase;
         var cameraXLow = $"__{poolName}_{cameraVariablePhase}_camera_x_lo";
@@ -150,7 +169,7 @@ public static partial class ActorFrameworkLowerer
                     screenX,
                     Maybe<ExpressionSyntax>.None,
                     Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
-                        PoolField(arrayName, indexName, "x"),
+                        PoolField(arrayName, index, "x"),
                         new IdentifierSyntax(cameraXLow),
                         Operator.Get("-")))),
                 new DeclarationSyntax(
@@ -158,7 +177,7 @@ public static partial class ActorFrameworkLowerer
                     screenY,
                     Maybe<ExpressionSyntax>.None,
                     Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
-                        PoolField(arrayName, indexName, "y"),
+                        PoolField(arrayName, index, "y"),
                         new IdentifierSyntax(cameraYLow),
                         Operator.Get("-")))),
                 new DeclarationSyntax("u8", visibleXName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
@@ -166,14 +185,14 @@ public static partial class ActorFrameworkLowerer
             };
 
         var sameCameraXPage = And(
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
         var nextCameraXPage = And(
             new BinaryExpressionSyntax(
-                PoolField(arrayName, indexName, "xHi"),
+                PoolField(arrayName, index, "xHi"),
                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
                 Operator.Equal),
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
         var xMargin = screenWidth + margin < 256 ? margin : 0;
         ExpressionSyntax forwardXExpression = Or(sameCameraXPage, nextCameraXPage);
         var rightLimit = screenWidth + xMargin;
@@ -192,14 +211,14 @@ public static partial class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(256 - xMargin), Operator.GreaterThanOrEqual),
                 Or(
                     And(
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan)),
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan)),
                     And(
                         new BinaryExpressionSyntax(
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), Constant(1), Operator.Get("+")),
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "xHi"), Constant(1), Operator.Get("+")),
                             new IdentifierSyntax(cameraXHigh),
                             Operator.Equal),
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual))));
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual))));
             declarations.Add(SetByteFlagIf(visibleXName, leftOfCameraX));
 
             if (rightLimit >= 256)
@@ -209,29 +228,29 @@ public static partial class ActorFrameworkLowerer
                     Or(
                         And(
                             new BinaryExpressionSyntax(
-                                PoolField(arrayName, indexName, "xHi"),
+                                PoolField(arrayName, index, "xHi"),
                                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
                                 Operator.Equal),
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual)),
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual)),
                         And(
                             new BinaryExpressionSyntax(
-                                PoolField(arrayName, indexName, "xHi"),
+                                PoolField(arrayName, index, "xHi"),
                                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(2), Operator.Get("+")),
                                 Operator.Equal),
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan))));
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan))));
                 declarations.Add(SetByteFlagIf(visibleXName, rightOfCameraX));
             }
         }
 
         var sameCameraYPage = And(
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.Get(">=")));
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.Get(">=")));
         var nextCameraYPage = And(
             new BinaryExpressionSyntax(
-                PoolField(arrayName, indexName, "yHi"),
+                PoolField(arrayName, index, "yHi"),
                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
                 Operator.Equal),
-            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan));
+            new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan));
         var yMargin = screenHeight + margin < 256 ? margin : 0;
         ExpressionSyntax forwardYExpression = Or(sameCameraYPage, nextCameraYPage);
         var bottomLimit = screenHeight + yMargin;
@@ -250,14 +269,14 @@ public static partial class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(256 - yMargin), Operator.GreaterThanOrEqual),
                 Or(
                     And(
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan)),
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan)),
                     And(
                         new BinaryExpressionSyntax(
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), Constant(1), Operator.Get("+")),
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "yHi"), Constant(1), Operator.Get("+")),
                             new IdentifierSyntax(cameraYHigh),
                             Operator.Equal),
-                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual))));
+                        new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual))));
             declarations.Add(SetByteFlagIf(visibleYName, aboveCameraY));
 
             if (bottomLimit >= 256)
@@ -267,16 +286,16 @@ public static partial class ActorFrameworkLowerer
                     Or(
                         And(
                             new BinaryExpressionSyntax(
-                                PoolField(arrayName, indexName, "yHi"),
+                                PoolField(arrayName, index, "yHi"),
                                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
                                 Operator.Equal),
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual)),
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual)),
                         And(
                             new BinaryExpressionSyntax(
-                                PoolField(arrayName, indexName, "yHi"),
+                                PoolField(arrayName, index, "yHi"),
                                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(2), Operator.Get("+")),
                                 Operator.Equal),
-                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan))));
+                            new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan))));
                 declarations.Add(SetByteFlagIf(visibleYName, belowCameraY));
             }
         }
@@ -288,6 +307,76 @@ public static partial class ActorFrameworkLowerer
             And(
                 new BinaryExpressionSyntax(new IdentifierSyntax(visibleXName), Constant(0), Operator.NotEqual),
                 new BinaryExpressionSyntax(new IdentifierSyntax(visibleYName), Constant(0), Operator.NotEqual)));
+    }
+
+    private static ActorScreenProjection BuildDirectPooledScreenProjection(
+        string arrayName,
+        ExpressionSyntax index,
+        string poolName,
+        string phase,
+        int screenWidth,
+        int screenHeight)
+    {
+        var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
+        var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
+        var cameraYLow = $"__{poolName}_{phase}_camera_y_lo";
+        var cameraYHigh = $"__{poolName}_{phase}_camera_y_hi";
+        var screenX = $"__{poolName}_{phase}_screen_x";
+        var screenY = $"__{poolName}_{phase}_screen_y";
+        var screenXIdentifier = new IdentifierSyntax(screenX);
+        var screenYIdentifier = new IdentifierSyntax(screenY);
+
+        var declarations = new List<StatementSyntax>
+        {
+            new DeclarationSyntax(
+                "u8",
+                screenX,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(arrayName, index, "x"),
+                    new IdentifierSyntax(cameraXLow),
+                    Operator.Get("-")))),
+            new DeclarationSyntax(
+                "u8",
+                screenY,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(arrayName, index, "y"),
+                    new IdentifierSyntax(cameraYLow),
+                    Operator.Get("-")))),
+        };
+
+        var visibleX = Or(
+            And(
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual)),
+            And(
+                new BinaryExpressionSyntax(
+                    PoolField(arrayName, index, "xHi"),
+                    new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
+                    Operator.Equal),
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan)));
+        if (screenWidth < 256)
+        {
+            visibleX = And(visibleX, new BinaryExpressionSyntax(screenXIdentifier, Constant(screenWidth), Operator.LessThan));
+        }
+
+        var visibleY = Or(
+            And(
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual)),
+            And(
+                new BinaryExpressionSyntax(
+                    PoolField(arrayName, index, "yHi"),
+                    new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
+                    Operator.Equal),
+                new BinaryExpressionSyntax(PoolField(arrayName, index, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan)));
+        if (screenHeight < 256)
+        {
+            visibleY = And(visibleY, new BinaryExpressionSyntax(screenYIdentifier, Constant(screenHeight), Operator.LessThan));
+        }
+
+        return new ActorScreenProjection(declarations, screenXIdentifier, screenYIdentifier, And(visibleX, visibleY));
     }
 
     private sealed record ActorScreenProjection(IReadOnlyList<StatementSyntax> Declarations, IdentifierSyntax ScreenX, IdentifierSyntax ScreenY, ExpressionSyntax Visible);

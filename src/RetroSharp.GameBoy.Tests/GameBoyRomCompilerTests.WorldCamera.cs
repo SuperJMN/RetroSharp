@@ -491,6 +491,29 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Indexed_png_sprite_sheet_maps_palette_colors_by_luminance()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var pixels = Enumerable.Repeat((byte)1, 8 * 16).ToArray();
+        pixels[0] = 0;
+        pixels[1] = 3;
+        pixels[2] = 2;
+        File.WriteAllBytes(
+            Path.Combine(directory, "indexed.gb.png"),
+            EncodeIndexedPng(
+                8,
+                16,
+                pixels,
+                [0x28, 0x28, 0x28, 0x00, 0x00, 0x00, 0xF8, 0xF8, 0xF8, 0xA8, 0xA8, 0xA8],
+                [0xFF, 0x00, 0xFF, 0xFF]));
+
+        var frames = GameBoyPngSpriteSheet.ReadFrames(Path.Combine(directory, "indexed.gb.png"), 8, 16);
+
+        Assert.Equal("32100000", frames[0][0]);
+    }
+
+    [Fact]
     public void Compiles_scroll_set_to_game_boy_scroll_register_writes()
     {
         const string source = """

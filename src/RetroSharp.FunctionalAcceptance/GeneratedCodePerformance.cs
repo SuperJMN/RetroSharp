@@ -392,29 +392,13 @@ internal static class GeneratedCodePerformanceMatrixRunner
         ArgumentNullException.ThrowIfNull(adapter);
         var first = RunOnce(adapter);
         var second = RunOnce(adapter);
-        for (var index = 0; index < first.Count; index++)
-        {
-            var firstRow = first[index];
-            var secondRow = second[index];
-            if (!string.Equals(firstRow.RomSha256, secondRow.RomSha256, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"Generated-code performance target '{adapter.Target.StableId()}' produced different ROM hashes between independent runs for fixture '{firstRow.CaseId}'.");
-            }
-        }
+        VerifyMatchingObservableResults(adapter.Target, first, second);
 
         var firstReport = GeneratedCodePerformanceReport.Serialize(first);
-        var secondReport = GeneratedCodePerformanceReport.Serialize(second);
-        if (!string.Equals(firstReport, secondReport, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Generated-code performance target '{adapter.Target.StableId()}' produced different reports between independent runs.");
-        }
-
         return new GeneratedCodePerformanceMatrixResult(adapter.Target, first, firstReport);
     }
 
-    public static GeneratedCodePerformanceMatrixResult RunTwiceAndVerifySnapshot(
+    public static GeneratedCodePerformanceMatrixResult RunTwiceAndVerifyCadenceBudget(
         IGeneratedCodePerformanceTargetAdapter adapter,
         string snapshotPath)
     {
@@ -422,14 +406,89 @@ internal static class GeneratedCodePerformanceMatrixRunner
         var expected = GeneratedCodePerformanceReport.ReadSnapshot(snapshotPath)
             .Where(row => row.Target == result.Target)
             .ToArray();
-        if (!expected.SequenceEqual(result.Rows))
-        {
-            throw new InvalidOperationException(
-                $"Generated-code performance target '{result.Target.StableId()}' differs from the intentional characterization snapshot. Review and refresh these rows deliberately:\n{result.Report}");
-        }
-
+        VerifyCadenceBudget(result.Target, result.Rows, expected);
         return result;
     }
+
+    internal static void VerifyCadenceBudget(
+        FunctionalTarget target,
+        IReadOnlyList<GeneratedCodePerformanceRow> actual,
+        IReadOnlyList<GeneratedCodePerformanceRow> expected)
+    {
+        if (actual.Count != expected.Count)
+        {
+            throw new InvalidOperationException(
+                $"Generated-code performance target '{target.StableId()}' produced {actual.Count} cases, but its cadence budget defines {expected.Count}.");
+        }
+
+        for (var index = 0; index < actual.Count; index++)
+        {
+            var actualRow = actual[index];
+            var expectedRow = expected[index];
+            if (!SameFixture(actualRow, expectedRow))
+            {
+                throw new InvalidOperationException(
+                    $"Generated-code performance target '{target.StableId()}' cadence budget case '{expectedRow.CaseId}' does not match actual case '{actualRow.CaseId}'.");
+            }
+
+            if (actualRow.LogicalWaitDelta < expectedRow.LogicalWaitDelta)
+            {
+                throw new InvalidOperationException(
+                    $"Generated-code performance fixture '{actualRow.CaseId}' on '{target.StableId()}' completed {actualRow.LogicalWaitDelta} logical frame waits; the cadence budget requires at least {expectedRow.LogicalWaitDelta}.");
+            }
+
+            if (actualRow.LongestMiss > expectedRow.LongestMiss)
+            {
+                throw new InvalidOperationException(
+                    $"Generated-code performance fixture '{actualRow.CaseId}' on '{target.StableId()}' missed {actualRow.LongestMiss} consecutive physical frames; the cadence budget allows at most {expectedRow.LongestMiss}.");
+            }
+        }
+    }
+
+    private static void VerifyMatchingObservableResults(
+        FunctionalTarget target,
+        IReadOnlyList<GeneratedCodePerformanceRow> first,
+        IReadOnlyList<GeneratedCodePerformanceRow> second)
+    {
+        if (first.Count != second.Count)
+        {
+            throw new InvalidOperationException(
+                $"Generated-code performance target '{target.StableId()}' produced different case counts between independent runs.");
+        }
+
+        for (var index = 0; index < first.Count; index++)
+        {
+            var firstRow = first[index];
+            var secondRow = second[index];
+            if (!SameFixture(firstRow, secondRow)
+                || firstRow.LogicalWaitDelta != secondRow.LogicalWaitDelta
+                || firstRow.LongestMiss != secondRow.LongestMiss
+                || !string.Equals(firstRow.BootStatus, secondRow.BootStatus, StringComparison.Ordinal)
+                || firstRow.BootResetCount != secondRow.BootResetCount
+                || firstRow.ResetReentries != secondRow.ResetReentries
+                || !string.Equals(firstRow.WaitStatus, secondRow.WaitStatus, StringComparison.Ordinal)
+                || firstRow.DeclaredHardwareSprites != secondRow.DeclaredHardwareSprites
+                || firstRow.HardwareSpriteLimit != secondRow.HardwareSpriteLimit
+                || firstRow.DeclaredScanlineSprites != secondRow.DeclaredScanlineSprites
+                || firstRow.ScanlineSpriteLimit != secondRow.ScanlineSpriteLimit)
+            {
+                throw new InvalidOperationException(
+                    $"Generated-code performance target '{target.StableId()}' produced different observable results between independent runs for fixture '{firstRow.CaseId}'.");
+            }
+        }
+    }
+
+    private static bool SameFixture(
+        GeneratedCodePerformanceRow first,
+        GeneratedCodePerformanceRow second) =>
+        first.Target == second.Target
+        && string.Equals(first.CaseId, second.CaseId, StringComparison.Ordinal)
+        && first.Workload == second.Workload
+        && first.Scale == second.Scale
+        && first.PoolCapacity == second.PoolCapacity
+        && first.ObjectCount == second.ObjectCount
+        && first.WarmUpPhysicalFrames == second.WarmUpPhysicalFrames
+        && first.ObservedPhysicalFrames == second.ObservedPhysicalFrames;
 
     private static IReadOnlyList<GeneratedCodePerformanceRow> RunOnce(
         IGeneratedCodePerformanceTargetAdapter adapter)

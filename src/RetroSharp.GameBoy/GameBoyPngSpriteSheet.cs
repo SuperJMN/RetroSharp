@@ -258,11 +258,12 @@ internal static class GameBoyPngSpriteSheet
 
         private static byte[] MapIndexed(byte[] pixels, byte[] palette, byte[]? transparency, string path)
         {
-            if (palette.Length < 12)
+            if (palette.Length % 3 != 0)
             {
-                throw new InvalidOperationException($"Indexed PNG sprite sheet '{path}' must have at least four palette colors.");
+                throw new InvalidOperationException($"Indexed PNG sprite sheet '{path}' has an invalid palette.");
             }
 
+            var colorIndexer = new ColorIndexer(path);
             var result = new byte[pixels.Length];
             for (var i = 0; i < pixels.Length; i++)
             {
@@ -274,12 +275,14 @@ internal static class GameBoyPngSpriteSheet
                     continue;
                 }
 
-                if (index > 3)
+                var paletteOffset = index * 3;
+                if (paletteOffset + 2 >= palette.Length)
                 {
-                    throw new InvalidOperationException($"Indexed PNG sprite sheet '{path}' can only use palette indexes 0, 1, 2, and 3.");
+                    throw new InvalidOperationException($"Indexed PNG sprite sheet '{path}' references a missing palette color.");
                 }
 
-                result[i] = index;
+                var rgb = palette[paletteOffset] << 16 | palette[paletteOffset + 1] << 8 | palette[paletteOffset + 2];
+                result[i] = colorIndexer.ColorIndexFor(rgb);
             }
 
             return result;
@@ -287,47 +290,26 @@ internal static class GameBoyPngSpriteSheet
 
         private sealed class ColorIndexer(string path)
         {
-            private readonly Dictionary<int, byte> customColors = [];
-            private readonly bool[] usedIndexes = new bool[4];
+            private readonly HashSet<int> opaqueColors = [];
 
             public byte ColorIndexFor(int rgb)
             {
-                if (KnownColorIndex(rgb) is { } known)
+                if (opaqueColors.Add(rgb) && opaqueColors.Count > 3)
                 {
-                    usedIndexes[known] = true;
-                    return known;
+                    throw new InvalidOperationException($"PNG sprite sheet '{path}' can use at most three opaque sprite colors.");
                 }
 
-                if (customColors.TryGetValue(rgb, out var existing))
+                var red = (rgb >> 16) & 0xFF;
+                var green = (rgb >> 8) & 0xFF;
+                var blue = rgb & 0xFF;
+                var luminance = (red * 299 + green * 587 + blue * 114) / 1000;
+                return luminance switch
                 {
-                    return existing;
-                }
-
-                for (byte index = 1; index <= 3; index++)
-                {
-                    if (usedIndexes[index])
-                    {
-                        continue;
-                    }
-
-                    usedIndexes[index] = true;
-                    customColors.Add(rgb, index);
-                    return index;
-                }
-
-                throw new InvalidOperationException($"PNG sprite sheet '{path}' can use at most three opaque sprite colors.");
+                    >= 192 => 1,
+                    >= 96 => 2,
+                    _ => 3,
+                };
             }
-
-            private static byte? KnownColorIndex(int rgb) => rgb switch
-            {
-                0xE0F8D0 => 1,
-                0x88C070 => 2,
-                0x346856 => 3,
-                0xFFFFFF => 1,
-                0xB8B8B8 => 2,
-                0x000000 => 3,
-                _ => null,
-            };
         }
     }
 }

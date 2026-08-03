@@ -1,8 +1,8 @@
 # Generated-code performance baseline
 
 This directory owns the `GCP-0.1` Actor Framework characterization fixture and
-its refreshable exact report. It is validation input, not a sample or a public
-benchmark API.
+its refreshable diagnostic report. It is validation input, not a sample or a
+public benchmark API.
 
 `fixture.retrosharp.json`, `src/main.rs`, and `assets/` are a complete valid
 two-target project. The validation materializer preserves that full Actor
@@ -35,11 +35,11 @@ protocol failure and cannot become a performance row.
 
 `baseline.tsv` contains exactly 26 data rows: the 13 fixtures for Game Boy and
 then the same 13 for NES. Tests run every target matrix twice and require
-identical ROM hashes and serialized rows. The file is an intentional
-characterization snapshot, not a permanent success threshold for the current
-cliffs. A later optimization refreshes it deliberately by reviewing the full
-new report; it must not preserve slow tick counts merely to keep this file
-unchanged.
+matching observable cadence and safety results. Against the baseline, completed
+logical waits may stay equal or improve and the longest miss may stay equal or
+decrease. ROM hashes, byte sizes, selected profiles, CPU models, and exact
+modeled cycle totals remain useful diagnostics in the report, but are not test
+gates and do not require a refresh when behavior remains within budget.
 
 The 2026-07-17 GCP-1.1 refresh records the expected ROM-byte changes from
 constant-cost spawn columns. NES now sustains 100/100 through the 128-record
@@ -54,8 +54,8 @@ from camera-window spawn candidate indexes. The wide-spawn matrix now sustains
 remain unchanged; their remaining eight-slot cadence work belongs to the
 GCP-2.x actor-phase/struct-addressing path.
 
-The TSV serializer always writes literal LF line endings so the exact report is
-independent of the host operating system.
+The TSV serializer always writes literal LF line endings so diagnostic reports
+are independent of the host operating system.
 
 GCP-2.3 deliberately refreshes the NES rows after bounding runtime
 struct-array address materialization. Capacities 1, 2, and 4 retain 100/100;

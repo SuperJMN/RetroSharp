@@ -262,14 +262,12 @@ public static partial class ActorFrameworkLowerer
     }
 
     private static ExpressionStatementSyntax FieldAssignment(string poolName, string indexName, string fieldName, string operatorSymbol, ExpressionSyntax value)
-    {
-        return new ExpressionStatementSyntax(new AssignmentSyntax(
-            new MemberAccessLValue(PoolField(poolName, indexName, fieldName)),
-            operatorSymbol,
-            value));
-    }
+        => FieldAssignment(poolName, new IdentifierSyntax(indexName), fieldName, operatorSymbol, value);
 
     private static ExpressionStatementSyntax FieldAssignment(string poolName, int index, string fieldName, string operatorSymbol, ExpressionSyntax value)
+        => FieldAssignment(poolName, Constant(index), fieldName, operatorSymbol, value);
+
+    private static ExpressionStatementSyntax FieldAssignment(string poolName, ExpressionSyntax index, string fieldName, string operatorSymbol, ExpressionSyntax value)
     {
         return new ExpressionStatementSyntax(new AssignmentSyntax(
             new MemberAccessLValue(PoolField(poolName, index, fieldName)),
@@ -357,13 +355,14 @@ public static partial class ActorFrameworkLowerer
     }
 
     private static MemberAccessSyntax PoolField(string poolName, string indexName, string fieldName)
-    {
-        return new MemberAccessSyntax(new IndexExpressionSyntax(poolName, new IdentifierSyntax(indexName)), fieldName);
-    }
+        => PoolField(poolName, new IdentifierSyntax(indexName), fieldName);
 
     private static MemberAccessSyntax PoolField(string poolName, int index, string fieldName)
+        => PoolField(poolName, Constant(index), fieldName);
+
+    private static MemberAccessSyntax PoolField(string poolName, ExpressionSyntax index, string fieldName)
     {
-        return new MemberAccessSyntax(new IndexExpressionSyntax(poolName, new ConstantSyntax(index.ToString(CultureInfo.InvariantCulture))), fieldName);
+        return new MemberAccessSyntax(new IndexExpressionSyntax(poolName, index), fieldName);
     }
 
     private static ExpressionStatementSyntax Assign(LValue target, ExpressionSyntax value)

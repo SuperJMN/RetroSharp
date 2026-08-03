@@ -301,7 +301,7 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
-    public void Compiles_actor_update_like_grouped_pool_loop_for_nes()
+    public void Compiles_singleton_actor_update_like_direct_guard_for_nes()
     {
         const string manualSource = """
                                     struct Actor {
@@ -332,14 +332,10 @@ public partial class NesRomCompilerTests
                                         enemies[0].x = 24;
                                         enemies[0].y = 48;
 
-                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
-                                            if (enemies[__enemies_update_i].active != 0) {
-                                                if (enemies[__enemies_update_i].kind == Goomba) {
-                                                    enemies[__enemies_update_i].x += GoombaSpeed;
-                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
-                                                        enemies[__enemies_update_i].xHi += 1;
-                                                    }
-                                                }
+                                        if ((enemies[0].active != 0) && (enemies[0].kind == Goomba)) {
+                                            enemies[0].x += GoombaSpeed;
+                                            if (enemies[0].x < GoombaSpeed) {
+                                                enemies[0].xHi += 1;
                                             }
                                         }
 

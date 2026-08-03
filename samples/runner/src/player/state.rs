@@ -62,6 +62,17 @@ class PlayerState
         verticalSubpixel = 0;
     }
 
+    inline void BounceAfterStomp(bool jumpHeld)
+    {
+        velocityY = Jump.ShortStompVelocity;
+        if (jumpHeld)
+        {
+            velocityY = Jump.HeldStompVelocity;
+        }
+        jumping = jumpHeld;
+        verticalSubpixel = 0;
+    }
+
     inline void StartJump(u8 horizontalSpeed)
     {
         velocityY = Jump.StandingVelocity;

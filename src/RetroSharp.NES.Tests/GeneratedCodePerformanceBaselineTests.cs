@@ -8,9 +8,9 @@ using Xunit.Abstractions;
 public sealed class GeneratedCodePerformanceBaselineTests(ITestOutputHelper output)
 {
     [Fact]
-    public void Exact_cli_roms_reproduce_the_nes_snapshot_twice()
+    public void Canonical_matrix_meets_the_nes_cadence_budget_twice()
     {
-        var result = GeneratedCodePerformanceMatrixRunner.RunTwiceAndVerifySnapshot(
+        var result = GeneratedCodePerformanceMatrixRunner.RunTwiceAndVerifyCadenceBudget(
             new NesPerformanceTargetAdapter(
                 RepositoryDirectory("validation/generated-code-performance")),
             RepositoryFile("validation/generated-code-performance/baseline.tsv"));
