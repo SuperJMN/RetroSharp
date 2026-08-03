@@ -89,9 +89,7 @@ class FrameState
 
 }
 
-inline void PresentFrame(PlayerState player, CameraState view)
+inline void PresentFrame(PlayerState player, u8 screenX, u8 screenY)
 {
-    Pixel screenX = view.ScreenX(player);
-    Pixel screenY = view.ScreenY(player);
     Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);
 }

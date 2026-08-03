@@ -140,15 +140,56 @@ public sealed class GeneratedCodePerformanceProtocolTests
     }
 
     [Fact]
-    public void Matrix_runner_rejects_rom_hash_drift_between_independent_runs()
+    public void Matrix_runner_treats_rom_hash_drift_as_diagnostic_when_observable_results_match()
     {
         var adapter = new FakePerformanceTargetAdapter(deterministic: false);
 
+        var result = GeneratedCodePerformanceMatrixRunner.RunTwice(adapter);
+
+        Assert.Equal(26, adapter.BuildCalls);
+        Assert.Equal(13, result.Rows.Count);
+    }
+
+    [Fact]
+    public void Cadence_budget_allows_improvements_and_ignores_codegen_diagnostics()
+    {
+        var result = GeneratedCodePerformanceMatrixRunner.RunTwice(
+            new FakePerformanceTargetAdapter(deterministic: true));
+        var expected = result.Rows
+            .Select(row => row with
+            {
+                LogicalWaitDelta = row.LogicalWaitDelta - 1,
+                LongestMiss = row.LongestMiss + 1,
+                ObservationCycles = 1,
+                CpuModel = "old-cpu-model",
+                SelectedProfile = "old-profile",
+                RomBytes = 1,
+                RomSha256 = "old-diagnostic-hash",
+            })
+            .ToArray();
+
+        GeneratedCodePerformanceMatrixRunner.VerifyCadenceBudget(
+            result.Target,
+            result.Rows,
+            expected);
+    }
+
+    [Fact]
+    public void Cadence_budget_rejects_fewer_completed_frame_waits()
+    {
+        var result = GeneratedCodePerformanceMatrixRunner.RunTwice(
+            new FakePerformanceTargetAdapter(deterministic: true));
+        var actual = result.Rows.ToArray();
+        actual[0] = actual[0] with { LogicalWaitDelta = actual[0].LogicalWaitDelta - 1 };
+
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            GeneratedCodePerformanceMatrixRunner.RunTwice(adapter));
+            GeneratedCodePerformanceMatrixRunner.VerifyCadenceBudget(
+                result.Target,
+                actual,
+                result.Rows));
 
         Assert.Equal(
-            "Generated-code performance target 'gb' produced different ROM hashes between independent runs for fixture 'wide-spawn-3'.",
+            "Generated-code performance fixture 'wide-spawn-3' on 'gb' completed 99 logical frame waits; the cadence budget requires at least 100.",
             exception.Message);
     }
 

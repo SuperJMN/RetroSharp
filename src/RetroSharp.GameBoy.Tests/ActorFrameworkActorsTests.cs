@@ -204,6 +204,31 @@ public partial class GameBoyRomCompilerTests
 
     [Fact]
     [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Singleton_actor_update_avoids_generic_pool_loop_and_dynamic_indexing()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Patrol, speed: 1, cooldown: 255);
+                                  enemies.Update();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.DoesNotContain("for(u8__enemies_update_i", lowered);
+        Assert.Contains("enemies[0].active!=0", lowered);
+        Assert.Contains("enemies[0].kind==Goomba", lowered);
+        Assert.Contains("enemies[0].x-=GoombaSpeed", lowered);
+        Assert.Contains("enemies[0].timer+=1", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_draw_hoists_camera_x_projection_once_per_phase_loop()
     {
         const string source = """
@@ -448,6 +473,31 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Rejects_fused_actor_draw_and_contact_that_exceeds_game_boy_hardware_sprite_budget()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "wide-goomba.sprite.json",
+            SpriteJson(Rows(16, 16, "1111111111111111")));
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(goomba, "wide-goomba.sprite.json");
+                                  Actors.Pool(enemies, 21);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Video.WaitVBlank();
+                                  enemies.DrawAndTouchPlayerTop(72, 40, 16, 16, 8);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'gb' supports 40 hardware sprites per frame, but Actors.Pool for 'enemies' can draw up to 42 because capacity 21 times Enemies.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Compiles_actor_draw_loop_when_multi_sprite_png_pool_fits_game_boy_budget()
     {
         var baseDirectory = WriteSpritePng(
@@ -498,7 +548,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Compiles_actor_update_and_draw_like_grouped_pool_loops()
+    public void Compiles_singleton_actor_update_and_draw_like_direct_update_and_grouped_draw()
     {
         var baseDirectory = WriteSpriteJsonAsset(
             "goomba.sprite.json",
@@ -535,14 +585,10 @@ public partial class GameBoyRomCompilerTests
                                         enemies[0].y = 48;
                                         Video.WaitVBlank();
 
-                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
-                                            if (enemies[__enemies_update_i].active != 0) {
-                                                if (enemies[__enemies_update_i].kind == Goomba) {
-                                                    enemies[__enemies_update_i].x += GoombaSpeed;
-                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
-                                                        enemies[__enemies_update_i].xHi += 1;
-                                                    }
-                                                }
+                                        if ((enemies[0].active != 0) && (enemies[0].kind == Goomba)) {
+                                            enemies[0].x += GoombaSpeed;
+                                            if (enemies[0].x < GoombaSpeed) {
+                                                enemies[0].xHi += 1;
                                             }
                                         }
 
@@ -729,7 +775,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Compiles_actor_update_animation_tick_like_explicit_field_increment()
+    public void Compiles_singleton_actor_update_animation_tick_like_explicit_field_increment()
     {
         const string manualSource = """
                                     struct Actor {
@@ -758,16 +804,12 @@ public partial class GameBoyRomCompilerTests
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
 
-                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
-                                            if (enemies[__enemies_update_i].active != 0) {
-                                                if (enemies[__enemies_update_i].kind == Goomba) {
-                                                    enemies[__enemies_update_i].x += GoombaSpeed;
-                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
-                                                        enemies[__enemies_update_i].xHi += 1;
-                                                    }
-                                                    enemies[__enemies_update_i].animTick += 1;
-                                                }
+                                        if ((enemies[0].active != 0) && (enemies[0].kind == Goomba)) {
+                                            enemies[0].x += GoombaSpeed;
+                                            if (enemies[0].x < GoombaSpeed) {
+                                                enemies[0].xHi += 1;
                                             }
+                                            enemies[0].animTick += 1;
                                         }
                                     }
                                     """;
@@ -1045,6 +1087,114 @@ public partial class GameBoyRomCompilerTests
                               """;
 
         _ = GameBoyRomCompiler.CompileSource(source);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Singleton_actor_touch_player_accepts_runtime_position_without_pool_loop()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 16);
+                                  u8 playerX = 72;
+                                  u8 playerY = 40;
+                                  enemies.TouchPlayer(playerX, playerY, 18, 32);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.DoesNotContain("for(u8__enemies_player_i", lowered);
+        Assert.Contains("enemies[0].active!=0", lowered);
+        Assert.DoesNotContain("enemies[0].kind==Goomba", lowered);
+        Assert.Contains("__enemies_player_screen_x<playerX+18", lowered);
+        Assert.Contains("__enemies_player_screen_y<playerY+32", lowered);
+        Assert.Contains("enemies[0].state=1", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Singleton_actor_touch_player_top_restricts_contact_to_the_actor_top_band()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 16);
+                                  u8 playerX = 72;
+                                  u8 playerY = 40;
+                                  enemies.TouchPlayerTop(playerX, playerY, 18, 32, 8);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.DoesNotContain("for(u8__enemies_player_i", lowered);
+        Assert.Contains("__enemies_player_screen_y<playerY+32", lowered);
+        Assert.Contains("playerY+32<=__enemies_player_screen_y+8", lowered);
+        Assert.Contains("enemies[0].state=1", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Actor_draw_selects_declared_defeated_frame_when_health_is_zero()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(goomba, "goomba.png", 16, 16);
+                                  Animation.Clip(walk, 0, 16, 16);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, animation: walk, defeatedFrame: 2);
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.Contains("if(enemies[__enemies_draw_i].health==0)", lowered);
+        Assert.Contains("__enemies_draw_frame_Goomba=2", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(goomba,__enemies_draw_x_Goomba,__enemies_draw_y_Goomba,__enemies_draw_frame_Goomba,false,0)", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Singleton_actor_draw_and_top_contact_share_one_visible_guard()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(goomba, "goomba.png", 16, 16);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 16, defeatedFrame: 2);
+                                  u8 playerX = 72;
+                                  u8 playerY = 40;
+                                  enemies.DrawAndTouchPlayerTop(playerX, playerY, 18, 32, 8);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.Equal(1, CountOccurrences(lowered, "enemies[0].active!=0"));
+        Assert.DoesNotContain("__enemies_player_", lowered);
+        Assert.Contains("enemies[0].health!=0", lowered);
+        Assert.Contains("playerY+32<=__enemies_draw_player_screen_y+8", lowered);
+        Assert.Contains("enemies[0].state=1", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(goomba,__enemies_draw_x_Goomba,__enemies_draw_y_Goomba,__enemies_draw_frame_Goomba,false,0)", lowered);
     }
 
     [Fact]

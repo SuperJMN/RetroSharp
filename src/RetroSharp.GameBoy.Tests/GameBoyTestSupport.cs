@@ -104,6 +104,39 @@ internal static class GameBoyTestSupport
         return output.ToArray();
     }
 
+    internal static byte[] EncodeIndexedPng(int width, int height, byte[] pixels, byte[] palette, byte[] transparency)
+    {
+        using var output = new MemoryStream();
+        output.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        Span<byte> ihdr = stackalloc byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(ihdr[0..4], width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr[4..8], height);
+        ihdr[8] = 8;
+        ihdr[9] = 3;
+        WritePngChunk(output, "IHDR", ihdr);
+        WritePngChunk(output, "PLTE", palette);
+        WritePngChunk(output, "tRNS", transparency);
+
+        using var raw = new MemoryStream();
+        for (var y = 0; y < height; y++)
+        {
+            raw.WriteByte(0);
+            raw.Write(pixels, y * width, width);
+        }
+
+        using var compressed = new MemoryStream();
+        using (var zlib = new ZLibStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            raw.Position = 0;
+            raw.CopyTo(zlib);
+        }
+
+        WritePngChunk(output, "IDAT", compressed.ToArray());
+        WritePngChunk(output, "IEND", []);
+        return output.ToArray();
+    }
+
     internal static string Fingerprint(byte[] bytes) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
 

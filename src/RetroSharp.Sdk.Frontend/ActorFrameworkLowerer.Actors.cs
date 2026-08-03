@@ -137,16 +137,19 @@ public static partial class ActorFrameworkLowerer
             var contactDamage = OptionalLiteralByte(namedArguments, "contactDamage", 0, enemyName.Identifier);
             var hitboxWidth = OptionalLiteralByte(namedArguments, "hitboxWidth", 0, enemyName.Identifier);
             var hitboxHeight = OptionalLiteralByte(namedArguments, "hitboxHeight", 0, enemyName.Identifier);
+            int? defeatedFrame = namedArguments.ContainsKey("defeatedFrame")
+                ? OptionalLiteralByte(namedArguments, "defeatedFrame", 0, enemyName.Identifier)
+                : null;
 
             foreach (var name in namedArguments.Keys)
             {
-                if (name is not "sprite" and not "behavior" and not "animation" and not "speed" and not "hp" and not "cooldown" and not "contactDamage" and not "hitboxWidth" and not "hitboxHeight")
+                if (name is not "sprite" and not "behavior" and not "animation" and not "speed" and not "hp" and not "cooldown" and not "contactDamage" and not "hitboxWidth" and not "hitboxHeight" and not "defeatedFrame")
                 {
                     throw new InvalidOperationException($"Enemies.Def for '{enemyName.Identifier}' has unsupported property '{name}'.");
                 }
             }
 
-            return new EnemyDef(enemyName.Identifier, sprite, behavior, animation, speed, hp, cooldown, contactDamage, hitboxWidth, hitboxHeight);
+            return new EnemyDef(enemyName.Identifier, sprite, behavior, animation, speed, hp, cooldown, contactDamage, hitboxWidth, hitboxHeight, defeatedFrame);
         }
 
         public static ActorSpawnLayer ReadSpawnDirective(ActorFrameworkCall call, string baseDirectory)
@@ -212,9 +215,11 @@ public static partial class ActorFrameworkLowerer
                 {
                     "Update" => [PoolUpdateLoop(pool, poolCall, state)],
                     "Draw" => PoolDrawStatements(pool, poolCall, state),
+                    "DrawAndTouchPlayerTop" => PoolDrawAndTouchPlayerTopStatements(pool, poolCall, state),
                     "TouchTiles" => PoolTouchTilesStatements(pool, poolCall, state),
                     "LandOnTiles" => PoolLandOnTilesStatements(pool, poolCall, state),
                     "TouchPlayer" => PoolTouchPlayerStatements(pool, poolCall, state),
+                    "TouchPlayerTop" => PoolTouchPlayerTopStatements(pool, poolCall, state),
                     _ => [RewriteStatement(statement, state)!],
                 };
                 return true;
@@ -240,7 +245,7 @@ public static partial class ActorFrameworkLowerer
             return false;
         }
 
-        public static ForSyntax PoolUpdateLoop(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+        public static StatementSyntax PoolUpdateLoop(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
         {
             RequireNoArguments(call);
             if (!state.SupportsUpdate)
@@ -250,11 +255,22 @@ public static partial class ActorFrameworkLowerer
 
             RequireEnemyDefs(state, $"{pool.Name}.Update");
 
+            if (pool.Capacity == 1 && state.Actors.EnemyDefs.Count == 1)
+            {
+                var def = state.Actors.EnemyDefs[0];
+                return new IfElseSyntax(
+                    And(
+                        new BinaryExpressionSyntax(PoolField(pool.Name, 0, "active"), Constant(0), Operator.NotEqual),
+                        new BinaryExpressionSyntax(PoolField(pool.Name, 0, "kind"), new IdentifierSyntax(def.Name), Operator.Equal)),
+                    new BlockSyntax(UpdateStatementsFor(pool, Constant(0), def).ToList()),
+                    Maybe<BlockSyntax>.None);
+            }
+
             var indexName = $"__{pool.Name}_update_i";
             var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(
                     def.Name,
-                    new BlockSyntax(UpdateStatementsFor(pool, indexName, def).ToList())))
+                    new BlockSyntax(UpdateStatementsFor(pool, new IdentifierSyntax(indexName), def).ToList())))
                 .ToList();
 
             return PoolLoop(
@@ -356,7 +372,8 @@ public static partial class ActorFrameworkLowerer
         private static IReadOnlyList<StatementSyntax> RewriteSpawnDirective(ActorFrameworkCall call, ActorFrameworkState state)
         {
             var layer = state.Spawns.Layer(SpawnLayerKey(call));
-            return RuntimeSpawnActivationStatements(layer, state.GeneratedCalls.NextActivationPrefix(layer), state.ScreenWidth);
+            var pool = state.Actors.Pool(layer.PoolName);
+            return RuntimeSpawnActivationStatements(layer, state.GeneratedCalls.NextActivationPrefix(layer), state.ScreenWidth, pool.Capacity);
         }
 
         private static ActorSpawnLayerKey SpawnLayerKey(ActorFrameworkCall call)
@@ -806,5 +823,6 @@ public static partial class ActorFrameworkLowerer
         int Cooldown,
         int ContactDamage,
         int HitboxWidth,
-        int HitboxHeight);
+        int HitboxHeight,
+        int? DefeatedFrame);
 }

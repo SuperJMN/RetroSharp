@@ -47,7 +47,14 @@ static class Jump
     const i8 ReleasedGravity = 5;
     const i8 TerminalVelocity = 69;
     const i8 BounceVelocity = 32;
+    const i8 ShortStompVelocity = -40;
+    const i8 HeldStompVelocity = -56;
     const i16 Subpixel = 16;
+}
+
+static class GoombaDeath
+{
+    const u8 SquashedUpdates = 16;
 }
 
 enum Direction

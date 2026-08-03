@@ -295,7 +295,7 @@ descriptors; GCP-3.1 starts their executable projection in the report model.
 | `NesWorldPackReaderTests` complete-stage gates | Collision cold <= 5,000, resident <= 375, repeated cell <= 120; visual cold <= 7,500 and resident <= 400 CPU cycles for that emitted profile. |
 | `NesLargeWorldCameraTests` | Resident complete-stage column preparation <= 13,000 and bounded packed column commit <= 2,136 CPU cycles. |
 | NES GCP-2.3 struct-array emitted-code/runtime tests | A direct zero-page index at Actor stride 13 materializes X in 15 bytes / 24 CPU cycles, down from 41 / 68. The accepted one-byte-offset domain is bounded by 33 bytes / 57 cycles at stride 255. A shared `Sprite.Draw` slot cursor charges one materialization for matching runtime fields. |
-| `validation/generated-code-performance/baseline.tsv` | Exact ROM/profile/hash plus 20 warm-up and 100-frame cadence classification for the 13 canonical cases per target. |
+| `validation/generated-code-performance/baseline.tsv` | Diagnostic ROM/profile/hash data plus a directional 20-warm-up/100-frame cadence budget for the 13 canonical cases per target. Hashes, byte sizes, profiles, CPU models, and exact cycle totals are not gates. |
 
 `baseline.tsv` is the refreshable current snapshot. In a post-GCP-1.1 tree it
 contains the constant-cost ROM-lookup results. The pre-GCP-1.1 equality counts

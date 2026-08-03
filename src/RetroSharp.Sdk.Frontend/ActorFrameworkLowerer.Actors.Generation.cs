@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using RetroSharp.Core;
+using RetroSharp.Core.Sdk.Tiled;
 using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
@@ -55,7 +56,13 @@ public static partial class ActorFrameworkLowerer
         {
             WalkStatements(block, statement =>
             {
-                if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Method: "Draw" } drawCall })
+                if (statement is ExpressionStatementSyntax
+                    {
+                        Expression: QualifiedCallSyntax
+                        {
+                            Method: "Draw" or "DrawAndTouchPlayerTop",
+                        } drawCall,
+                    })
                 {
                     drawnPools.Add(drawCall.Qualifier);
                 }
@@ -385,45 +392,45 @@ public static partial class ActorFrameworkLowerer
             }
         }
 
-        private static IReadOnlyList<StatementSyntax> UpdateStatementsFor(ActorPool pool, string indexName, EnemyDef def)
+        private static IReadOnlyList<StatementSyntax> UpdateStatementsFor(ActorPool pool, ExpressionSyntax index, EnemyDef def)
         {
             IReadOnlyList<StatementSyntax> statements = def.Behavior switch
             {
                 "Walker" =>
-                    AddWorldX(pool, indexName, new IdentifierSyntax($"{def.Name}Speed")),
+                    AddWorldX(pool, index, new IdentifierSyntax($"{def.Name}Speed")),
                 "Flyer" =>
-                    AddWorldY(pool, indexName, new IdentifierSyntax($"{def.Name}Speed")),
+                    AddWorldY(pool, index, new IdentifierSyntax($"{def.Name}Speed")),
                 "Patrol" =>
                 [
-                    FacingMove(pool, indexName, def),
-                    FieldAssignment(pool.Name, indexName, "timer", "+=", new ConstantSyntax("1")),
-                    TimerCooldown(pool, indexName, def, [
-                        FieldAssignment(pool.Name, indexName, "timer", "=", new ConstantSyntax("0")),
-                        FieldAssignment(pool.Name, indexName, "facing", "^=", new ConstantSyntax("1")),
+                    FacingMove(pool, index, def),
+                    FieldAssignment(pool.Name, index, "timer", "+=", new ConstantSyntax("1")),
+                    TimerCooldown(pool, index, def, [
+                        FieldAssignment(pool.Name, index, "timer", "=", new ConstantSyntax("0")),
+                        FieldAssignment(pool.Name, index, "facing", "^=", new ConstantSyntax("1")),
                     ]),
                 ],
                 "Shooter" =>
                 [
-                    FieldAssignment(pool.Name, indexName, "timer", "+=", new ConstantSyntax("1")),
+                    FieldAssignment(pool.Name, index, "timer", "+=", new ConstantSyntax("1")),
                     TimerCooldown(
                         pool,
-                        indexName,
+                        index,
                         def,
                         [
-                            FieldAssignment(pool.Name, indexName, "timer", "=", new ConstantSyntax("0")),
-                            FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax("1")),
+                            FieldAssignment(pool.Name, index, "timer", "=", new ConstantSyntax("0")),
+                            FieldAssignment(pool.Name, index, "state", "=", new ConstantSyntax("1")),
                         ],
                         [
-                            FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax("0")),
+                            FieldAssignment(pool.Name, index, "state", "=", new ConstantSyntax("0")),
                         ]),
                 ],
                 "Chaser" =>
                 [
-                    FacingMove(pool, indexName, def),
+                    FacingMove(pool, index, def),
                 ],
                 "Hazard" =>
                 [
-                    FieldAssignment(pool.Name, indexName, "state", "=", new IdentifierSyntax($"{def.Name}ContactDamage")),
+                    FieldAssignment(pool.Name, index, "state", "=", new IdentifierSyntax($"{def.Name}ContactDamage")),
                 ],
                 _ => throw new InvalidOperationException($"{pool.Name}.Update does not support actor behavior '{def.Behavior}' yet."),
             };
@@ -431,67 +438,67 @@ public static partial class ActorFrameworkLowerer
             if (def.Animation is not null)
             {
                 statements = statements.Concat([
-                    FieldAssignment(pool.Name, indexName, "animTick", "+=", new ConstantSyntax("1")),
+                    FieldAssignment(pool.Name, index, "animTick", "+=", new ConstantSyntax("1")),
                 ]).ToList();
             }
 
             return statements;
         }
 
-        private static IfElseSyntax FacingMove(ActorPool pool, string indexName, EnemyDef def)
+        private static IfElseSyntax FacingMove(ActorPool pool, ExpressionSyntax index, EnemyDef def)
         {
             var speed = new IdentifierSyntax($"{def.Name}Speed");
             return new IfElseSyntax(
-                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "facing"), new ConstantSyntax("0"), Operator.Equal),
-                new BlockSyntax(AddWorldX(pool, indexName, speed).ToList()),
-                Maybe.From(new BlockSyntax(SubtractWorldX(pool, indexName, speed).ToList())));
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "facing"), new ConstantSyntax("0"), Operator.Equal),
+                new BlockSyntax(AddWorldX(pool, index, speed).ToList()),
+                Maybe.From(new BlockSyntax(SubtractWorldX(pool, index, speed).ToList())));
         }
 
-        private static IReadOnlyList<StatementSyntax> AddWorldX(ActorPool pool, string indexName, ExpressionSyntax amount)
+        private static IReadOnlyList<StatementSyntax> AddWorldX(ActorPool pool, ExpressionSyntax index, ExpressionSyntax amount)
         {
             return
             [
-                FieldAssignment(pool.Name, indexName, "x", "+=", amount),
+                FieldAssignment(pool.Name, index, "x", "+=", amount),
                 new IfElseSyntax(
-                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), amount, Operator.LessThan),
-                    new BlockSyntax([FieldAssignment(pool.Name, indexName, "xHi", "+=", new ConstantSyntax("1"))]),
+                    new BinaryExpressionSyntax(PoolField(pool.Name, index, "x"), amount, Operator.LessThan),
+                    new BlockSyntax([FieldAssignment(pool.Name, index, "xHi", "+=", new ConstantSyntax("1"))]),
                     Maybe<BlockSyntax>.None),
             ];
         }
 
-        private static IReadOnlyList<StatementSyntax> SubtractWorldX(ActorPool pool, string indexName, ExpressionSyntax amount)
+        private static IReadOnlyList<StatementSyntax> SubtractWorldX(ActorPool pool, ExpressionSyntax index, ExpressionSyntax amount)
         {
             return
             [
                 new IfElseSyntax(
-                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), amount, Operator.LessThan),
-                    new BlockSyntax([FieldAssignment(pool.Name, indexName, "xHi", "-=", new ConstantSyntax("1"))]),
+                    new BinaryExpressionSyntax(PoolField(pool.Name, index, "x"), amount, Operator.LessThan),
+                    new BlockSyntax([FieldAssignment(pool.Name, index, "xHi", "-=", new ConstantSyntax("1"))]),
                     Maybe<BlockSyntax>.None),
-                FieldAssignment(pool.Name, indexName, "x", "-=", amount),
+                FieldAssignment(pool.Name, index, "x", "-=", amount),
             ];
         }
 
-        private static IReadOnlyList<StatementSyntax> AddWorldY(ActorPool pool, string indexName, ExpressionSyntax amount)
+        private static IReadOnlyList<StatementSyntax> AddWorldY(ActorPool pool, ExpressionSyntax index, ExpressionSyntax amount)
         {
             return
             [
-                FieldAssignment(pool.Name, indexName, "y", "+=", amount),
+                FieldAssignment(pool.Name, index, "y", "+=", amount),
                 new IfElseSyntax(
-                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), amount, Operator.LessThan),
-                    new BlockSyntax([FieldAssignment(pool.Name, indexName, "yHi", "+=", new ConstantSyntax("1"))]),
+                    new BinaryExpressionSyntax(PoolField(pool.Name, index, "y"), amount, Operator.LessThan),
+                    new BlockSyntax([FieldAssignment(pool.Name, index, "yHi", "+=", new ConstantSyntax("1"))]),
                     Maybe<BlockSyntax>.None),
             ];
         }
 
         private static IfElseSyntax TimerCooldown(
             ActorPool pool,
-            string indexName,
+            ExpressionSyntax index,
             EnemyDef def,
             IReadOnlyList<StatementSyntax> whenReady,
             IReadOnlyList<StatementSyntax>? whenWaiting = null)
         {
             return new IfElseSyntax(
-                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "timer"), new IdentifierSyntax($"{def.Name}Cooldown"), Operator.Equal),
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "timer"), new IdentifierSyntax($"{def.Name}Cooldown"), Operator.Equal),
                 new BlockSyntax(whenReady.ToList()),
                 whenWaiting is null ? Maybe<BlockSyntax>.None : Maybe.From(new BlockSyntax(whenWaiting.ToList())));
         }
@@ -516,7 +523,7 @@ public static partial class ActorFrameworkLowerer
             var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(
                     def.Name,
-                    ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight, state)))
+                    ActorDrawBlock(pool, new IdentifierSyntax(indexName), def, projection, state.ScreenHeight, state)))
                 .ToList();
             var activeStatements = projection.Declarations
                 .Append(PooledKindDispatch(pool.Name, indexName, branches, $"{pool.Name} actor dispatch requires at least one Enemies.Def declaration."))
@@ -530,32 +537,46 @@ public static partial class ActorFrameworkLowerer
 
         private static BlockSyntax ActorDrawBlock(
             ActorPool pool,
-            string indexName,
+            ExpressionSyntax index,
             EnemyDef def,
             ActorScreenProjection projection,
             int hiddenY,
-            ActorFrameworkState state)
+            ActorFrameworkState state,
+            IReadOnlyList<StatementSyntax>? whenVisibleActive = null)
         {
             var statements = new List<StatementSyntax>();
             var drawX = $"__{pool.Name}_draw_x_{def.Name}";
             var drawY = $"__{pool.Name}_draw_y_{def.Name}";
 
             ExpressionSyntax frame = new ConstantSyntax("0");
-            if (def.Animation is not null)
+            if (def.Animation is not null || def.DefeatedFrame.HasValue)
             {
                 var frameVariable = $"__{pool.Name}_draw_frame_{def.Name}";
-                statements.Add(new DeclarationSyntax(
-                    "u8",
-                    frameVariable,
-                    Maybe<ExpressionSyntax>.None,
-                    Maybe.From<ExpressionSyntax>(IntrinsicCall(
+                ExpressionSyntax initialFrame = def.Animation is null
+                    ? new ConstantSyntax("0")
+                    : IntrinsicCall(
                         state,
                         AnimationFrameIntrinsic,
                         [
                             new IdentifierSyntax(def.Animation),
-                            PoolField(pool.Name, indexName, "animTick"),
-                        ]))));
+                            PoolField(pool.Name, index, "animTick"),
+                        ]);
+                statements.Add(new DeclarationSyntax(
+                    "u8",
+                    frameVariable,
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From(initialFrame)));
                 frame = new IdentifierSyntax(frameVariable);
+
+                if (def.DefeatedFrame.HasValue)
+                {
+                    statements.Add(new IfElseSyntax(
+                        new BinaryExpressionSyntax(PoolField(pool.Name, index, "health"), Constant(0), Operator.Equal),
+                        new BlockSyntax([
+                            Assign(new IdentifierLValue(frameVariable), Constant(def.DefeatedFrame.Value)),
+                        ]),
+                        Maybe<BlockSyntax>.None));
+                }
             }
 
             statements.Add(new DeclarationSyntax(
@@ -569,21 +590,28 @@ public static partial class ActorFrameworkLowerer
                 Maybe<ExpressionSyntax>.None,
                 Maybe.From<ExpressionSyntax>(new ConstantSyntax(hiddenY.ToString(CultureInfo.InvariantCulture)))));
 
+            var visibleStatements = new List<StatementSyntax>
+            {
+                new ExpressionStatementSyntax(new AssignmentSyntax(
+                    new IdentifierLValue(drawX),
+                    "=",
+                    projection.ScreenX)),
+                new ExpressionStatementSyntax(new AssignmentSyntax(
+                    new IdentifierLValue(drawY),
+                    "=",
+                    projection.ScreenY)),
+            };
+            if (whenVisibleActive is not null)
+            {
+                visibleStatements.AddRange(whenVisibleActive);
+            }
+
             statements.Add(new IfElseSyntax(
-                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), new ConstantSyntax("0"), Operator.NotEqual),
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "active"), new ConstantSyntax("0"), Operator.NotEqual),
                 new BlockSyntax([
                     new IfElseSyntax(
                         projection.Visible,
-                        new BlockSyntax([
-                            new ExpressionStatementSyntax(new AssignmentSyntax(
-                                new IdentifierLValue(drawX),
-                                "=",
-                                projection.ScreenX)),
-                            new ExpressionStatementSyntax(new AssignmentSyntax(
-                                new IdentifierLValue(drawY),
-                                "=",
-                                projection.ScreenY)),
-                        ]),
+                        new BlockSyntax(visibleStatements),
                         Maybe<BlockSyntax>.None),
                 ]),
                 Maybe<BlockSyntax>.None));
@@ -601,6 +629,73 @@ public static partial class ActorFrameworkLowerer
                 ])));
 
             return new BlockSyntax(statements);
+        }
+
+        private static IReadOnlyList<StatementSyntax> PoolDrawAndTouchPlayerTopStatements(
+            ActorPool pool,
+            QualifiedCallSyntax call,
+            ActorFrameworkState state)
+        {
+            var parameters = RequireArguments(call, 5);
+            if (!state.SupportsDraw)
+            {
+                throw new InvalidOperationException($"Target '{state.TargetName}' does not support actor Draw yet.");
+            }
+
+            RequireEnemyDefs(state, $"{pool.Name}.DrawAndTouchPlayerTop");
+            var missingSprite = state.Actors.EnemyDefs.FirstOrDefault(def => def.Sprite is null);
+            if (missingSprite is not null)
+            {
+                throw new InvalidOperationException($"{pool.Name}.DrawAndTouchPlayerTop requires Enemies.Def for '{missingSprite.Name}' to declare a sprite identifier.");
+            }
+
+            var playerX = parameters[0];
+            var playerY = parameters[1];
+            var playerWidth = RequiredLiteralByte(parameters[2], $"{pool.Name}.DrawAndTouchPlayerTop argument 3");
+            var playerHeight = RequiredLiteralByte(parameters[3], $"{pool.Name}.DrawAndTouchPlayerTop argument 4");
+            var topDepth = RequiredLiteralByte(parameters[4], $"{pool.Name}.DrawAndTouchPlayerTop argument 5");
+            if (topDepth == 0)
+            {
+                throw new InvalidOperationException($"{pool.Name}.DrawAndTouchPlayerTop argument 5 must be from 1 to 255.");
+            }
+
+            var playerRight = OffsetExpression(playerX, playerWidth, subtract: false);
+            var playerBottom = OffsetExpression(playerY, playerHeight, subtract: false);
+            const string phase = "draw_player";
+
+            if (pool.Capacity == 1 && state.Actors.EnemyDefs.Count == 1)
+            {
+                var def = state.Actors.EnemyDefs[0];
+                var directProjection = BuildDirectPooledScreenProjection(pool.Name, Constant(0), pool.Name, phase, state.ScreenWidth, state.ScreenHeight);
+                var contact = LiveTouchPlayerContact(pool, Constant(0), def, playerX, playerY, playerRight, playerBottom, directProjection, topDepth);
+                var statements = directProjection.Declarations
+                    .Concat(ActorDrawBlock(pool, Constant(0), def, directProjection, state.ScreenHeight, state, [contact]).Statements)
+                    .ToList();
+
+                return PooledCameraDeclarations(pool.Name, phase, configuresCamera: true)
+                    .Concat(statements)
+                    .ToList();
+            }
+
+            var indexName = $"__{pool.Name}_{phase}_i";
+            var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight, margin: 0);
+            var branches = state.Actors.EnemyDefs
+                .Select(def =>
+                {
+                    var index = new IdentifierSyntax(indexName);
+                    var contact = LiveTouchPlayerContact(pool, index, def, playerX, playerY, playerRight, playerBottom, projection, topDepth);
+                    var statements = ActorDrawBlock(pool, index, def, projection, state.ScreenHeight, state, [contact]).Statements
+                        .ToList();
+                    return new KindBranch(def.Name, new BlockSyntax(statements));
+                })
+                .ToList();
+            var loopStatements = projection.Declarations
+                .Append(PooledKindDispatch(pool.Name, indexName, branches, $"{pool.Name} actor dispatch requires at least one Enemies.Def declaration."))
+                .ToList();
+
+            return PooledCameraDeclarations(pool.Name, phase, configuresCamera: true)
+                .Append(PoolLoop(pool, indexName, loopStatements))
+                .ToList();
         }
 
         private static IReadOnlyList<StatementSyntax> PoolTouchTilesStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -730,21 +825,57 @@ public static partial class ActorFrameworkLowerer
         }
 
         private static IReadOnlyList<StatementSyntax> PoolTouchPlayerStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+            => PoolTouchPlayerStatements(pool, call, state, topDepth: null);
+
+        private static IReadOnlyList<StatementSyntax> PoolTouchPlayerTopStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
         {
-            var parameters = RequireArguments(call, 4);
+            var parameters = RequireArguments(call, 5);
+            var topDepth = RequiredLiteralByte(parameters[4], $"{pool.Name}.TouchPlayerTop argument 5");
+            if (topDepth == 0)
+            {
+                throw new InvalidOperationException($"{pool.Name}.TouchPlayerTop argument 5 must be from 1 to 255.");
+            }
+
+            return PoolTouchPlayerStatements(pool, call, state, topDepth);
+        }
+
+        private static IReadOnlyList<StatementSyntax> PoolTouchPlayerStatements(
+            ActorPool pool,
+            QualifiedCallSyntax call,
+            ActorFrameworkState state,
+            int? topDepth)
+        {
+            var parameters = RequireArguments(call, topDepth.HasValue ? 5 : 4);
             RequireEnemyDefs(state, $"{pool.Name}.TouchPlayer");
 
-            var playerX = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchPlayer argument 1");
-            var playerY = RequiredLiteralByte(parameters[1], $"{pool.Name}.TouchPlayer argument 2");
+            var playerX = parameters[0];
+            var playerY = parameters[1];
             var playerWidth = RequiredLiteralByte(parameters[2], $"{pool.Name}.TouchPlayer argument 3");
             var playerHeight = RequiredLiteralByte(parameters[3], $"{pool.Name}.TouchPlayer argument 4");
-            var playerRight = CheckedByte(playerX + playerWidth, $"{pool.Name}.TouchPlayer player right edge");
-            var playerBottom = CheckedByte(playerY + playerHeight, $"{pool.Name}.TouchPlayer player bottom edge");
+            var playerRight = OffsetExpression(playerX, playerWidth, subtract: false);
+            var playerBottom = OffsetExpression(playerY, playerHeight, subtract: false);
+
+            if (pool.Capacity == 1 && state.Actors.EnemyDefs.Count == 1)
+            {
+                var def = state.Actors.EnemyDefs[0];
+                var directProjection = BuildDirectPooledScreenProjection(pool.Name, Constant(0), pool.Name, "player", state.ScreenWidth, state.ScreenHeight);
+                var directStatements = directProjection.Declarations
+                    .Concat(TouchPlayerBlock(pool, Constant(0), def, playerX, playerY, playerRight, playerBottom, directProjection, topDepth).Statements)
+                    .ToList();
+                var directContact = new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.Name, 0, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax(directStatements),
+                    Maybe<BlockSyntax>.None);
+
+                return PooledCameraDeclarations(pool.Name, "player", configuresCamera: true)
+                    .Append(directContact)
+                    .ToList();
+            }
 
             var indexName = $"__{pool.Name}_player_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, "player", state.ScreenWidth, state.ScreenHeight, margin: 0);
             var branches = state.Actors.EnemyDefs
-                .Select(def => new KindBranch(def.Name, TouchPlayerBlock(pool, indexName, def, playerX, playerY, playerRight, playerBottom, projection)))
+                .Select(def => new KindBranch(def.Name, TouchPlayerBlock(pool, new IdentifierSyntax(indexName), def, playerX, playerY, playerRight, playerBottom, projection, topDepth)))
                 .ToList();
             var activeStatements = projection.Declarations
                 .Append(PooledKindDispatch(pool.Name, indexName, branches, $"{pool.Name} actor dispatch requires at least one Enemies.Def declaration."))
@@ -758,52 +889,99 @@ public static partial class ActorFrameworkLowerer
 
         private static BlockSyntax TouchPlayerBlock(
             ActorPool pool,
-            string indexName,
+            ExpressionSyntax index,
             EnemyDef def,
-            int playerX,
-            int playerY,
-            int playerRight,
-            int playerBottom,
-            ActorScreenProjection projection)
+            ExpressionSyntax playerX,
+            ExpressionSyntax playerY,
+            ExpressionSyntax playerRight,
+            ExpressionSyntax playerBottom,
+            ActorScreenProjection projection,
+            int? topDepth)
         {
-            var overlapsX = And(
-                new BinaryExpressionSyntax(projection.ScreenX, Constant(playerRight), Operator.LessThan),
-                ActorRightOverlapsPlayerLeft(projection.ScreenX, def.HitboxWidth, playerX));
-            var overlapsY = And(
-                new BinaryExpressionSyntax(projection.ScreenY, Constant(playerBottom), Operator.LessThan),
-                new BinaryExpressionSyntax(OffsetExpression(projection.ScreenY, def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
-
-            var touchPlayer = new IfElseSyntax(
-                And(overlapsX, overlapsY),
-                new BlockSyntax([
-                    FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
-                ]),
-                Maybe<BlockSyntax>.None);
+            var touchPlayer = LiveTouchPlayerContact(pool, index, def, playerX, playerY, playerRight, playerBottom, projection, topDepth);
 
             return new BlockSyntax([
                 new IfElseSyntax(projection.Visible, new BlockSyntax([touchPlayer]), Maybe<BlockSyntax>.None),
             ]);
         }
 
-        private static ExpressionSyntax ActorRightOverlapsPlayerLeft(ExpressionSyntax actorScreenX, int actorWidth, int playerX)
+        private static StatementSyntax LiveTouchPlayerContact(
+            ActorPool pool,
+            ExpressionSyntax index,
+            EnemyDef def,
+            ExpressionSyntax playerX,
+            ExpressionSyntax playerY,
+            ExpressionSyntax playerRight,
+            ExpressionSyntax playerBottom,
+            ActorScreenProjection projection,
+            int? topDepth)
+        {
+            var contact = TouchPlayerContact(pool, index, def, playerX, playerY, playerRight, playerBottom, projection, topDepth);
+            if (!def.DefeatedFrame.HasValue)
+            {
+                return contact;
+            }
+
+            return new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "health"), Constant(0), Operator.NotEqual),
+                new BlockSyntax([contact]),
+                Maybe<BlockSyntax>.None);
+        }
+
+        private static IfElseSyntax TouchPlayerContact(
+            ActorPool pool,
+            ExpressionSyntax index,
+            EnemyDef def,
+            ExpressionSyntax playerX,
+            ExpressionSyntax playerY,
+            ExpressionSyntax playerRight,
+            ExpressionSyntax playerBottom,
+            ActorScreenProjection projection,
+            int? topDepth)
+        {
+            var overlapsX = And(
+                new BinaryExpressionSyntax(projection.ScreenX, playerRight, Operator.LessThan),
+                ActorRightOverlapsPlayerLeft(projection.ScreenX, def.HitboxWidth, playerX));
+            var overlapsY = topDepth.HasValue
+                ? And(
+                    new BinaryExpressionSyntax(projection.ScreenY, playerBottom, Operator.LessThan),
+                    new BinaryExpressionSyntax(playerBottom, OffsetExpression(projection.ScreenY, topDepth.Value, subtract: false), Operator.Get("<=")))
+                : And(
+                    new BinaryExpressionSyntax(projection.ScreenY, playerBottom, Operator.LessThan),
+                    new BinaryExpressionSyntax(OffsetExpression(projection.ScreenY, def.HitboxHeight, subtract: false), playerY, Operator.Get(">")));
+
+            return new IfElseSyntax(
+                And(overlapsX, overlapsY),
+                new BlockSyntax([
+                    FieldAssignment(pool.Name, index, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
+                ]),
+                Maybe<BlockSyntax>.None);
+        }
+
+        private static ExpressionSyntax ActorRightOverlapsPlayerLeft(ExpressionSyntax actorScreenX, int actorWidth, ExpressionSyntax playerX)
         {
             if (actorWidth == 0)
             {
-                return new BinaryExpressionSyntax(actorScreenX, Constant(playerX), Operator.Get(">"));
+                return new BinaryExpressionSyntax(actorScreenX, playerX, Operator.Get(">"));
             }
 
             return Or(
-                new BinaryExpressionSyntax(actorScreenX, Constant(playerX), Operator.GreaterThanOrEqual),
+                new BinaryExpressionSyntax(actorScreenX, playerX, Operator.GreaterThanOrEqual),
                 new BinaryExpressionSyntax(
-                    new BinaryExpressionSyntax(Constant(playerX), actorScreenX, Operator.Get("-")),
+                    new BinaryExpressionSyntax(playerX, actorScreenX, Operator.Get("-")),
                     Constant(actorWidth),
                     Operator.LessThan));
         }
 
-        private static IReadOnlyList<StatementSyntax> RuntimeSpawnActivationStatements(ActorSpawnLayer layer, string prefix, int screenWidth)
+        private static IReadOnlyList<StatementSyntax> RuntimeSpawnActivationStatements(ActorSpawnLayer layer, string prefix, int screenWidth, int poolCapacity)
         {
             var windowLeft = layer.WindowLeft ?? 0;
             var windowWidth = layer.WindowWidth ?? screenWidth;
+            if (poolCapacity == 1 && layer.Spawns.Count == 1)
+            {
+                return SingletonSpawnActivationStatements(layer, prefix, windowLeft, windowWidth);
+            }
+
             var statements = SpawnRecycleStatements(layer, prefix, windowLeft, windowWidth).ToList();
 
             if (layer.Spawns.Count != 0)
@@ -812,6 +990,80 @@ public static partial class ActorFrameworkLowerer
             }
 
             return statements;
+        }
+
+        private static IReadOnlyList<StatementSyntax> SingletonSpawnActivationStatements(
+            ActorSpawnLayer layer,
+            string prefix,
+            int windowLeft,
+            int windowWidth)
+        {
+            var spawn = layer.Spawns[0];
+            var cameraDeclarations = SpawnCameraXDeclarations(prefix, windowLeft).ToList();
+            var recycleProjection = BuildSpawnScreenProjection(
+                PoolField(layer.PoolName, 0, "x"),
+                PoolField(layer.PoolName, 0, "xHi"),
+                $"{prefix}_recycle",
+                windowLeft,
+                windowWidth,
+                prefix);
+            var recycleStatements = recycleProjection.Declarations
+                .Append(new IfElseSyntax(
+                    new UnaryExpressionSyntax("!", recycleProjection.Visible),
+                    new BlockSyntax([FieldAssignment(layer.PoolName, 0, "active", "=", Constant(0))]),
+                    Maybe<BlockSyntax>.None))
+                .ToList();
+            cameraDeclarations.Add(new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(layer.PoolName, 0, "active"), Constant(0), Operator.NotEqual),
+                new BlockSyntax(recycleStatements),
+                Maybe<BlockSyntax>.None));
+
+            var worldX = SplitWorldX(spawn.X, "actor spawn X");
+            var spawnProjection = BuildSpawnScreenProjection(
+                Constant(worldX.Low),
+                Constant(worldX.High),
+                $"{prefix}_spawn",
+                windowLeft,
+                windowWidth,
+                prefix);
+            var spawnStatements = spawnProjection.Declarations
+                .Append(new IfElseSyntax(
+                    And(
+                        spawnProjection.Visible,
+                        new BinaryExpressionSyntax(PoolField(layer.PoolName, 0, "active"), Constant(0), Operator.Equal)),
+                    new BlockSyntax(SingletonSpawnSlotAssignments(layer, spawn).ToList()),
+                    Maybe<BlockSyntax>.None))
+                .ToList();
+            cameraDeclarations.Add(new IfElseSyntax(
+                new BinaryExpressionSyntax(
+                    new IndexExpressionSyntax($"{layer.RuntimeName}_used", Constant(0)),
+                    Constant(0),
+                    Operator.Equal),
+                new BlockSyntax(spawnStatements),
+                Maybe<BlockSyntax>.None));
+
+            return cameraDeclarations;
+        }
+
+        private static IEnumerable<StatementSyntax> SingletonSpawnSlotAssignments(ActorSpawnLayer layer, LogicalActorSpawn spawn)
+        {
+            var worldX = SplitWorldX(spawn.X, "actor spawn X");
+            var worldY = SplitWorldY(spawn.Y, "actor spawn Y");
+            yield return FieldAssignment(layer.PoolName, 0, "kind", "=", new IdentifierSyntax(spawn.Kind));
+            yield return FieldAssignment(layer.PoolName, 0, "x", "=", Constant(worldX.Low));
+            yield return FieldAssignment(layer.PoolName, 0, "xHi", "=", Constant(worldX.High));
+            yield return FieldAssignment(layer.PoolName, 0, "y", "=", Constant(worldY.Low));
+            yield return FieldAssignment(layer.PoolName, 0, "yHi", "=", Constant(worldY.High));
+            foreach (var fieldName in SpawnInitialFieldNames.Where(name => name != "active"))
+            {
+                yield return FieldAssignment(layer.PoolName, 0, fieldName, "=", Constant(SpawnInitialFieldValue(spawn, fieldName)));
+            }
+
+            yield return FieldAssignment(layer.PoolName, 0, "active", "=", Constant(SpawnInitialFieldValue(spawn, "active")));
+            yield return new ExpressionStatementSyntax(new AssignmentSyntax(
+                new IndexLValue($"{layer.RuntimeName}_used", Constant(0)),
+                "=",
+                Constant(1)));
         }
 
         private static IReadOnlyList<StatementSyntax> SpawnRecycleStatements(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)

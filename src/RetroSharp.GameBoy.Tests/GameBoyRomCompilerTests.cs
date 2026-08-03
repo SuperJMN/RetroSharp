@@ -96,9 +96,9 @@ public partial class GameBoyRomCompilerTests
         var palette = new[]
         {
             (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
-            (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
-            (R: (byte)0xB8, G: (byte)0xB8, B: (byte)0xB8, A: (byte)0xFF),
-            (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+            (R: (byte)0xF8, G: (byte)0xF8, B: (byte)0xF8, A: (byte)0xFF),
+            (R: (byte)0xA8, G: (byte)0xA8, B: (byte)0xA8, A: (byte)0xFF),
+            (R: (byte)0x28, G: (byte)0x28, B: (byte)0x28, A: (byte)0xFF),
         };
 
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
