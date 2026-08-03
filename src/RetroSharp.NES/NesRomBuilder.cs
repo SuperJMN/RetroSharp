@@ -9,6 +9,8 @@ namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
 {
+    internal const string CodeBankedProfileName = "nes-mmc3-tvrom-codebank-v1";
+    private const string ProgramEntryLabel = "banked_program_entry";
     private const ushort Mmc3BootPaletteAddress = 0xA000;
     private const ushort Mmc3BootNameTableAddress = 0xA020;
     internal const string WorldPackLabel = "worldpack_default";
@@ -37,7 +39,8 @@ internal static class NesRomBuilder
             useFourScreenNametables,
             cartridgeProfile,
             packedWorldBytes: null,
-            worldPackProbe: null).Rom;
+            worldPackProbe: null,
+            programLinkMode: NesProgramLinkMode.Fixed).Rom;
     }
 
     internal static NesRomBuildResult BuildWithReport(
@@ -45,7 +48,8 @@ internal static class NesRomBuilder
         bool useFourScreenNametables,
         NesCartridgeProfile? forcedCartridgeProfile,
         byte[]? packedWorldOverride,
-        NesWorldPackProbe? worldPackProbe)
+        NesWorldPackProbe? worldPackProbe,
+        NesProgramLinkMode? forcedProgramLinkMode = null)
     {
         var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
         var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
@@ -68,43 +72,69 @@ internal static class NesRomBuilder
 
         if (forcedCartridgeProfile is { } forced)
         {
-            return BuildForProfile(program, useFourScreenNametables, forced, selectedWorldPack, worldPackProbe);
+            return BuildForProfile(
+                program,
+                useFourScreenNametables,
+                forced,
+                selectedWorldPack,
+                worldPackProbe,
+                forcedProgramLinkMode ?? NesProgramLinkMode.Fixed);
         }
 
-        if (packedWorldOverride is null && discoveredWorldPack is not null && !requiresPackedCamera)
+        var mapper0WorldPack = packedWorldOverride is null && discoveredWorldPack is not null && !requiresPackedCamera
+            ? null
+            : selectedWorldPack;
+        try
+        {
+            // Preserve the exact historical mapper-0 image when it genuinely fits. A
+            // discovered canonical pack becomes physical only after the real final link
+            // proves that mapper 0 cannot hold the executable or packed payload.
+            return BuildForProfile(
+                program,
+                useFourScreenNametables,
+                NesCartridgeProfile.Mapper0,
+                mapper0WorldPack,
+                mapper0WorldPack is null ? null : worldPackProbe,
+                NesProgramLinkMode.Fixed);
+        }
+        catch (InvalidOperationException exception) when (
+            ShouldPromoteMapper0ToMmc3(exception, selectedWorldPack is not null))
         {
             try
             {
-                // Preserve the exact historical mapper-0 image when it genuinely fits. The
-                // discovered canonical pack becomes a physical section only after that real
-                // final link proves a banked address/capacity need.
-                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, packedWorldBytes: null, worldPackProbe: null);
+                // The second attempt is the byte-identical existing MMC3 data-only path.
+                return BuildForProfile(
+                    program,
+                    useFourScreenNametables,
+                    NesCartridgeProfile.Mmc3Tvrom,
+                    selectedWorldPack,
+                    worldPackProbe,
+                    NesProgramLinkMode.Fixed);
             }
-            catch (InvalidOperationException exception) when (IsMapper0CapacityConstraint(exception))
+            catch (InvalidOperationException mmc3Exception) when (IsMmc3ProgramCapacityConstraint(mmc3Exception))
             {
-                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, discoveredWorldPack, worldPackProbe);
+                return BuildForProfile(
+                    program,
+                    useFourScreenNametables,
+                    NesCartridgeProfile.Mmc3Tvrom,
+                    selectedWorldPack,
+                    worldPackProbe,
+                    NesProgramLinkMode.BankedR6);
             }
-        }
-
-        // A tall discovered world can exceed the raw one-VBlank column shape while
-        // remaining valid through the bounded packed camera scheduler. In that case,
-        // attempt mapper 0 with the canonical pack first; mapper selection still
-        // escalates only if that real packed final link exceeds mapper-0 capacity.
-
-        try
-        {
-            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, selectedWorldPack, worldPackProbe);
-        }
-        catch (InvalidOperationException exception) when (
-            selectedWorldPack is not null &&
-            IsMapper0CapacityConstraint(exception))
-        {
-            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, selectedWorldPack, worldPackProbe);
         }
     }
 
     private static bool IsMapper0CapacityConstraint(InvalidOperationException exception) =>
         exception.Data[nameof(NesLinkConstraint)] is NesLinkConstraint.Mapper0Prg or NesLinkConstraint.Mapper0Dpcm;
+
+    internal static bool ShouldPromoteMapper0ToMmc3(
+        InvalidOperationException exception,
+        bool hasPackedWorld) =>
+        exception.Data[nameof(NesLinkConstraint)] is NesLinkConstraint.Mapper0Prg ||
+        hasPackedWorld && IsMapper0CapacityConstraint(exception);
+
+    private static bool IsMmc3ProgramCapacityConstraint(InvalidOperationException exception) =>
+        exception.Data[nameof(NesLinkConstraint)] is NesLinkConstraint.Mmc3ProgramPrg;
 
     private static InvalidOperationException LinkConstraint(NesLinkConstraint constraint, string message)
     {
@@ -118,9 +148,14 @@ internal static class NesRomBuilder
         bool useFourScreenNametables,
         NesCartridgeProfile cartridgeProfile,
         byte[]? packedWorldBytes,
-        NesWorldPackProbe? worldPackProbe)
+        NesWorldPackProbe? worldPackProbe,
+        NesProgramLinkMode programLinkMode)
     {
         var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
+        if (programLinkMode is NesProgramLinkMode.BankedR6 && !layout.EmitMmc3Foundation)
+        {
+            throw new InvalidOperationException("NES banked program linking requires the MMC3/TVROM cartridge layout.");
+        }
         var worldPackRuntime = packedWorldBytes is null
             ? null
             : NesWorldPackRuntimePlan.Create(packedWorldBytes);
@@ -132,6 +167,17 @@ internal static class NesRomBuilder
         var includeLegacyWorldData = !layout.EmitMmc3Foundation ||
                                      packedWorldBytes is null ||
                                      program.RequiresLegacyWorldData;
+        var occupiedWorldBanks = worldPackPlacement?.Segments
+            .Select(segment => segment.PhysicalBank)
+            .ToHashSet() ?? [];
+        var programBanks = programLinkMode is NesProgramLinkMode.BankedR6
+            ? layout.PrgSections
+                .Where(section =>
+                    section.Kind is NesPrgSectionKind.WorldR6 &&
+                    !occupiedWorldBanks.Contains(section.PhysicalBank))
+                .OrderBy(section => section.PhysicalOffset)
+                .ToArray()
+            : [];
         var prgBuild = BuildPrgRom(
             program,
             layout,
@@ -139,7 +185,11 @@ internal static class NesRomBuilder
             worldPackPlacement,
             worldPackProbe,
             worldPackPlacement is null ? packedWorldBytes : null,
-            includeLegacyWorldData);
+            includeLegacyWorldData,
+            programLinkMode,
+            programBanks,
+            occupiedWorldBanks.Count,
+            packedWorldBytes?.Length ?? 0);
         var prg = prgBuild.Bytes;
         if (layout.EmitMmc3Foundation)
         {
@@ -191,7 +241,11 @@ internal static class NesRomBuilder
         NesWorldPackPlacement? worldPackPlacement,
         NesWorldPackProbe? worldPackProbe,
         byte[]? inlineWorldPack,
-        bool includeLegacyWorldData)
+        bool includeLegacyWorldData,
+        NesProgramLinkMode programLinkMode,
+        IReadOnlyList<NesPrgSectionLayout> programBanks,
+        int occupiedWorldBankCount,
+        int packedWorldByteCount)
     {
         var longForLoopIds = new HashSet<int>();
         var longWhileLoopIds = new HashSet<int>();
@@ -208,7 +262,11 @@ internal static class NesRomBuilder
                     worldPackPlacement,
                     worldPackProbe,
                     inlineWorldPack,
-                    includeLegacyWorldData);
+                    includeLegacyWorldData,
+                    programLinkMode,
+                    programBanks,
+                    occupiedWorldBankCount,
+                    packedWorldByteCount);
             }
             catch (BranchOutOfRangeException ex)
             {
@@ -236,9 +294,15 @@ internal static class NesRomBuilder
         NesWorldPackPlacement? worldPackPlacement,
         NesWorldPackProbe? worldPackProbe,
         byte[]? inlineWorldPack,
-        bool includeLegacyWorldData)
+        bool includeLegacyWorldData,
+        NesProgramLinkMode programLinkMode,
+        IReadOnlyList<NesPrgSectionLayout> programBanks,
+        int occupiedWorldBankCount,
+        int packedWorldByteCount)
     {
-        var builder = new PrgBuilder(layout.FixedRuntimeCpuBaseAddress);
+        var builder = programLinkMode is NesProgramLinkMode.BankedR6
+            ? PrgBuilder.CreateSectioned(layout.FixedRuntimeCpuBaseAddress)
+            : new PrgBuilder(layout.FixedRuntimeCpuBaseAddress);
         DpcmSampleLayout? fixedDpcmLayout = null;
         if (layout.EmitMmc3Foundation)
         {
@@ -254,7 +318,15 @@ internal static class NesRomBuilder
             EmitDpcmSampleBlocks(builder, fixedDpcmLayout.Placements);
         }
         var usePackedCamera = worldPackRuntime is not null && program.UsesCameraRuntime;
-        var frameScheduler = NesPhysicalFrameScheduler.Create(builder, program, layout, usePackedCamera);
+        var frameScheduler = programLinkMode is NesProgramLinkMode.BankedR6
+            ? NesPhysicalFrameScheduler.Create(
+                builder,
+                program,
+                CodeBankedProfileName,
+                layout.UseFourScreenNametables,
+                usePackedCamera,
+                layout.EmitMmc3Foundation && usePackedCamera)
+            : NesPhysicalFrameScheduler.Create(builder, program, layout, usePackedCamera);
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
         if (layout.EmitMmc3Foundation)
         {
@@ -317,10 +389,28 @@ internal static class NesRomBuilder
         builder.Emit(0xA9, 0x1E);                   // LDA #$1E
         builder.Emit(0x8D, 0x01, 0x20);             // STA $2001
 
-        runtimeCompiler.Emit(program.MainBlock);
-
-        builder.Label("forever");
-        builder.JumpAbsolute("forever");
+        int movableProgramBytes;
+        if (programLinkMode is NesProgramLinkMode.BankedR6)
+        {
+            builder.JumpAbsolute(ProgramEntryLabel);
+            using (builder.EnterSection(NesPrgResidence.ProgramR6))
+            {
+                var programStartAddress = builder.CurrentAddress;
+                builder.Label(ProgramEntryLabel);
+                runtimeCompiler.Emit(program.MainBlock);
+                builder.Label("forever");
+                builder.JumpAbsolute("forever");
+                movableProgramBytes = builder.CurrentAddress - programStartAddress;
+            }
+        }
+        else
+        {
+            var programStartAddress = builder.CurrentAddress;
+            runtimeCompiler.Emit(program.MainBlock);
+            builder.Label("forever");
+            builder.JumpAbsolute("forever");
+            movableProgramBytes = builder.CurrentAddress - programStartAddress;
+        }
 
         runtimeCompiler.EmitReferencedSubroutines();
         if (worldPackRuntime is not null)
@@ -384,7 +474,7 @@ internal static class NesRomBuilder
         IReadOnlyList<NesDpcmBuildPlacement> dpcmPlacements = [];
         if (layout.EmitMmc3Foundation)
         {
-            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress);
+            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress, movableProgramBytes, programLinkMode);
             var dpcmLayout = fixedDpcmLayout
                 ?? throw new InvalidOperationException("MMC3 DPCM layout was not reserved before fixed runtime emission.");
             var pinnedBuilder = new PrgBuilder(0xA000);
@@ -420,7 +510,7 @@ internal static class NesRomBuilder
         var resetTrampolineBytes = 0;
         if (layout.EmitMmc3Foundation)
         {
-            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress);
+            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress, movableProgramBytes, programLinkMode);
             EmitMmc3ResetTrampoline(builder, layout.FixedTrailerStartAddress);
             resetTrampolineBytes = builder.CurrentAddress - layout.FixedTrailerStartAddress;
         }
@@ -431,7 +521,44 @@ internal static class NesRomBuilder
             SeedMmc3SwitchableBanks(prg, layout.PrgSections);
         }
 
-        var code = builder.Build();
+        NesPrgLinkResult? linkedProgram = null;
+        byte[] code;
+        if (programLinkMode is NesProgramLinkMode.BankedR6)
+        {
+            try
+            {
+                linkedProgram = NesPrgLinker.Link(
+                    builder,
+                    new NesPrgLinkLayout(
+                        layout.FixedRuntimePhysicalOffset,
+                        layout.FixedTrailerStartAddress,
+                        checked((ushort)(layout.FixedRuntimeCpuBaseAddress + fixedPayloadBeforeTrailer)),
+                        programBanks,
+                        "mmc3_select_r6"));
+            }
+            catch (NesProgramBankCapacityException exception)
+            {
+                var totalR6Banks = layout.PrgSections.Count(section => section.Kind is NesPrgSectionKind.WorldR6);
+                throw LinkConstraint(
+                    NesLinkConstraint.Mmc3R6Capacity,
+                    $"NES MMC3/TVROM R6 capacity overflow: WorldPack owns {occupiedWorldBankCount} bank(s) ({packedWorldByteCount} bytes) and program requires {exception.RequiredBanks} bank(s) ({exception.ProgramBytes} linked bytes), but R6 banks [0, 3, 4, 5] provide {totalR6Banks} whole banks.");
+            }
+            catch (NesFixedVeneerCapacityException exception)
+            {
+                throw LinkConstraint(NesLinkConstraint.FixedPrg, exception.Message);
+            }
+
+            code = linkedProgram.FixedBytes;
+            foreach (var segment in linkedProgram.ProgramSegments)
+            {
+                segment.Bytes.CopyTo(prg, segment.PhysicalOffset);
+            }
+        }
+        else
+        {
+            code = builder.Build();
+        }
+
         if (code.Length > layout.FixedRuntimeSize - 6)
         {
             var message = layout.EmitMmc3Foundation
@@ -459,7 +586,7 @@ internal static class NesRomBuilder
             ? null
             : builder.AddressOfLabel(WorldPackLabel) - layout.FixedRuntimeCpuBaseAddress;
         var fixedPayloadBytes = layout.EmitMmc3Foundation
-            ? checked(fixedPayloadBeforeTrailer + resetTrampolineBytes + 6)
+            ? checked(fixedPayloadBeforeTrailer + (linkedProgram?.FixedVeneerBytes ?? 0) + resetTrampolineBytes + 6)
             : checked(code.Length + 6);
         var fixedSymbols = worldPackRuntime is null
             ? new Dictionary<string, ushort>()
@@ -498,6 +625,13 @@ internal static class NesRomBuilder
             dpcmPlacements,
             fixedPayloadBytes,
             fixedSymbols,
+            linkedProgram?.ProgramBytes ?? 0,
+            linkedProgram?.FixedVeneerBytes ?? 0,
+            linkedProgram?.ProgramSegments ?? [],
+            linkedProgram?.Symbols
+                .Where(pair => pair.Value.Residence is NesPrgResidence.ProgramR6)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal) ??
+            new Dictionary<string, NesPrgSymbol>(StringComparer.Ordinal),
             runtimeCompiler.UserVariables,
             frameScheduler.SelectedProfile,
             frameScheduler.CreateCpuWorkReport(program.SdkOperationStream));
@@ -512,12 +646,21 @@ internal static class NesRomBuilder
         }
     }
 
-    private static void EnsureFixedDataBeforeTrailer(NesCartridgeLayout layout, int currentAddress)
+    private static void EnsureFixedDataBeforeTrailer(
+        NesCartridgeLayout layout,
+        int currentAddress,
+        int movableProgramBytes,
+        NesProgramLinkMode programLinkMode)
     {
         if (currentAddress > layout.FixedTrailerStartAddress)
         {
+            var constraint = layout.EmitMmc3Foundation &&
+                             programLinkMode is NesProgramLinkMode.Fixed &&
+                             currentAddress - movableProgramBytes <= layout.FixedTrailerStartAddress
+                ? NesLinkConstraint.Mmc3ProgramPrg
+                : NesLinkConstraint.FixedPrg;
             throw LinkConstraint(
-                NesLinkConstraint.FixedPrg,
+                constraint,
                 $"NES {layout.Name} fixed PRG section overflow: runtime/data/DPCM end at ${currentAddress:X4}, beyond reset trailer start ${layout.FixedTrailerStartAddress:X4}.");
         }
     }
@@ -676,6 +819,21 @@ internal static class NesRomBuilder
             }
         }
 
+        var programRelativeOffset = 0;
+        for (var index = 0; index < prgBuild.ProgramSegments.Count; index++)
+        {
+            var programSegment = prgBuild.ProgramSegments[index];
+            AddReportSegment(
+                segments,
+                $"program:r6:{index}",
+                "R6 program $8000-$9FFF",
+                programRelativeOffset,
+                programSegment.PhysicalOffset,
+                programSegment.Bytes.Length,
+                programSegment.CpuAddress);
+            programRelativeOffset += programSegment.Bytes.Length;
+        }
+
         AddReportSegment(
             segments,
             "fixed:vectors",
@@ -691,11 +849,14 @@ internal static class NesRomBuilder
             layout.PrgRomSize,
             layout.ChrRomSize,
             prgBuild.FixedPayloadBytes,
+            prgBuild.ProgramR6Bytes,
+            prgBuild.FixedVeneerBytes,
             prgBuild.PinnedDataBytes.Length,
             layout.EmitMmc3Foundation ? 4_128 : 0,
             CalculateResidentChrBytes(program),
             orderedSegments,
             prgBuild.FixedSymbols,
+            prgBuild.ProgramSymbols,
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
             prgBuild.FrameCpuWork);

@@ -8,6 +8,12 @@ internal enum NesCartridgeProfile
     Mmc3Tvrom,
 }
 
+internal enum NesProgramLinkMode
+{
+    Fixed,
+    BankedR6,
+}
+
 internal enum NesPrgSectionKind
 {
     WorldR6,
@@ -20,6 +26,8 @@ internal enum NesLinkConstraint
 {
     Mapper0Prg,
     Mapper0Dpcm,
+    Mmc3ProgramPrg,
+    Mmc3R6Capacity,
     FixedPrg,
     Dpcm,
 }
@@ -32,6 +40,10 @@ internal sealed record NesPrgBuild(
     IReadOnlyList<NesDpcmBuildPlacement> DpcmPlacements,
     int FixedPayloadBytes,
     IReadOnlyDictionary<string, ushort> FixedSymbols,
+    int ProgramR6Bytes,
+    int FixedVeneerBytes,
+    IReadOnlyList<NesLinkedProgramSegment> ProgramSegments,
+    IReadOnlyDictionary<string, NesPrgSymbol> ProgramSymbols,
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
     string FrameProfile,
     SdkCpuWorkReport FrameCpuWork);
@@ -45,11 +57,14 @@ internal sealed record NesRomBuildReport(
     int PrgRomSize,
     int ChrRomSize,
     int FixedPayloadBytes,
+    int ProgramR6Bytes,
+    int FixedVeneerBytes,
     int PinnedR7Bytes,
     int BootR7Bytes,
     int ResidentChrBytes,
     IReadOnlyList<NesRomBuildSegment> Segments,
     IReadOnlyDictionary<string, ushort> FixedSymbols,
+    IReadOnlyDictionary<string, NesPrgSymbol> BankedSymbols,
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
     IReadOnlyList<NesRuntimeRegion> RuntimeRegions,
     SdkCpuWorkReport CpuWork);

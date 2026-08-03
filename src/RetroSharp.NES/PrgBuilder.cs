@@ -1,29 +1,172 @@
 namespace RetroSharp.NES;
 
+internal enum NesPrgResidence
+{
+    Fixed,
+    ProgramR6,
+}
+
+internal enum NesPrgRelocationKind
+{
+    AbsoluteAddress,
+    AbsoluteJump,
+    AbsoluteCall,
+    RelativeBranch,
+    LowByte,
+    HighByte,
+}
+
+internal sealed record NesPrgAtom(int Offset, int Length);
+
+internal sealed record NesPrgLabelDefinition(
+    NesPrgResidence? Residence,
+    int Offset,
+    ushort? ExternalAddress);
+
+internal sealed record NesPrgRelocation(
+    NesPrgResidence Residence,
+    int Offset,
+    string Label,
+    int Addend,
+    NesPrgRelocationKind Kind);
+
+internal sealed record NesPrgSectionEmission(
+    byte[] Bytes,
+    IReadOnlyList<NesPrgAtom> Atoms);
+
+internal sealed record NesPrgEmission(
+    ushort FixedBaseAddress,
+    IReadOnlyDictionary<NesPrgResidence, NesPrgSectionEmission> Sections,
+    IReadOnlyDictionary<string, NesPrgLabelDefinition> Labels,
+    IReadOnlyList<NesPrgRelocation> Relocations);
+
 internal sealed class PrgBuilder
 {
+    private sealed class RecordedSection
+    {
+        public List<byte> Bytes { get; } = [];
+
+        public List<NesPrgAtom> Atoms { get; } = [];
+    }
+
+    private sealed class SectionScope(PrgBuilder owner, NesPrgResidence previous) : IDisposable
+    {
+        private bool disposed;
+
+        public void Dispose()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            owner.currentResidence = previous;
+            disposed = true;
+        }
+    }
+
     private readonly ushort baseAddress;
     private readonly List<byte> bytes = [];
     private readonly Dictionary<string, int> labels = [];
     private readonly List<(int Offset, string Label, int Addend)> absoluteFixups = [];
     private readonly List<(int Offset, string Label, int Addend, bool High)> byteFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
+    private readonly bool sectioned;
+    private readonly Dictionary<NesPrgResidence, RecordedSection> recordedSections = [];
+    private readonly Dictionary<string, NesPrgLabelDefinition> recordedLabels = [];
+    private readonly List<NesPrgRelocation> recordedRelocations = [];
+    private NesPrgResidence currentResidence = NesPrgResidence.Fixed;
     private int nextLabelId;
 
-    public PrgBuilder(ushort baseAddress = 0x8000)
+    public PrgBuilder(ushort baseAddress = 0x8000) : this(baseAddress, sectioned: false)
     {
-        this.baseAddress = baseAddress;
     }
 
-    public int CurrentAddress => baseAddress + bytes.Count;
+    private PrgBuilder(ushort baseAddress, bool sectioned)
+    {
+        this.baseAddress = baseAddress;
+        this.sectioned = sectioned;
+        if (sectioned)
+        {
+            recordedSections[NesPrgResidence.Fixed] = new RecordedSection();
+            recordedSections[NesPrgResidence.ProgramR6] = new RecordedSection();
+        }
+    }
 
-    public void Label(string name) => labels[name] = bytes.Count;
+    internal static PrgBuilder CreateSectioned(ushort fixedBaseAddress) =>
+        new(fixedBaseAddress, sectioned: true);
 
-    public void DefineExternalLabel(string name, ushort address) => labels[name] = address - baseAddress;
+    public int CurrentAddress =>
+        (sectioned && currentResidence is NesPrgResidence.ProgramR6 ? 0x8000 : baseAddress) + CurrentBytes.Count;
+
+    public void Label(string name)
+    {
+        if (!sectioned)
+        {
+            labels[name] = bytes.Count;
+            return;
+        }
+
+        recordedLabels[name] = new NesPrgLabelDefinition(
+            currentResidence,
+            CurrentBytes.Count,
+            ExternalAddress: null);
+    }
+
+    public void DefineExternalLabel(string name, ushort address)
+    {
+        if (!sectioned)
+        {
+            labels[name] = address - baseAddress;
+            return;
+        }
+
+        recordedLabels[name] = new NesPrgLabelDefinition(
+            Residence: null,
+            Offset: 0,
+            ExternalAddress: address);
+    }
 
     public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
 
-    public void Emit(params byte[] values) => bytes.AddRange(values);
+    public void Emit(params byte[] values)
+    {
+        if (!sectioned)
+        {
+            bytes.AddRange(values);
+            return;
+        }
+
+        EmitRecordedAtom(values);
+    }
+
+    internal IDisposable EnterSection(NesPrgResidence residence)
+    {
+        if (!sectioned)
+        {
+            throw new InvalidOperationException("NES PRG sections require a sectioned builder.");
+        }
+
+        var previous = currentResidence;
+        currentResidence = residence;
+        return new SectionScope(this, previous);
+    }
+
+    internal NesPrgEmission FreezeForLink()
+    {
+        if (!sectioned)
+        {
+            throw new InvalidOperationException("A flat NES PRG builder cannot be passed to the sectioned linker.");
+        }
+
+        return new NesPrgEmission(
+            baseAddress,
+            recordedSections.ToDictionary(
+                pair => pair.Key,
+                pair => new NesPrgSectionEmission(pair.Value.Bytes.ToArray(), pair.Value.Atoms.ToArray())),
+            new Dictionary<string, NesPrgLabelDefinition>(recordedLabels, StringComparer.Ordinal),
+            recordedRelocations.ToArray());
+    }
 
     public void PadToAddress(ushort address)
     {
@@ -32,10 +175,26 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${baseAddress:X4}.");
         }
 
+        if (sectioned && currentResidence is not NesPrgResidence.Fixed)
+        {
+            throw new InvalidOperationException("NES PRG address padding is valid only in the fixed section.");
+        }
+
         var targetOffset = address - baseAddress;
-        if (targetOffset < bytes.Count)
+        if (targetOffset < CurrentBytes.Count)
         {
             throw new InvalidOperationException($"NES PRG address ${address:X4} has already been emitted.");
+        }
+
+        if (sectioned)
+        {
+            var padding = targetOffset - CurrentBytes.Count;
+            if (padding > 0)
+            {
+                EmitRecordedAtom(new byte[padding]);
+            }
+
+            return;
         }
 
         while (bytes.Count < targetOffset)
@@ -47,25 +206,49 @@ internal sealed class PrgBuilder
     public void EmitLabelLowByte(string label, int addend = 0)
     {
         Emit(0x00);
-        byteFixups.Add((bytes.Count - 1, label, addend, High: false));
+        AddByteRelocation(label, addend, high: false);
     }
 
     public void EmitLabelHighByte(string label, int addend = 0)
     {
         Emit(0x00);
-        byteFixups.Add((bytes.Count - 1, label, addend, High: true));
+        AddByteRelocation(label, addend, high: true);
     }
 
     public void LoadAImmediate(int value) => Emit(0xA9, CheckedByte(value));
 
     public void LoadAImmediateLabelLowByte(string label, int addend = 0)
     {
+        if (sectioned)
+        {
+            var offset = EmitRecordedAtom(0xA9, 0x00);
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                offset + 1,
+                label,
+                addend,
+                NesPrgRelocationKind.LowByte));
+            return;
+        }
+
         Emit(0xA9);
         EmitLabelLowByte(label, addend);
     }
 
     public void LoadAImmediateLabelHighByte(string label, int addend = 0)
     {
+        if (sectioned)
+        {
+            var offset = EmitRecordedAtom(0xA9, 0x00);
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                offset + 1,
+                label,
+                addend,
+                NesPrgRelocationKind.HighByte));
+            return;
+        }
+
         Emit(0xA9);
         EmitLabelHighByte(label, addend);
     }
@@ -185,7 +368,7 @@ internal sealed class PrgBuilder
     public void LdaAbsoluteX(string label, int addend = 0)
     {
         Emit(0xBD, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label, addend));
+        AddAbsoluteRelocation(label, addend, NesPrgRelocationKind.AbsoluteAddress);
     }
 
     public void LoadAIndirectY(byte address) => Emit(0xB1, address);
@@ -193,19 +376,31 @@ internal sealed class PrgBuilder
     public void JumpAbsolute(string label)
     {
         Emit(0x4C, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label, 0));
+        AddAbsoluteRelocation(label, 0, NesPrgRelocationKind.AbsoluteJump);
     }
 
     public void CallSubroutine(string label)
     {
         Emit(0x20, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label, 0));
+        AddAbsoluteRelocation(label, 0, NesPrgRelocationKind.AbsoluteCall);
     }
 
     public void BranchRelative(byte opcode, string label)
     {
         Emit(opcode, 0x00);
-        relativeFixups.Add((bytes.Count - 1, label));
+        if (sectioned)
+        {
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                CurrentBytes.Count - 1,
+                label,
+                Addend: 0,
+                NesPrgRelocationKind.RelativeBranch));
+        }
+        else
+        {
+            relativeFixups.Add((bytes.Count - 1, label));
+        }
     }
 
     public void JumpIf(byte branchOpcode, string label)
@@ -218,12 +413,29 @@ internal sealed class PrgBuilder
             0xF0 => 0xD0, // BEQ -> BNE
             _ => throw new ArgumentOutOfRangeException(nameof(branchOpcode), branchOpcode, "Unsupported 6502 condition branch."),
         };
+        if (sectioned)
+        {
+            var offset = EmitRecordedAtom((byte)inverse, 0x03, 0x4C, 0x00, 0x00);
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                offset + 3,
+                label,
+                Addend: 0,
+                NesPrgRelocationKind.AbsoluteJump));
+            return;
+        }
+
         Emit((byte)inverse, 0x03); // Skip the following absolute JMP when the condition is false.
         JumpAbsolute(label);
     }
 
     public byte[] Build()
     {
+        if (sectioned)
+        {
+            throw new InvalidOperationException("A sectioned NES PRG builder must be linked with NesPrgLinker.");
+        }
+
         foreach (var fixup in byteFixups)
         {
             var address = AddressOf(fixup.Label, fixup.Addend);
@@ -253,7 +465,82 @@ internal sealed class PrgBuilder
         return bytes.ToArray();
     }
 
-    public ushort AddressOfLabel(string label) => checked((ushort)AddressOf(label));
+    public ushort AddressOfLabel(string label)
+    {
+        if (!sectioned)
+        {
+            return checked((ushort)AddressOf(label));
+        }
+
+        if (!recordedLabels.TryGetValue(label, out var definition))
+        {
+            throw new InvalidOperationException($"Unknown NES PRG label '{label}'.");
+        }
+
+        if (definition.ExternalAddress is { } externalAddress)
+        {
+            return externalAddress;
+        }
+
+        if (definition.Residence is not NesPrgResidence.Fixed)
+        {
+            throw new InvalidOperationException(
+                $"NES banked program label '{label}' requires a physical bank as well as a CPU address.");
+        }
+
+        return checked((ushort)(baseAddress + definition.Offset));
+    }
+
+    private List<byte> CurrentBytes => sectioned
+        ? recordedSections[currentResidence].Bytes
+        : bytes;
+
+    private int EmitRecordedAtom(params byte[] values)
+    {
+        var section = recordedSections[currentResidence];
+        var offset = section.Bytes.Count;
+        section.Bytes.AddRange(values);
+        if (values.Length > 0)
+        {
+            section.Atoms.Add(new NesPrgAtom(offset, values.Length));
+        }
+
+        return offset;
+    }
+
+    private void AddAbsoluteRelocation(string label, int addend, NesPrgRelocationKind kind)
+    {
+        if (sectioned)
+        {
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                CurrentBytes.Count - 2,
+                label,
+                addend,
+                kind));
+        }
+        else
+        {
+            absoluteFixups.Add((bytes.Count - 2, label, addend));
+        }
+    }
+
+    private void AddByteRelocation(string label, int addend, bool high)
+    {
+        if (sectioned)
+        {
+            recordedRelocations.Add(new NesPrgRelocation(
+                currentResidence,
+                CurrentBytes.Count - 1,
+                label,
+                addend,
+                high ? NesPrgRelocationKind.HighByte : NesPrgRelocationKind.LowByte));
+        }
+        else
+        {
+            byteFixups.Add((bytes.Count - 1, label, addend, High: high));
+        }
+    }
 
     private static byte CheckedByte(int value)
     {

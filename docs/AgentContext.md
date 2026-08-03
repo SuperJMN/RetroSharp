@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: current navigation and execution context.
-Last updated: 2026-07-31.
+Last updated: 2026-08-03.
 
 Read this after `AGENTS.md`. It is deliberately short and current. Historical
 issue closeouts, commit hashes, ROM hashes, and one-off acceptance measurements
@@ -75,7 +75,8 @@ instead of keeping a second copy. Load only the one route that owns the task.
 | Is a sample portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md`; per-scenario acceptance records are under `history/` |
 | What is the generated-code CPU-work contract? | `GeneratedCodeCpuWorkContract.md` |
-| Is the task about large maps or banking? | `GameBoyBankingRoadmap.md`, `NesLargeWorldsCartridgeProfile.md`; completed epic history in `history/LargeWorldsRoadmap.md` |
+| Is the task about large maps or data banking? | `GameBoyBankingRoadmap.md`, `NesLargeWorldsCartridgeProfile.md`; completed epic history in `history/LargeWorldsRoadmap.md` |
+| Is the task about NES executable code banking? | `NesCodeBankingV1.md` |
 | Is the task about issue execution or publication? | `AgentExecution.md` |
 | Reviewing a completed roadmap or closed-issue history? | `history/` (background only, e.g. `history/GeneratedCodePerformanceRoadmap.md`, `history/NesFrameSchedulingRoadmap.md`, `history/LegacyZ80Compiler.md`) |
 
@@ -124,6 +125,7 @@ Start at the narrow owner, then inspect its direct caller and focused evidence.
 | NES portable operation emission | `NesSdkOperationLowerer` | `NesSdk*LoweringTests`, `NesSdkLoweringArchitectureTests` |
 | Game Boy frame policy | `GameBoyFramePlan` | `GameBoyFramePlanTests` |
 | NES executable frame scheduling | `NesPhysicalFrameScheduler`, with `NesFramePlan` as private policy data | scheduler, frame-plan, OAM-publication, and CPU-work tests |
+| NES executable PRG placement and far control flow | `NesPrgLinker`, with sectioned emission from `PrgBuilder` | `NesPrgLinkerTests`, `NesRomCompilerTests.RomBanking.cs` |
 | Functional cartridge observation | `GameBoyFunctionalObservationEngine`, `NesFunctionalObservationEngine` | target observation tests and cross-target scenario acceptance |
 
 The ROM builders link and orchestrate output; they are not the owner of runtime

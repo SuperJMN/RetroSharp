@@ -2,7 +2,9 @@
 
 Status: **accepted for LW-0.3 on 2026-07-10; forced linker/runtime foundation
 implemented by LW-3.1, production placement/selection implemented by LW-3.2,
-and the production fixed-bank reader implemented by LW-3.3 on 2026-07-12.**
+and the production fixed-bank reader implemented by LW-3.3 on 2026-07-12. The
+later executable-banking extension is owned separately by
+[`NesCodeBankingV1.md`](NesCodeBankingV1.md).**
 
 This ADR selects the cartridge architecture for the NES Large Worlds
 linker/runtime. LW-3.1 implements its target-private forced linker and fixed
@@ -226,15 +228,18 @@ distinct nametables.
 
 ## Fixed execution and restoration invariant
 
-No callable code, return address target, jump table, NMI handler, IRQ handler,
-reset path, vector, DPCM byte, or bank-switch helper may live in R6 or R7. A
-banked window contains data only.
+Within the Large Worlds `nes-mmc3-tvrom-v1` profile, no callable code, return
+address target, jump table, NMI handler, IRQ handler, reset path, vector, DPCM
+byte, or bank-switch helper may live in R6 or R7. A banked window contains data
+only.
 
 Large Worlds v1 therefore implements **banked world/data placement with a fixed
-executable runtime**. It does not automatically partition or bank executable
-program code. Overflow of the fixed 16 KiB execution/DPCM/vector region remains
-a profile failure and requires a separate future code-banking architecture
-decision rather than silently placing callable code in R6 or R7.
+executable runtime**. It does not partition or bank executable program code.
+Overflow of the fixed 16 KiB execution/DPCM/vector region remains a failure for
+this profile rather than silently placing callable code in R6 or R7. The later
+[`NES Code Banking v1`](NesCodeBankingV1.md) contract adds a distinct selected
+profile for the narrower case where the movable gameplay stream causes that
+overflow; it does not change this profile's layout or restoration rules.
 
 The only runtime-changing window in v1 is R6. Its callable protocol is:
 
@@ -333,7 +338,7 @@ hardware-versus-simplicity tradeoff with a documented 64 KiB PRG, CHR-ROM, and
 secondary operational advantage. Its IRQ counter is neither a selection reason
 nor part of v1 behavior.
 
-## Mapper-0 default and selection rule
+## Mapper-0 default and data-only selection rule
 
 This ADR does not change existing output. `NesRomBuilder` continues to emit the
 current mapper 0 header and byte layout for existing programs.
@@ -350,7 +355,7 @@ The LW-3.2 final-link selector preserves these rules:
    this selected banked profile, but the selector does not force MMC3 if
    the completed production image genuinely needs no banking and fits mapper 0.
 3. Do not silently promote a program to MMC3 to hide an unrelated coordinate,
-   collision, CHR, palette, or fixed-bank overflow. Emit the responsible
+   collision, CHR, palette, or fixed-resident overflow. Emit the responsible
    diagnostic.
 4. An explicit analysis/test mode may force the MMC3 layout for header and bank
    boundary acceptance, but there is no public mapper argument in gameplay
@@ -366,6 +371,12 @@ bytes; with the LW-3.3 reader linked, the normalized full-`stage1` probe now
 measures 2,762 pack, 5,012 pinned, 4,128 boot, 4,327 fixed payload, and 3,056
 resident CHR bytes. This is a profile and capacity policy, not a false
 NROM-overflow claim.
+
+These remain the first two stages of current selection. If the fixed-execution
+MMC3 link proves that its flattened gameplay stream alone causes the fixed PRG
+overflow, the separate `NesCodeBankingV1.md` contract permits one further
+target-private attempt. CHR, DPCM, pinned-R7, `WorldPack`, fixed-resident, and
+combined R6-capacity failures still stop with their owning diagnostics.
 
 ## Behavioral emulator evidence
 

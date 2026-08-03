@@ -95,6 +95,8 @@ internal sealed class NesTestCpu
 
     public List<int> R6BankWrites { get; } = [];
 
+    public List<int> R7BankWrites { get; } = [];
+
     public List<NesRoutineResult> NestedReadResults { get; } = [];
 
     public List<NesPpuWrite> PpuWrites { get; } = [];
@@ -297,6 +299,7 @@ internal sealed class NesTestCpu
         switch (opcode)
         {
             case 0x05: Or(Read(Read(pc++))); cycles += 3; break;
+            case 0x08: Push((byte)(PackStatus() | 0x10)); cycles += 3; break;
             case 0x09: Or(Read(pc++)); cycles += 2; break;
             case 0x0A: carry = (a & 0x80) != 0; LoadA((byte)(a << 1)); cycles += 2; break;
             case 0x0D: Or(Read(ReadWordAndAdvance())); cycles += 4; break;
@@ -314,6 +317,7 @@ internal sealed class NesTestCpu
                     cycles += 4;
                     break;
                 }
+            case 0x28: UnpackStatus(Pop()); cycles += 4; break;
             case 0x30: Branch(negative); break;
             case 0x38: carry = true; cycles += 2; break;
             case 0x40:
@@ -633,6 +637,7 @@ internal sealed class NesTestCpu
         else if (selectedRegister == 7)
         {
             CurrentR7Bank = value;
+            R7BankWrites.Add(value);
         }
     }
 
