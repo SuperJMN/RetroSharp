@@ -21,6 +21,7 @@ internal sealed partial class NesSdkOperationLowerer
     private const string PublishVisibleCameraXSubroutineLabel = "nes_publish_visible_camera_x";
     private const string PublishVisibleCameraYSubroutineLabel = "nes_publish_visible_camera_y";
     private const string SharedDrawLogicalSpriteSubroutinePrefix = "nes_sdk_draw_logical_sprite_shared";
+    private const string SharedCameraAabbSubroutinePrefix = "nes_sdk_camera_aabb_shared";
 
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
@@ -30,6 +31,10 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly bool usePackedCamera;
     private readonly IReadOnlyDictionary<SharedDrawLogicalSpriteShape, string> sharedDrawLogicalSpriteSubroutines;
     private readonly HashSet<SharedDrawLogicalSpriteShape> referencedSharedDrawLogicalSpriteSubroutines = [];
+    private readonly bool shareRepeatedSdkOperations;
+    private readonly Dictionary<SharedCameraAabbShape, SharedCameraAabbBody> referencedSharedCameraAabbSubroutines = [];
+    private IReadOnlyDictionary<SharedCameraAabbShape, string>? sharedCameraAabbSubroutines;
+    private bool emittingSharedCameraAabbBody;
     private int nextHardwareSprite;
     private bool packedCollisionAtScratchSubroutineReferenced;
     private bool packedCollisionFlagsSubroutineReferenced;
@@ -84,6 +89,7 @@ internal sealed partial class NesSdkOperationLowerer
         this.frameScheduler = frameScheduler;
         useFourScreenNametables = frameScheduler.UseFourScreenNametables;
         usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
+        this.shareRepeatedSdkOperations = shareRepeatedSdkOperations;
         sharedDrawLogicalSpriteSubroutines = shareRepeatedSdkOperations
             ? CreateSharedDrawLogicalSpriteSubroutines()
             : new Dictionary<SharedDrawLogicalSpriteShape, string>();
@@ -238,5 +244,61 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         return value;
+    }
+
+        internal void EmitReferencedSubroutines()
+    {
+        EmitReferencedSharedDrawLogicalSpriteSubroutines();
+        EmitReferencedSharedCameraAabbSubroutines();
+
+        if (packedColumnRequestSubroutineReferenced)
+        {
+            EmitPackedColumnRequestSubroutine();
+        }
+
+        if (packedColumnPrefetchSubroutineReferenced)
+        {
+            EmitPackedColumnPrefetchSubroutine();
+        }
+
+        if (packedRowRequestSubroutineReferenced)
+        {
+            EmitPackedRowRequestSubroutine();
+        }
+
+        if (packedWideSourceColumnSubroutineReferenced)
+        {
+            EmitPackedWideSourceColumnSubroutine();
+        }
+
+        if (packedCollisionAtScratchSubroutineReferenced)
+        {
+            EmitPackedCollisionAtScratchSubroutine();
+        }
+
+        if (packedCollisionFlagsSubroutineReferenced)
+        {
+            EmitPackedCollisionFlagsSubroutine();
+        }
+
+        if (cameraIncrementTileSubroutineReferenced)
+        {
+            EmitIncrementCameraTileSubroutine();
+        }
+
+        if (cameraDecrementTileSubroutineReferenced)
+        {
+            EmitDecrementCameraTileSubroutine();
+        }
+
+        if (publishVisibleCameraXSubroutineReferenced)
+        {
+            EmitPublishVisibleCameraXSubroutine();
+        }
+
+        if (publishVisibleCameraYSubroutineReferenced)
+        {
+            EmitPublishVisibleCameraYSubroutine();
+        }
     }
 }

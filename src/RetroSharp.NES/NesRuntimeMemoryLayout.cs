@@ -52,6 +52,9 @@ internal static class NesRuntimeMemoryLayout
     internal static readonly NesRamRange WorldPackScalarState = new("WorldPack scalar state", 0x0326, 0x0048);
     internal static readonly NesRamRange PackedCameraAndWorldPackAuxiliaryState = new("packed camera and WorldPack auxiliary state", 0x036E, 0x0092);
     internal static readonly NesRamRange WorldPackStaging = new("WorldPack staging", 0x0400, WorldPack.MaximumStagingBytes);
+    // Anchored to the *maximum* staging length, not the current one: staging is
+    // dynamic-length and may legally grow to its maximum without moving anything else.
+    internal static readonly NesRamRange SharedSdkOperands = new("shared SDK operand storage", SharedSdk.Base, SharedSdk.Bytes);
     internal static readonly NesRamRange CpuRamMirror1 = new("CPU RAM mirror 1", 0x0800, 0x0800);
     internal static readonly NesRamRange CpuRamMirror2 = new("CPU RAM mirror 2", 0x1000, 0x0800);
     internal static readonly NesRamRange CpuRamMirror3 = new("CPU RAM mirror 3", 0x1800, 0x0800);
@@ -72,6 +75,7 @@ internal static class NesRuntimeMemoryLayout
         WorldPackScalarState,
         PackedCameraAndWorldPackAuxiliaryState,
         WorldPackStaging,
+        SharedSdkOperands,
         CpuRamMirror1,
         CpuRamMirror2,
         CpuRamMirror3,
@@ -220,12 +224,23 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort OamShadow = 0x0200;
     }
 
+    // Operands handed to a shared SDK helper across a JSR. They live in their own
+    // reserved range instead of aliasing zero-page scratch, so no value ever crosses a
+    // call in undeclared storage and Validate() polices the placement.
     internal static class SharedSdk
     {
-        internal const byte SpriteX = Runtime.CollisionColumnScratch;
-        internal const byte SpriteY = Runtime.CollisionRowScratch;
-        internal const byte SpriteFrame = Runtime.SpriteFrameScratch;
-        internal const byte SpriteFlipX = Runtime.ExpressionScratch;
+        // int, not ushort: DescribeNamedAddresses() projects every byte/ushort literal in
+        // this class as a named address, and Base is a placement anchor, not an operand.
+        internal const int Base = 0x0400 + WorldPack.MaximumStagingBytes;
+        internal const int Bytes = 7;
+
+        internal const ushort SpriteX = Base;
+        internal const ushort SpriteY = Base + 1;
+        internal const ushort SpriteFrame = Base + 2;
+        internal const ushort SpriteFlipX = Base + 3;
+        internal const ushort AabbScreenX = Base + 4;
+        internal const ushort AabbWorldYLow = Base + 5;
+        internal const ushort AabbWorldYHigh = Base + 6;
     }
 
     internal static class PackedCamera
@@ -508,6 +523,7 @@ internal static class NesRuntimeMemoryLayout
             ("input", typeof(Input)),
             ("packed camera", typeof(PackedCamera)),
             ("runtime", typeof(Runtime)),
+            ("shared SDK", typeof(SharedSdk)),
             ("sprite", typeof(Sprite)),
             ("WorldPack", typeof(WorldPack)),
         };

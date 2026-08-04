@@ -218,19 +218,19 @@ internal sealed partial class NesSdkOperationLowerer
         try
         {
             EmitSdkByteExpressionToA(operation.X);
-            builder.StoreAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
             EmitSdkByteExpressionToA(operation.Y);
-            builder.StoreAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
             if (shape.Frame.Kind is SharedByteOperandKind.Runtime)
             {
                 EmitSdkByteExpressionToA(operation.Frame);
-                builder.StoreAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
             }
 
             if (shape.FlipX.Kind is SharedByteOperandKind.Runtime && operation.FlipX is { } flipX)
             {
                 EmitSdkByteExpressionToA(flipX);
-                builder.StoreAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
             }
         }
         finally
@@ -283,14 +283,14 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitSharedSpriteDrawY(int offset, int oamOffset)
     {
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
         EmitAddSignedImmediate(offset - 1 - BottomOverscanInset());
         EmitSharedStoreOamByte(oamOffset);
     }
 
     private void EmitSharedSpriteTileBase(NesCompiledSpriteAsset asset)
     {
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
         EmitMultiplyAByConstant(asset.TilesPerFrame);
         EmitAddSignedImmediate(asset.FirstTile);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch);
@@ -315,7 +315,7 @@ internal sealed partial class NesSdkOperationLowerer
             return;
         }
 
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
         EmitMultiplyAByConstant(asset.TilesPerFrame);
         EmitAddSignedImmediate(asset.FirstTile + pieceTileOffset);
     }
@@ -344,7 +344,7 @@ internal sealed partial class NesSdkOperationLowerer
 
         var normalLabel = builder.CreateLabel("shared_sprite_x_normal");
         var endLabel = builder.CreateLabel("shared_sprite_x_end");
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
         builder.CompareImmediate(0);
         builder.BranchRelative(0xF0, normalLabel);
         EmitSharedSpriteDrawXAtOffset(flippedOffset, oamOffset);
@@ -356,7 +356,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitSharedSpriteDrawXAtOffset(int offset, int oamOffset)
     {
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
         EmitAddSignedImmediate(offset);
         EmitSharedStoreOamByte(oamOffset);
     }
@@ -380,7 +380,7 @@ internal sealed partial class NesSdkOperationLowerer
 
         var noFlipLabel = builder.CreateLabel("shared_sprite_flags_no_flip");
         var storeLabel = builder.CreateLabel("shared_sprite_flags_store");
-        builder.LoadAZeroPage(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
         builder.CompareImmediate(0);
         builder.BranchRelative(0xF0, noFlipLabel);
         builder.LoadAImmediate(paletteSlot | 0x40);

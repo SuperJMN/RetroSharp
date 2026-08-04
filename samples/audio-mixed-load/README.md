@@ -11,13 +11,6 @@ The source uses only `RetroSharp.Portable2D`. Target-specific VGM/VGZ, sprite, a
 banking, mapper, APU and DPCM behavior is selected by target asset variants and target
 lowering; no hardware-specific gameplay API appears in the sample.
 
-On NES, the two player-metasprite draw sites also form the stable shared-SDK-operation
-canary: both keep the same compile-time asset/palette shape while passing runtime frame
-and flip operands. The backend may therefore emit one fixed-resident draw body and call
-it from both sites. Tests gate relative PRG savings, one logical tick per physical frame,
-and the existing functional behavior; exact bytes, addresses, hashes, and cycles remain
-diagnostic.
-
 Build both tracked cartridges from the repository root:
 
 ```bash

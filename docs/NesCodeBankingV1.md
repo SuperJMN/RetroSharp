@@ -131,12 +131,21 @@ owns build, liveness, progress, banking restoration, and safe PPU/OAM evidence;
 the editable runner and user playback remain the authority for perceived
 smoothness.
 
-[`samples/audio-mixed-load`](../samples/audio-mixed-load) is the stable
-shared-operation canary. Its two runtime-shaped player metasprite draws must
-compile to one fixed helper body and two calls, use less fixed PRG than the
+[`samples/platformer-landing`](../samples/platformer-landing) is the stable
+shared-operation canary. Its repeated collision probes must compile to one
+fixed helper body per shape with one call per site, use less fixed PRG than the
 same unrolled control, remain at one logical tick per physical frame in steady
-state, and retain its existing cross-target audio, camera, background, OAM,
-input, reset, and video-write acceptance.
+state with no worse peak active tick, and retain its existing cross-target
+camera, background, OAM, input, reset, and video-write acceptance. No sample
+source is edited to manufacture the repetition.
+
+The shared *sprite* helper is declared unit-test-only. Sharing requires two
+draw sites with the same compile-time shape, and no current sample has that
+shape twice, so `NesSharedSdkOperationSubroutineTests` covers the mechanism
+with synthetic programs only. That status is deliberate: the machinery is
+generic and correct, and widening the shape key so a constant operand can share
+a body with a runtime one is what activates it on real samples. It is recorded
+here rather than left silently dead.
 
 Focused evidence is split by owner:
 
