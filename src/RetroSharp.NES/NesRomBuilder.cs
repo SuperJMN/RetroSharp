@@ -646,9 +646,17 @@ internal static class NesRomBuilder
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal) ??
             new Dictionary<string, NesPrgSymbol>(StringComparer.Ordinal),
             runtimeCompiler.UserVariables,
+            DescribeSharedSdkSubroutines(builder),
             frameScheduler.SelectedProfile,
             frameScheduler.CreateCpuWorkReport(program.SdkOperationStream));
     }
+
+    private static IReadOnlyList<NesSharedSdkSubroutine> DescribeSharedSdkSubroutines(PrgBuilder builder) =>
+        builder.SubroutineCallSites
+            .Where(pair => pair.Key.StartsWith(NesSdkOperationLowerer.SharedSubroutineLabelPrefix, StringComparison.Ordinal))
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => new NesSharedSdkSubroutine(pair.Key, builder.AddressOfLabel(pair.Key), pair.Value))
+            .ToArray();
 
     private static void EmitGeneratedRomTables(PrgBuilder builder, NesVideoProgram program)
     {
@@ -872,6 +880,7 @@ internal static class NesRomBuilder
             prgBuild.ProgramSymbols,
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
+            prgBuild.SharedSdkSubroutines,
             prgBuild.FrameCpuWork);
     }
 

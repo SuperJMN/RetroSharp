@@ -94,6 +94,49 @@ public sealed class NesRuntimeAbiProjectionTests
         Assert.Equal(0x03AF, addresses["packed camera.Slot1PayloadCursor"]);
     }
 
+    // The projection comparisons above are dynamic: they re-derive the expectation from
+    // NesRuntimeMemoryLayout, so adding a reserved range or a named address passes them
+    // silently. Shared SDK operands cross a JSR boundary and are therefore part of the
+    // observable runtime ABI, so they are asserted explicitly here as well.
+    [Fact]
+    public void Projection_publishes_the_shared_sdk_operand_range_and_its_named_operands()
+    {
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport("void Main() { }");
+
+        using var document = JsonDocument.Parse(SerializeProjection(result));
+        var root = document.RootElement;
+
+        var range = Assert.Single(
+            root.GetProperty("ranges").EnumerateArray(),
+            item => item.GetProperty("name").GetString() == "shared SDK operand storage");
+        Assert.Equal(NesRuntimeMemoryLayout.SharedSdk.Base, range.GetProperty("start").GetInt32());
+        Assert.Equal(NesRuntimeMemoryLayout.SharedSdk.Bytes, range.GetProperty("length").GetInt32());
+
+        var operands = root.GetProperty("addresses").EnumerateArray()
+            .Where(item => item.GetProperty("domain").GetString() == "shared SDK")
+            .ToDictionary(
+                item => item.GetProperty("name").GetString()!,
+                item => item.GetProperty("address").GetInt32(),
+                StringComparer.Ordinal);
+
+        Assert.Equal(
+            new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["SpriteX"] = NesRuntimeMemoryLayout.SharedSdk.SpriteX,
+                ["SpriteY"] = NesRuntimeMemoryLayout.SharedSdk.SpriteY,
+                ["SpriteFrame"] = NesRuntimeMemoryLayout.SharedSdk.SpriteFrame,
+                ["SpriteFlipX"] = NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX,
+                ["AabbScreenX"] = NesRuntimeMemoryLayout.SharedSdk.AabbScreenX,
+                ["AabbWorldYLow"] = NesRuntimeMemoryLayout.SharedSdk.AabbWorldYLow,
+                ["AabbWorldYHigh"] = NesRuntimeMemoryLayout.SharedSdk.AabbWorldYHigh,
+            },
+            operands);
+
+        // The operands must not reappear as zero-page scratch aliases: the whole point of
+        // the range is that a value crossing a JSR has declared storage of its own.
+        Assert.All(operands.Values, address => Assert.True(address >= 0x0100, $"${address:X4} must not be zero page."));
+    }
+
     [Fact]
     public void Projection_binds_compiled_user_variables_to_the_exact_rom()
     {

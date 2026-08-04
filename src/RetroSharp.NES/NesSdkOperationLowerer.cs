@@ -20,8 +20,11 @@ internal sealed partial class NesSdkOperationLowerer
     private const string CameraDecrementTileSubroutineLabel = "nes_camera_decrement_tile";
     private const string PublishVisibleCameraXSubroutineLabel = "nes_publish_visible_camera_x";
     private const string PublishVisibleCameraYSubroutineLabel = "nes_publish_visible_camera_y";
-    private const string SharedDrawLogicalSpriteSubroutinePrefix = "nes_sdk_draw_logical_sprite_shared";
-    private const string SharedCameraAabbSubroutinePrefix = "nes_sdk_camera_aabb_shared";
+    // Every shared SDK operation body carries this prefix so the build report can describe
+    // deduplication without knowing which operations participate.
+    internal const string SharedSubroutineLabelPrefix = "nes_sdk_shared_";
+    private const string SharedDrawLogicalSpriteSubroutinePrefix = SharedSubroutineLabelPrefix + "draw_logical_sprite";
+    private const string SharedCameraAabbSubroutinePrefix = SharedSubroutineLabelPrefix + "camera_aabb";
 
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
