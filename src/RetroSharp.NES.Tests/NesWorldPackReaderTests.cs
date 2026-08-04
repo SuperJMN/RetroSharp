@@ -429,6 +429,89 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Code_banked_raw_collision_reuses_alternating_cells_without_switching_r6_again()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(
+            "void Main() { while (true) { } }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var program = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal));
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(checked((byte)program.PhysicalBank));
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, checked((byte)program.PhysicalBank));
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+
+        cpu.R6BankWrites.Clear();
+        cpu.SetWorldPackCoordinates(9, 38);
+        var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        var writesAfterFirst = cpu.R6BankWrites.Count;
+        cpu.SetWorldPackCoordinates(10, 38);
+        var second = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        var writesAfterSecond = cpu.R6BankWrites.Count;
+        cpu.SetWorldPackCoordinates(9, 38);
+        var reused = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+
+        output.WriteLine(
+            $"banked raw collision cache: first={first.Cycles}/{writesAfterFirst} writes, "
+            + $"second={second.Cycles}/{writesAfterSecond - writesAfterFirst} writes, "
+            + $"reused={reused.Cycles}/{cpu.R6BankWrites.Count - writesAfterSecond} writes");
+        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, second.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, reused.A);
+        Assert.Equal(2, writesAfterFirst);
+        Assert.Equal(4, writesAfterSecond);
+        Assert.Equal(writesAfterSecond, cpu.R6BankWrites.Count);
+        Assert.True(
+            reused.Cycles < first.Cycles,
+            $"Reusing an alternating raw collision cell should avoid the R6 round trip; first={first.Cycles}, reused={reused.Cycles}.");
+        Assert.Equal(program.PhysicalBank, cpu.CurrentR6Bank);
+        Assert.Equal(program.PhysicalBank, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
+    }
+
+    [Fact]
+    public void Code_banked_raw_visual_reads_reuse_the_same_metatile_cell_without_switching_r6_again()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(
+            "void Main() { while (true) { } }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var program = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal));
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(checked((byte)program.PhysicalBank));
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, checked((byte)program.PhysicalBank));
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+
+        cpu.R6BankWrites.Clear();
+        cpu.SetWorldPackCoordinates(9, 20);
+        var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+        var writesAfterFirst = cpu.R6BankWrites.Count;
+        cpu.SetWorldPackCoordinates(9, 21);
+        var second = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+
+        output.WriteLine(
+            $"banked raw visual cell: first={first.Cycles}/{writesAfterFirst} writes, "
+            + $"second={second.Cycles}/{cpu.R6BankWrites.Count - writesAfterFirst} writes");
+        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, second.A);
+        Assert.Equal(2, writesAfterFirst);
+        Assert.Equal(writesAfterFirst, cpu.R6BankWrites.Count);
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+        Assert.True(
+            second.Cycles < first.Cycles,
+            $"A repeated raw visual metatile cell should avoid another R6 round trip; first={first.Cycles}, second={second.Cycles}.");
+        Assert.Equal(program.PhysicalBank, cpu.CurrentR6Bank);
+        Assert.Equal(program.PhysicalBank, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
+    }
+
+    [Fact]
     public void Complete_stage1_raw_visual_reads_fit_a_single_frame_edge_prepare_budget_without_decode()
     {
         var fixture = NesTiledWorldImporter.CompileWorldPack(

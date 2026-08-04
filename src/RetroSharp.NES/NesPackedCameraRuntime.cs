@@ -92,9 +92,10 @@ internal static class NesPackedCameraRuntimeEmitter
         NesWorldPackRuntimePlan plan,
         int rowTileWritesPerPhase,
         int rowAttributePhase,
-        NesPackedColumnCommit columnCommit)
+        NesPackedColumnCommit columnCommit,
+        bool batchBankedWorldPackReads)
     {
-        EmitPrepareEdge(builder, plan, columnCommit);
+        EmitPrepareEdge(builder, plan, columnCommit, batchBankedWorldPackReads);
         EmitCommitEdge(builder, plan, rowTileWritesPerPhase, rowAttributePhase, columnCommit);
         EmitReleaseReversedEdges(builder);
     }
@@ -858,13 +859,18 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpIf(0xD0, invalid);
     }
 
-    private static void EmitPrepareEdge(PrgBuilder builder, NesWorldPackRuntimePlan plan, NesPackedColumnCommit columnCommit)
+    private static void EmitPrepareEdge(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        NesPackedColumnCommit columnCommit,
+        bool batchBankedWorldPackReads)
     {
         var selectSlot0 = builder.CreateLabel("nes_packed_edge_select_slot_0");
         var selectSlot1 = builder.CreateLabel("nes_packed_edge_select_slot_1");
         var resumeSlot0 = builder.CreateLabel("nes_packed_edge_resume_slot_0");
         var resumeSlot1 = builder.CreateLabel("nes_packed_edge_resume_slot_1");
         var resume = builder.CreateLabel("nes_packed_edge_resume");
+        var beginLookups = builder.CreateLabel("nes_packed_edge_begin_lookups");
         var findAvailable = builder.CreateLabel("nes_packed_edge_find_available");
         var prepare = builder.CreateLabel("nes_packed_edge_prepare");
         var rowLoop = builder.CreateLabel("nes_packed_edge_prepare_row_loop");
@@ -942,7 +948,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.IncrementY();
         builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
-        builder.JumpAbsolute(column);
+        builder.JumpAbsolute(beginLookups);
 
         builder.Label(findAvailable);
         EmitJumpIfSlotAvailable(builder, NesRuntimeMemoryLayout.PackedCamera.Slot0, selectSlot0);
@@ -967,6 +973,10 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
+        builder.Label(beginLookups);
+        NesWorldPackRuntimeEmitter.EmitBeginBankedRawReadBatch(
+            builder,
+            batchBankedWorldPackReads);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(NesPackedCameraRuntime.Column);
         builder.JumpIf(0xF0, column);
@@ -1020,17 +1030,26 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(columnSlicePending);
         EmitStoreSelectedPrepareProgress(builder);
         builder.Label(preparePending);
+        NesWorldPackRuntimeEmitter.EmitEndBankedRawReadBatch(
+            builder,
+            batchBankedWorldPackReads);
         builder.LoadAImmediate(NesPackedCameraRuntime.PreparePending);
         builder.Return();
 
         builder.Label(failed);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        NesWorldPackRuntimeEmitter.EmitEndBankedRawReadBatch(
+            builder,
+            batchBankedWorldPackReads);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Released);
         EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.ReleaseCount);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
         builder.Return();
 
         builder.Label(success);
+        NesWorldPackRuntimeEmitter.EmitEndBankedRawReadBatch(
+            builder,
+            batchBankedWorldPackReads);
         EmitCopyFrameToSelectedMetadata(builder, resident: true);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Resident);
         EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.ResidentCount);

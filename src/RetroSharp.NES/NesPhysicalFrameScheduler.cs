@@ -327,7 +327,9 @@ internal sealed class NesPhysicalFrameScheduler
             runtimePlan,
             plan.CameraRowTileWritesPerFrame,
             CameraRowAttributePhase,
-            packedColumnCommit ?? new NesPackedColumnCommit(null, NesTarget.Capabilities.ScreenTiles.Height));
+            packedColumnCommit ?? new NesPackedColumnCommit(null, NesTarget.Capabilities.ScreenTiles.Height),
+            plan.CartridgeProfile == NesRomBuilder.CodeBankedProfileName
+            && NesWorldPackRuntimeEmitter.SupportsBatchedRawVisualReads(runtimePlan));
     }
 
     private int CameraRowAttributePhase =>
