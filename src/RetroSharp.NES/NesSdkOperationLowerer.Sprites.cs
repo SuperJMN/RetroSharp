@@ -150,6 +150,19 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         nextHardwareSprite += asset.Pieces.Count;
+        if (operation.Frame is SdkByteExpression.Constant constantFrame &&
+            (constantFrame.Value < 0 || constantFrame.Value >= asset.FrameCount))
+        {
+            throw new InvalidOperationException($"sprite_draw argument 4 must be between 0 and {asset.FrameCount - 1}.");
+        }
+
+        var sharedShape = SharedDrawLogicalSpriteShapeFor(operation);
+        if (sharedDrawLogicalSpriteSubroutines.TryGetValue(sharedShape, out var sharedSubroutine))
+        {
+            EmitSharedDrawLogicalSpriteCall(operation, firstHardwareSprite, sharedShape, sharedSubroutine);
+            return;
+        }
+
         var cursor = SharedRuntimeIndexedFieldCursor(operation.X, operation.Y, operation.Frame, operation.FlipX);
         if (cursor is { } sharedCursor)
         {
@@ -188,6 +201,198 @@ internal sealed partial class NesSdkOperationLowerer
         // Shadow OAM is published once by the next frame boundary. Keeping draw calls as
         // RAM-only updates preserves complete logical ordering without visible-scanline DMA.
     }
+
+    private void EmitSharedDrawLogicalSpriteCall(
+        Sdk2DOperation.DrawLogicalSprite operation,
+        int firstHardwareSprite,
+        SharedDrawLogicalSpriteShape shape,
+        string subroutine)
+    {
+        var cursor = SharedRuntimeIndexedFieldCursor(operation.X, operation.Y, operation.Frame, operation.FlipX);
+        if (cursor is { } sharedCursor)
+        {
+            EmitRuntimeMemberIndexToX(sharedCursor.BaseName, sharedCursor.Index);
+            activeRuntimeIndexedFieldCursor = sharedCursor;
+        }
+
+        try
+        {
+            EmitSdkByteExpressionToA(operation.X);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
+            EmitSdkByteExpressionToA(operation.Y);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
+            if (shape.Frame.Kind is SharedByteOperandKind.Runtime)
+            {
+                EmitSdkByteExpressionToA(operation.Frame);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+            }
+
+            if (shape.FlipX.Kind is SharedByteOperandKind.Runtime && operation.FlipX is { } flipX)
+            {
+                EmitSdkByteExpressionToA(flipX);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+            }
+        }
+        finally
+        {
+            activeRuntimeIndexedFieldCursor = null;
+        }
+
+        builder.LoadXImmediate(firstHardwareSprite * 4);
+        builder.CallSubroutine(subroutine);
+        referencedSharedDrawLogicalSpriteSubroutines.Add(shape);
+    }
+
+    private void EmitReferencedSharedDrawLogicalSpriteSubroutines()
+    {
+        foreach (var pair in sharedDrawLogicalSpriteSubroutines.OrderBy(pair => pair.Value, StringComparer.Ordinal))
+        {
+            if (referencedSharedDrawLogicalSpriteSubroutines.Contains(pair.Key))
+            {
+                EmitSharedDrawLogicalSpriteSubroutine(pair.Key, pair.Value);
+            }
+        }
+    }
+
+    private void EmitSharedDrawLogicalSpriteSubroutine(SharedDrawLogicalSpriteShape shape, string subroutine)
+    {
+        var asset = program.SpriteAssets[shape.SpriteId];
+        var cacheDynamicTileBase = shape.Frame.Kind is SharedByteOperandKind.Runtime && asset.Pieces.Count > 1;
+        builder.Label(subroutine);
+        if (cacheDynamicTileBase)
+        {
+            EmitSharedSpriteTileBase(asset);
+        }
+
+        for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
+        {
+            var piece = asset.Pieces[pieceIndex];
+            var oamOffset = pieceIndex * 4;
+            EmitSharedSpriteDrawY(piece.YOffset, oamOffset);
+            EmitSharedSpriteTile(shape.Frame, asset, piece.TileOffset, cacheDynamicTileBase);
+            EmitSharedStoreOamByte(oamOffset + 1);
+            EmitSharedSpriteDrawAttributes(
+                shape.FlipX,
+                shape.PhysicalPaletteSlot + piece.PaletteSlotOffset,
+                oamOffset + 2);
+            EmitSharedSpriteDrawX(shape.FlipX, asset, piece, oamOffset + 3);
+        }
+
+        builder.Return();
+    }
+
+    private void EmitSharedSpriteDrawY(int offset, int oamOffset)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteY);
+        EmitAddSignedImmediate(offset - 1 - BottomOverscanInset());
+        EmitSharedStoreOamByte(oamOffset);
+    }
+
+    private void EmitSharedSpriteTileBase(NesCompiledSpriteAsset asset)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+        EmitMultiplyAByConstant(asset.TilesPerFrame);
+        EmitAddSignedImmediate(asset.FirstTile);
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch);
+    }
+
+    private void EmitSharedSpriteTile(
+        SharedByteOperandShape frame,
+        NesCompiledSpriteAsset asset,
+        int pieceTileOffset,
+        bool cachedDynamicTileBase)
+    {
+        if (frame.Kind is SharedByteOperandKind.Constant)
+        {
+            builder.LoadAImmediate(asset.FirstTile + frame.Constant * asset.TilesPerFrame + pieceTileOffset);
+            return;
+        }
+
+        if (cachedDynamicTileBase)
+        {
+            builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch);
+            EmitAddSignedImmediate(pieceTileOffset);
+            return;
+        }
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+        EmitMultiplyAByConstant(asset.TilesPerFrame);
+        EmitAddSignedImmediate(asset.FirstTile + pieceTileOffset);
+    }
+
+    private void EmitSharedSpriteDrawX(
+        SharedByteOperandShape flipX,
+        NesCompiledSpriteAsset asset,
+        NesMetaspritePiece piece,
+        int oamOffset)
+    {
+        var normalOffset = piece.XOffset;
+        var flippedOffset = asset.LogicalWidth - 8 - piece.XOffset;
+        if (flipX.Kind is SharedByteOperandKind.None ||
+            flipX is { Kind: SharedByteOperandKind.Constant, Constant: 0 } ||
+            normalOffset == flippedOffset)
+        {
+            EmitSharedSpriteDrawXAtOffset(normalOffset, oamOffset);
+            return;
+        }
+
+        if (flipX.Kind is SharedByteOperandKind.Constant)
+        {
+            EmitSharedSpriteDrawXAtOffset(flippedOffset, oamOffset);
+            return;
+        }
+
+        var normalLabel = builder.CreateLabel("shared_sprite_x_normal");
+        var endLabel = builder.CreateLabel("shared_sprite_x_end");
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, normalLabel);
+        EmitSharedSpriteDrawXAtOffset(flippedOffset, oamOffset);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(normalLabel);
+        EmitSharedSpriteDrawXAtOffset(normalOffset, oamOffset);
+        builder.Label(endLabel);
+    }
+
+    private void EmitSharedSpriteDrawXAtOffset(int offset, int oamOffset)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteX);
+        EmitAddSignedImmediate(offset);
+        EmitSharedStoreOamByte(oamOffset);
+    }
+
+    private void EmitSharedSpriteDrawAttributes(SharedByteOperandShape flipX, int paletteSlot, int oamOffset)
+    {
+        if (flipX.Kind is SharedByteOperandKind.None ||
+            flipX is { Kind: SharedByteOperandKind.Constant, Constant: 0 })
+        {
+            builder.LoadAImmediate(paletteSlot);
+            EmitSharedStoreOamByte(oamOffset);
+            return;
+        }
+
+        if (flipX.Kind is SharedByteOperandKind.Constant)
+        {
+            builder.LoadAImmediate(paletteSlot | 0x40);
+            EmitSharedStoreOamByte(oamOffset);
+            return;
+        }
+
+        var noFlipLabel = builder.CreateLabel("shared_sprite_flags_no_flip");
+        var storeLabel = builder.CreateLabel("shared_sprite_flags_store");
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, noFlipLabel);
+        builder.LoadAImmediate(paletteSlot | 0x40);
+        builder.JumpAbsolute(storeLabel);
+        builder.Label(noFlipLabel);
+        builder.LoadAImmediate(paletteSlot);
+        builder.Label(storeLabel);
+        EmitSharedStoreOamByte(oamOffset);
+    }
+
+    private void EmitSharedStoreOamByte(int oamOffset) =>
+        builder.StoreAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + oamOffset)));
 
     private static RuntimeIndexedFieldCursor? SharedRuntimeIndexedFieldCursor(params SdkByteExpression?[] expressions)
     {

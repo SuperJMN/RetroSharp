@@ -111,6 +111,8 @@ internal sealed class NesTestCpu
 
     public int NmiCount { get; private set; }
 
+    public List<long> NmiCompletionCycles { get; } = [];
+
     public int PhysicalFrames { get; private set; }
 
     public int ResetCount { get; private set; }
@@ -759,6 +761,7 @@ internal sealed class NesTestCpu
         {
             throw new InvalidOperationException("NES test NMI handler did not return.");
         }
+        NmiCompletionCycles.Add(cycles);
         NmiCount++;
     }
 

@@ -45,10 +45,13 @@ order. A build with no pack may use all four R6 banks; every pack segment
 reduces that program pool by one whole bank.
 
 The movable program is the flattened `Main` stream, including inline-expanded
-user, receiver, and value helpers and SDK operations lowered at their source
-sites, followed by its terminal loop. There is no new function ABI. Startup,
-runtime initialization, target subroutines, `WorldPack` and MMC3 helpers,
-generated ROM tables, DPCM, NMI/IRQ/reset code, and vectors remain fixed.
+user, receiver, and value helpers, followed by its terminal loop. A repeated
+multi-piece `DrawLogicalSprite` shape stores its runtime operands in
+`NesRuntimeMemoryLayout` scratch and calls one fixed-resident target helper;
+single-use and one-piece shapes remain inline when a call would not save code.
+This is target-owned SDK lowering, not a user-function ABI. Startup, runtime
+initialization, target subroutines, `WorldPack` and MMC3 helpers, generated ROM
+tables, DPCM, NMI/IRQ/reset code, and vectors remain fixed.
 
 ## Linker module
 
@@ -89,6 +92,12 @@ program-label relocation addends. User helpers remain inline, while calls from
 banked gameplay to fixed target subroutines remain ordinary `JSR`/`RTS` calls.
 NMI and IRQ code stay fixed and bank-neutral.
 
+Shared SDK helpers use the existing fixed residence and `AbsoluteCall`
+relocation. Their shape key retains compile-time asset, palette, transform,
+frame, and flip specialisation; per-call coordinates and runtime frame/flip
+values use the named scratch aliases. No new relocation, veneer, stack, or
+public ABI is introduced.
+
 ## Capacity and diagnostics
 
 Each program bank is 8 KiB. Every non-final bank reserves a three-byte bank-edge
@@ -121,6 +130,22 @@ retained sprites, actor-style work, input, and audio. Its automated observer
 owns build, liveness, progress, banking restoration, and safe PPU/OAM evidence;
 the editable runner and user playback remain the authority for perceived
 smoothness.
+
+[`samples/platformer-landing`](../samples/platformer-landing) is the stable
+shared-operation canary. Its repeated collision probes must compile to one
+fixed helper body per shape with one call per site, use less fixed PRG than the
+same unrolled control, remain at one logical tick per physical frame in steady
+state with no worse peak active tick, and retain its existing cross-target
+camera, background, OAM, input, reset, and video-write acceptance. No sample
+source is edited to manufacture the repetition.
+
+The shared *sprite* helper is declared unit-test-only. Sharing requires two
+draw sites with the same compile-time shape, and no current sample has that
+shape twice, so `NesSharedSdkOperationSubroutineTests` covers the mechanism
+with synthetic programs only. That status is deliberate: the machinery is
+generic and correct, and widening the shape key so a constant operand can share
+a body with a runtime one is what activates it on real samples. It is recorded
+here rather than left silently dead.
 
 Focused evidence is split by owner:
 

@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "c74eac0d4528d4d58813596c6cc181a9cb93f99fcba03d0fe74f23ed636ce874",
-  "romSha256": "1f21c204c72ec77f084fd4423dbfc2c2e29f301a7ad220a0c100658772e1f97d",
+  "abiFingerprint": "bce37d48d0e4dd9b7069600ebc6f54cf815575d2046ff600ed50ec028288cd54",
+  "romSha256": "e33f3cb4841da16221bf770d9d38ce11c5df22ea35d13cc0f5de5d464ea65b2c",
   "ranges": [
     {
       "id": "UserLocals",
@@ -88,6 +88,12 @@
       "name": "WorldPack staging",
       "start": 1024,
       "length": 614
+    },
+    {
+      "id": "SharedSdkOperands",
+      "name": "shared SDK operand storage",
+      "start": 1638,
+      "length": 7
     },
     {
       "id": "CpuRamMirror1",
@@ -1494,6 +1500,48 @@
       "name": "StagingStart",
       "address": 1024,
       "owner": "WorldPackStaging"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "SpriteX",
+      "address": 1638,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "SpriteY",
+      "address": 1639,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "SpriteFrame",
+      "address": 1640,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "SpriteFlipX",
+      "address": 1641,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "AabbScreenX",
+      "address": 1642,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "AabbWorldYLow",
+      "address": 1643,
+      "owner": "SharedSdkOperands"
+    },
+    {
+      "domain": "shared SDK",
+      "name": "AabbWorldYHigh",
+      "address": 1644,
+      "owner": "SharedSdkOperands"
     }
   ],
   "rangeAliases": [

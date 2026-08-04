@@ -75,6 +75,7 @@ internal sealed class PrgBuilder
     private readonly Dictionary<NesPrgResidence, RecordedSection> recordedSections = [];
     private readonly Dictionary<string, NesPrgLabelDefinition> recordedLabels = [];
     private readonly List<NesPrgRelocation> recordedRelocations = [];
+    private readonly Dictionary<string, int> subroutineCallSites = new(StringComparer.Ordinal);
     private NesPrgResidence currentResidence = NesPrgResidence.Fixed;
     private int nextLabelId;
 
@@ -379,10 +380,16 @@ internal sealed class PrgBuilder
         AddAbsoluteRelocation(label, 0, NesPrgRelocationKind.AbsoluteJump);
     }
 
+    // Call sites are counted for every residence so that the build report can describe
+    // shared SDK bodies identically on mapper 0 (single fixed section) and on MMC3, where
+    // the sectioned relocation table would otherwise be the only witness.
+    public IReadOnlyDictionary<string, int> SubroutineCallSites => subroutineCallSites;
+
     public void CallSubroutine(string label)
     {
         Emit(0x20, 0x00, 0x00);
         AddAbsoluteRelocation(label, 0, NesPrgRelocationKind.AbsoluteCall);
+        subroutineCallSites[label] = subroutineCallSites.GetValueOrDefault(label) + 1;
     }
 
     public void BranchRelative(byte opcode, string label)

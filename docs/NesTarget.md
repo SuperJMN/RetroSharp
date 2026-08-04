@@ -360,6 +360,16 @@ The tracked runner pair is regenerated together by
 `tools/gameboy/generate_sample_roms.py`; its sidecar is
 `samples/runner/bin/runner.nes.runtime-abi.json`.
 
+The projection includes the `shared SDK operand storage` range and the
+`shared SDK` address domain. When the lowerer emits one shared body for a
+repeated SDK operation, the operands that cross the `JSR` live in that reserved
+range rather than in zero-page scratch, so no value crosses a call boundary in
+undeclared storage. The range is anchored at
+`0x0400 + WorldPack.MaximumStagingBytes` — the *maximum* staging length, not the
+current one, because staging is dynamic-length and may legally grow. Adding the
+range changes sidecar *content*, so the contract stays `retrosharp.nes.runtime-abi`
+v1 and the tracked sidecars are regenerated deliberately.
+
 NES builds can also add `--symbols-out <path>` to emit a deterministic UTF-8
 symbol file accepted directly by the NES debug MCP.
 `NesSymbolFileProjection` derives range IDs and named addresses from

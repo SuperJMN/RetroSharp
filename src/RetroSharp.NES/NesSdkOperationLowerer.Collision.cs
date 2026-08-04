@@ -7,34 +7,43 @@ internal sealed partial class NesSdkOperationLowerer
 {
     internal void EmitCameraAabbTiles(Sdk2DOperation.CameraAabbTiles operation)
     {
-        if (operation.WorldId != "default")
-        {
-            throw new InvalidOperationException($"Unsupported NES world id '{operation.WorldId}'.");
-        }
-
-        var config = EnsureCameraConfigured("camera_aabb_tiles");
-        var worldMap = WorldMapForFlagQuery("camera_aabb_tiles");
-        var width = CameraAabbWidth(operation.Width);
-        var flags = (int)operation.Flags;
-        if (width == 0 || operation.Height == 0 || flags == 0)
+        if (!TryResolveCameraAabbProbe(
+                SharedCameraAabbKind.Tiles,
+                operation.WorldId,
+                operation.ScreenX,
+                operation.WorldY,
+                operation.WorldYOffset,
+                operation.Width,
+                operation.Height,
+                operation.Flags,
+                "camera_aabb_tiles",
+                out var probe))
         {
             builder.LoadAImmediate(0);
             return;
         }
 
-        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_tiles");
+        if (TryEmitSharedCameraAabbCall(probe))
+        {
+            return;
+        }
 
+        EmitCameraAabbTilesBody(probe);
+    }
+
+    private void EmitCameraAabbTilesBody(CameraAabbProbe probe)
+    {
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
-        var constantWorldY = TrySdkConst(operation.WorldY, out _);
-        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        var constantWorldY = TrySdkConst(probe.WorldY, out _);
+        foreach (var yOffset in AabbSampleOffsets(probe.Height))
         {
-            var hitTopOffset = operation.WorldYOffset + yOffset;
+            var hitTopOffset = probe.WorldYOffset + yOffset;
             var nextRowLabel = builder.CreateLabel("camera_aabb_tiles_next_row");
             if (!constantWorldY)
             {
-                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
-                builder.CompareImmediate(worldMap.Height);
+                EmitWorldPixelToTileCoordinate(probe.WorldY, hitTopOffset);
+                builder.CompareImmediate(probe.WorldMap.Height);
                 var inBoundsLabel = builder.CreateLabel("camera_aabb_tiles_row_in_bounds");
                 builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
                 builder.JumpAbsolute(nextRowLabel);
@@ -42,19 +51,19 @@ internal sealed partial class NesSdkOperationLowerer
                 builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.CollisionRowScratch);
             }
 
-            foreach (var xOffset in AabbSampleOffsets(width))
+            foreach (var xOffset in AabbSampleOffsets(probe.Width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_tiles_next");
                 if (constantWorldY)
                 {
-                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, "camera_aabb_tiles");
+                    EmitCameraTileFlagsAt(probe.ScreenX, xOffset, probe.WorldY, hitTopOffset, probe.Config, "camera_aabb_tiles");
                 }
                 else
                 {
-                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                    EmitCameraTileFlagsAtStoredRow(probe.ScreenX, xOffset, probe.Config);
                 }
 
-                builder.AndImmediate(flags);
+                builder.AndImmediate(probe.Flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
                 builder.JumpAbsolute(foundLabel);
@@ -73,35 +82,43 @@ internal sealed partial class NesSdkOperationLowerer
 
     internal void EmitCameraAabbHitTop(Sdk2DOperation.CameraAabbHitTop operation)
     {
-        if (operation.WorldId != "default")
-        {
-            throw new InvalidOperationException($"Unsupported NES world id '{operation.WorldId}'.");
-        }
-
-        var callName = "camera_aabb_hit_top";
-        var config = EnsureCameraConfigured(callName);
-        var worldMap = WorldMapForFlagQuery(callName);
-        var width = CameraAabbWidth(operation.Width);
-        var flags = (int)operation.Flags;
-        if (width == 0 || operation.Height == 0 || flags == 0)
+        if (!TryResolveCameraAabbProbe(
+                SharedCameraAabbKind.HitTop,
+                operation.WorldId,
+                operation.ScreenX,
+                operation.WorldY,
+                operation.WorldYOffset,
+                operation.Width,
+                operation.Height,
+                operation.Flags,
+                "camera_aabb_hit_top",
+                out var probe))
         {
             builder.LoadAImmediate(255);
             builder.TransferAToX();
             return;
         }
 
-        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_hit_top");
-
-        var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
-        var constantWorldY = TrySdkConst(operation.WorldY, out _);
-        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        if (TryEmitSharedCameraAabbCall(probe))
         {
-            var hitTopOffset = operation.WorldYOffset + yOffset;
+            return;
+        }
+
+        EmitCameraAabbHitTopBody(probe);
+    }
+
+    private void EmitCameraAabbHitTopBody(CameraAabbProbe probe)
+    {
+        var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
+        var constantWorldY = TrySdkConst(probe.WorldY, out _);
+        foreach (var yOffset in AabbSampleOffsets(probe.Height))
+        {
+            var hitTopOffset = probe.WorldYOffset + yOffset;
             var nextRowLabel = builder.CreateLabel("camera_aabb_hit_top_next_row");
             if (!constantWorldY)
             {
-                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
-                builder.CompareImmediate(worldMap.Height);
+                EmitWorldPixelToTileCoordinate(probe.WorldY, hitTopOffset);
+                builder.CompareImmediate(probe.WorldMap.Height);
                 var inBoundsLabel = builder.CreateLabel("camera_aabb_hit_top_row_in_bounds");
                 builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
                 builder.JumpAbsolute(nextRowLabel);
@@ -109,22 +126,22 @@ internal sealed partial class NesSdkOperationLowerer
                 builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.CollisionRowScratch);
             }
 
-            foreach (var xOffset in AabbSampleOffsets(width))
+            foreach (var xOffset in AabbSampleOffsets(probe.Width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
                 if (constantWorldY)
                 {
-                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                    EmitCameraTileFlagsAt(probe.ScreenX, xOffset, probe.WorldY, hitTopOffset, probe.Config, "camera_aabb_hit_top");
                 }
                 else
                 {
-                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                    EmitCameraTileFlagsAtStoredRow(probe.ScreenX, xOffset, probe.Config);
                 }
 
-                builder.AndImmediate(flags);
+                builder.AndImmediate(probe.Flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
-                EmitWorldPixelTileTop(operation.WorldY, hitTopOffset);
+                EmitWorldPixelTileTop(probe.WorldY, hitTopOffset);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(nextProbeLabel);
             }
@@ -135,6 +152,38 @@ internal sealed partial class NesSdkOperationLowerer
         builder.LoadAImmediate(255);
         builder.TransferAToX();
         builder.Label(endLabel);
+    }
+
+    private bool TryResolveCameraAabbProbe(
+        SharedCameraAabbKind kind,
+        string worldId,
+        SdkByteExpression screenX,
+        SdkWordExpression worldY,
+        int worldYOffset,
+        SdkAabbExtent widthExtent,
+        int height,
+        WorldTileFlags flagSet,
+        string callName,
+        out CameraAabbProbe probe)
+    {
+        if (worldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported NES world id '{worldId}'.");
+        }
+
+        var config = EnsureCameraConfigured(callName);
+        var worldMap = WorldMapForFlagQuery(callName);
+        var width = CameraAabbWidth(widthExtent);
+        var flags = (int)flagSet;
+        if (width == 0 || height == 0 || flags == 0)
+        {
+            probe = default;
+            return false;
+        }
+
+        ValidateConstantCameraAabbSpan(screenX, width, NesTarget.Capabilities.ScreenPixels.Width, callName);
+        probe = new CameraAabbProbe(kind, screenX, worldY, worldYOffset, width, height, flags, config, worldMap);
+        return true;
     }
 
     internal void EmitCameraScreenAabbTiles(Sdk2DOperation.CameraScreenAabbTiles operation)
@@ -461,7 +510,7 @@ internal sealed partial class NesSdkOperationLowerer
         var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
         var endLabel = builder.CreateLabel("camera_pixel_column_end");
 
-        EmitSdkByteExpressionToA(screenPixelX);
+        EmitCameraAabbScreenXToA(screenPixelX);
         if (screenPixelXOffset != 0)
         {
             builder.ClearCarry();
@@ -607,9 +656,9 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitSdkWordExpressionWithOffsetToAx(SdkWordExpression expression, int offset)
     {
-        EmitSdkWordExpressionToA(expression, highByte: false);
+        EmitCameraAabbWorldYToA(expression, highByte: false);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
-        EmitSdkWordExpressionToA(expression, highByte: true);
+        EmitCameraAabbWorldYToA(expression, highByte: true);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.ExpressionScratch);
 
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
@@ -664,6 +713,235 @@ internal sealed partial class NesSdkOperationLowerer
         builder.AndImmediate(0xF8);
     }
 
+    // Shared collision probes.
+    //
+    // Two sites whose probe grid, span, offsets, flags, and operand kinds match compile to
+    // the same instruction sequence apart from where the screen-X and world-Y operands come
+    // from. Materialising those two operands into `NesRuntimeMemoryLayout.SharedSdk` at the
+    // call site lets one fixed-resident body serve every matching site. Only runtime
+    // world-Y shapes are shared: a constant world-Y resolves per-row `WorldMapFlagRowLabel`
+    // tables and is a different body shape.
+
+    private enum SharedCameraAabbKind
+    {
+        Tiles,
+        HitTop,
+    }
+
+    private readonly record struct CameraAabbProbe(
+        SharedCameraAabbKind Kind,
+        SdkByteExpression ScreenX,
+        SdkWordExpression WorldY,
+        int WorldYOffset,
+        int Width,
+        int Height,
+        int Flags,
+        NesCameraConfig Config,
+        WorldMap2D WorldMap);
+
+    private readonly record struct SharedCameraAabbShape(
+        SharedCameraAabbKind Kind,
+        int WorldYOffset,
+        int Width,
+        int Height,
+        int Flags,
+        SharedByteOperandShape ScreenX);
+
+    // A body is only reusable while the camera and world facts it baked in still hold.
+    private readonly record struct SharedCameraAabbEnvironment(int MapWidth, int MapHeight);
+
+    private sealed record SharedCameraAabbBody(
+        string Label,
+        SharedCameraAabbEnvironment Environment,
+        CameraAabbProbe Probe);
+
+    private IReadOnlyDictionary<SharedCameraAabbShape, string> SharedCameraAabbSubroutines =>
+        sharedCameraAabbSubroutines ??= CreateSharedCameraAabbSubroutines();
+
+    private IReadOnlyDictionary<SharedCameraAabbShape, string> CreateSharedCameraAabbSubroutines()
+    {
+        if (!shareRepeatedSdkOperations)
+        {
+            return new Dictionary<SharedCameraAabbShape, string>();
+        }
+
+        var shapes = program.SdkOperationStream
+            .Select(TrySharedCameraAabbShape)
+            .Where(shape => shape is not null)
+            .Select(shape => shape!.Value)
+            .ToArray();
+        var repeated = shapes
+            .GroupBy(shape => shape)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet();
+        var result = new Dictionary<SharedCameraAabbShape, string>();
+        foreach (var shape in shapes)
+        {
+            if (repeated.Contains(shape) && !result.ContainsKey(shape))
+            {
+                result.Add(shape, $"{SharedCameraAabbSubroutinePrefix}_{result.Count}");
+            }
+        }
+
+        return result;
+    }
+
+    private SharedCameraAabbShape? TrySharedCameraAabbShape(Sdk2DOperation operation)
+    {
+        var (kind, worldId, screenX, worldY, worldYOffset, widthExtent, height, flagSet) = operation switch
+        {
+            Sdk2DOperation.CameraAabbTiles tiles => (
+                (SharedCameraAabbKind?)SharedCameraAabbKind.Tiles,
+                tiles.WorldId,
+                tiles.ScreenX,
+                tiles.WorldY,
+                tiles.WorldYOffset,
+                tiles.Width,
+                tiles.Height,
+                tiles.Flags),
+            Sdk2DOperation.CameraAabbHitTop hitTop => (
+                SharedCameraAabbKind.HitTop,
+                hitTop.WorldId,
+                hitTop.ScreenX,
+                hitTop.WorldY,
+                hitTop.WorldYOffset,
+                hitTop.Width,
+                hitTop.Height,
+                hitTop.Flags),
+            _ => (null, string.Empty, null!, null!, 0, null!, 0, default),
+        };
+        if (kind is not { } sharedKind || worldId != "default" || TrySdkConst(worldY, out _))
+        {
+            return null;
+        }
+
+        var width = CameraAabbWidth(widthExtent);
+        var flags = (int)flagSet;
+        if (width == 0 || height == 0 || flags == 0)
+        {
+            return null;
+        }
+
+        // A single-probe body is smaller than the operand stores plus JSR/RTS it would cost.
+        if (AabbSampleOffsets(width).Count * AabbSampleOffsets(height).Count < 2)
+        {
+            return null;
+        }
+
+        return new SharedCameraAabbShape(
+            sharedKind,
+            worldYOffset,
+            width,
+            height,
+            flags,
+            SharedByteOperandShape.From(screenX));
+    }
+
+    private bool TryEmitSharedCameraAabbCall(CameraAabbProbe probe)
+    {
+        if (TrySdkConst(probe.WorldY, out _))
+        {
+            return false;
+        }
+
+        var shape = new SharedCameraAabbShape(
+            probe.Kind,
+            probe.WorldYOffset,
+            probe.Width,
+            probe.Height,
+            probe.Flags,
+            SharedByteOperandShape.From(probe.ScreenX));
+        if (!SharedCameraAabbSubroutines.TryGetValue(shape, out var subroutine))
+        {
+            return false;
+        }
+
+        var environment = new SharedCameraAabbEnvironment(probe.Config.MapWidth, probe.WorldMap.Height);
+        if (referencedSharedCameraAabbSubroutines.TryGetValue(shape, out var body))
+        {
+            if (body.Environment != environment)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            referencedSharedCameraAabbSubroutines.Add(shape, new SharedCameraAabbBody(subroutine, environment, probe));
+        }
+
+        EmitSharedCameraAabbOperands(probe);
+        builder.CallSubroutine(subroutine);
+        return true;
+    }
+
+    private void EmitSharedCameraAabbOperands(CameraAabbProbe probe)
+    {
+        if (probe.ScreenX is not SdkByteExpression.Constant)
+        {
+            EmitSdkByteExpressionToA(probe.ScreenX);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.AabbScreenX);
+        }
+
+        EmitSdkWordExpressionToA(probe.WorldY, highByte: false);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.AabbWorldYLow);
+        EmitSdkWordExpressionToA(probe.WorldY, highByte: true);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.SharedSdk.AabbWorldYHigh);
+    }
+
+    private void EmitCameraAabbScreenXToA(SdkByteExpression screenPixelX)
+    {
+        if (emittingSharedCameraAabbBody)
+        {
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.SharedSdk.AabbScreenX);
+            return;
+        }
+
+        EmitSdkByteExpressionToA(screenPixelX);
+    }
+
+    private void EmitCameraAabbWorldYToA(SdkWordExpression expression, bool highByte)
+    {
+        if (emittingSharedCameraAabbBody)
+        {
+            builder.LoadAAbsolute(highByte
+                ? NesRuntimeMemoryLayout.SharedSdk.AabbWorldYHigh
+                : NesRuntimeMemoryLayout.SharedSdk.AabbWorldYLow);
+            return;
+        }
+
+        EmitSdkWordExpressionToA(expression, highByte);
+    }
+
+    private void EmitReferencedSharedCameraAabbSubroutines()
+    {
+        foreach (var body in referencedSharedCameraAabbSubroutines.Values.OrderBy(body => body.Label, StringComparer.Ordinal))
+        {
+            builder.Label(body.Label);
+            emittingSharedCameraAabbBody = true;
+            try
+            {
+                switch (body.Probe.Kind)
+                {
+                    case SharedCameraAabbKind.Tiles:
+                        EmitCameraAabbTilesBody(body.Probe);
+                        break;
+                    case SharedCameraAabbKind.HitTop:
+                        EmitCameraAabbHitTopBody(body.Probe);
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unsupported shared camera AABB kind '{body.Probe.Kind}'.");
+                }
+            }
+            finally
+            {
+                emittingSharedCameraAabbBody = false;
+            }
+
+            builder.Return();
+        }
+    }
+
     internal WorldMap2D WorldMapForFlagQuery(string callName)
     {
         return program.WorldMap
@@ -679,58 +957,4 @@ internal sealed partial class NesSdkOperationLowerer
             _ => throw new InvalidOperationException($"Unsupported camera AABB width '{width.GetType().Name}'."),
         };
     }
-
-    internal void EmitReferencedSubroutines()
-    {
-        if (packedColumnRequestSubroutineReferenced)
-        {
-            EmitPackedColumnRequestSubroutine();
-        }
-
-        if (packedColumnPrefetchSubroutineReferenced)
-        {
-            EmitPackedColumnPrefetchSubroutine();
-        }
-
-        if (packedRowRequestSubroutineReferenced)
-        {
-            EmitPackedRowRequestSubroutine();
-        }
-
-        if (packedWideSourceColumnSubroutineReferenced)
-        {
-            EmitPackedWideSourceColumnSubroutine();
-        }
-
-        if (packedCollisionAtScratchSubroutineReferenced)
-        {
-            EmitPackedCollisionAtScratchSubroutine();
-        }
-
-        if (packedCollisionFlagsSubroutineReferenced)
-        {
-            EmitPackedCollisionFlagsSubroutine();
-        }
-
-        if (cameraIncrementTileSubroutineReferenced)
-        {
-            EmitIncrementCameraTileSubroutine();
-        }
-
-        if (cameraDecrementTileSubroutineReferenced)
-        {
-            EmitDecrementCameraTileSubroutine();
-        }
-
-        if (publishVisibleCameraXSubroutineReferenced)
-        {
-            EmitPublishVisibleCameraXSubroutine();
-        }
-
-        if (publishVisibleCameraYSubroutineReferenced)
-        {
-            EmitPublishVisibleCameraYSubroutine();
-        }
-    }
-
 }

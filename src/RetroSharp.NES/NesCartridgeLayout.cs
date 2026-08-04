@@ -45,6 +45,7 @@ internal sealed record NesPrgBuild(
     IReadOnlyList<NesLinkedProgramSegment> ProgramSegments,
     IReadOnlyDictionary<string, NesPrgSymbol> ProgramSymbols,
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
+    IReadOnlyList<NesSharedSdkSubroutine> SharedSdkSubroutines,
     string FrameProfile,
     SdkCpuWorkReport FrameCpuWork);
 
@@ -67,7 +68,15 @@ internal sealed record NesRomBuildReport(
     IReadOnlyDictionary<string, NesPrgSymbol> BankedSymbols,
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
     IReadOnlyList<NesRuntimeRegion> RuntimeRegions,
+    IReadOnlyList<NesSharedSdkSubroutine> SharedSdkSubroutines,
     SdkCpuWorkReport CpuWork);
+
+/// <summary>
+/// One shared SDK operation body emitted once and reached by <see cref="CallSites"/> JSRs.
+/// Reported so that deduplication is auditable from a production build instead of from
+/// emitted-byte inspection.
+/// </summary>
+internal sealed record NesSharedSdkSubroutine(string Label, ushort CpuAddress, int CallSites);
 
 internal sealed record NesRuntimeUserVariable(
     string Name,

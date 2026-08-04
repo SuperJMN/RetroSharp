@@ -25,6 +25,7 @@ public sealed class NesRuntimeMemoryLayoutTests
                 ("WorldPack scalar state", (ushort)0x0326, 0x0048),
                 ("packed camera and WorldPack auxiliary state", (ushort)0x036E, 0x0092),
                 ("WorldPack staging", (ushort)0x0400, 0x0266),
+                ("shared SDK operand storage", (ushort)0x0666, 0x0007),
                 ("CPU RAM mirror 1", (ushort)0x0800, 0x0800),
                 ("CPU RAM mirror 2", (ushort)0x1000, 0x0800),
                 ("CPU RAM mirror 3", (ushort)0x1800, 0x0800),
@@ -38,7 +39,7 @@ public sealed class NesRuntimeMemoryLayoutTests
                 address.Owner.Contains(address.Address),
                 $"{address.Domain}.{address.Name} is outside {address.Owner.Name}."));
         Assert.Equal(
-            ["WorldPack", "audio", "banking", "camera", "input", "packed camera", "runtime", "sprite"],
+            ["WorldPack", "audio", "banking", "camera", "input", "packed camera", "runtime", "shared SDK", "sprite"],
             NesRuntimeMemoryLayout.NamedAddresses
                 .Select(address => address.Domain)
                 .Distinct(StringComparer.Ordinal)
