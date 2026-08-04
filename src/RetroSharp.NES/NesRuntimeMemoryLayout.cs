@@ -220,6 +220,14 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort OamShadow = 0x0200;
     }
 
+    internal static class SharedSdk
+    {
+        internal const byte SpriteX = Runtime.CollisionColumnScratch;
+        internal const byte SpriteY = Runtime.CollisionRowScratch;
+        internal const byte SpriteFrame = Runtime.SpriteFrameScratch;
+        internal const byte SpriteFlipX = Runtime.ExpressionScratch;
+    }
+
     internal static class PackedCamera
     {
         internal const ushort FrameCounterLow = 0x036E;

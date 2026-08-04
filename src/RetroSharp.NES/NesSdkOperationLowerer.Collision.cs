@@ -682,6 +682,8 @@ internal sealed partial class NesSdkOperationLowerer
 
     internal void EmitReferencedSubroutines()
     {
+        EmitReferencedSharedDrawLogicalSpriteSubroutines();
+
         if (packedColumnRequestSubroutineReferenced)
         {
             EmitPackedColumnRequestSubroutine();

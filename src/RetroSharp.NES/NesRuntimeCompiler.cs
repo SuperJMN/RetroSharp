@@ -42,7 +42,8 @@ internal sealed partial class NesRuntimeCompiler
         IReadOnlySet<int>? longWhileLoopIds = null,
         bool useFourScreenNametables = false,
         bool usePackedCamera = false,
-        bool useSequentialOamPublication = false)
+        bool useSequentialOamPublication = false,
+        bool shareRepeatedSdkOperations = true)
         : this(
             builder,
             program,
@@ -53,7 +54,8 @@ internal sealed partial class NesRuntimeCompiler
                 program,
                 useFourScreenNametables,
                 usePackedCamera,
-                useSequentialOamPublication))
+                useSequentialOamPublication),
+            shareRepeatedSdkOperations)
     {
     }
 
@@ -62,7 +64,8 @@ internal sealed partial class NesRuntimeCompiler
         NesVideoProgram program,
         IReadOnlySet<int>? longForLoopIds,
         IReadOnlySet<int>? longWhileLoopIds,
-        NesPhysicalFrameScheduler frameScheduler)
+        NesPhysicalFrameScheduler frameScheduler,
+        bool shareRepeatedSdkOperations = true)
     {
         ArgumentNullException.ThrowIfNull(frameScheduler);
         NesRuntimeMemoryLayout.Validate();
@@ -82,7 +85,8 @@ internal sealed partial class NesRuntimeCompiler
                 VariableAddress,
                 RuntimeIndexedMemberBaseAddress,
                 EmitRuntimeMemberIndexToX),
-            frameScheduler);
+            frameScheduler,
+            shareRepeatedSdkOperations);
     }
 
     public void EmitInitialization()

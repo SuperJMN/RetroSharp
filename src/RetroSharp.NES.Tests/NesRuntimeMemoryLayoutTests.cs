@@ -72,6 +72,18 @@ public sealed class NesRuntimeMemoryLayoutTests
     }
 
     [Fact]
+    public void Shared_sdk_operands_reuse_existing_transient_scratch_without_expanding_the_runtime_abi()
+    {
+        Assert.Equal(NesRuntimeMemoryLayout.Runtime.CollisionColumnScratch, NesRuntimeMemoryLayout.SharedSdk.SpriteX);
+        Assert.Equal(NesRuntimeMemoryLayout.Runtime.CollisionRowScratch, NesRuntimeMemoryLayout.SharedSdk.SpriteY);
+        Assert.Equal(NesRuntimeMemoryLayout.Runtime.SpriteFrameScratch, NesRuntimeMemoryLayout.SharedSdk.SpriteFrame);
+        Assert.Equal(NesRuntimeMemoryLayout.Runtime.ExpressionScratch, NesRuntimeMemoryLayout.SharedSdk.SpriteFlipX);
+        Assert.DoesNotContain(
+            NesRuntimeMemoryLayout.NamedAddresses,
+            address => address.Domain == "shared SDK");
+    }
+
+    [Fact]
     public void Every_duplicate_named_address_is_declared_as_an_intentional_alias()
     {
         var duplicates = NesRuntimeMemoryLayout.NamedAddresses

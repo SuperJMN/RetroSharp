@@ -40,7 +40,8 @@ internal static class NesRomBuilder
             cartridgeProfile,
             packedWorldBytes: null,
             worldPackProbe: null,
-            programLinkMode: NesProgramLinkMode.Fixed).Rom;
+            programLinkMode: NesProgramLinkMode.Fixed,
+            shareRepeatedSdkOperations: true).Rom;
     }
 
     internal static NesRomBuildResult BuildWithReport(
@@ -49,7 +50,8 @@ internal static class NesRomBuilder
         NesCartridgeProfile? forcedCartridgeProfile,
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe,
-        NesProgramLinkMode? forcedProgramLinkMode = null)
+        NesProgramLinkMode? forcedProgramLinkMode = null,
+        bool shareRepeatedSdkOperations = true)
     {
         var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
         var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
@@ -78,7 +80,8 @@ internal static class NesRomBuilder
                 forced,
                 selectedWorldPack,
                 worldPackProbe,
-                forcedProgramLinkMode ?? NesProgramLinkMode.Fixed);
+                forcedProgramLinkMode ?? NesProgramLinkMode.Fixed,
+                shareRepeatedSdkOperations);
         }
 
         var mapper0WorldPack = packedWorldOverride is null && discoveredWorldPack is not null && !requiresPackedCamera
@@ -95,7 +98,8 @@ internal static class NesRomBuilder
                 NesCartridgeProfile.Mapper0,
                 mapper0WorldPack,
                 mapper0WorldPack is null ? null : worldPackProbe,
-                NesProgramLinkMode.Fixed);
+                NesProgramLinkMode.Fixed,
+                shareRepeatedSdkOperations);
         }
         catch (InvalidOperationException exception) when (
             ShouldPromoteMapper0ToMmc3(exception, selectedWorldPack is not null))
@@ -109,7 +113,8 @@ internal static class NesRomBuilder
                     NesCartridgeProfile.Mmc3Tvrom,
                     selectedWorldPack,
                     worldPackProbe,
-                    NesProgramLinkMode.Fixed);
+                    NesProgramLinkMode.Fixed,
+                    shareRepeatedSdkOperations);
             }
             catch (InvalidOperationException mmc3Exception) when (IsMmc3ProgramCapacityConstraint(mmc3Exception))
             {
@@ -119,7 +124,8 @@ internal static class NesRomBuilder
                     NesCartridgeProfile.Mmc3Tvrom,
                     selectedWorldPack,
                     worldPackProbe,
-                    NesProgramLinkMode.BankedR6);
+                    NesProgramLinkMode.BankedR6,
+                    shareRepeatedSdkOperations);
             }
         }
     }
@@ -149,7 +155,8 @@ internal static class NesRomBuilder
         NesCartridgeProfile cartridgeProfile,
         byte[]? packedWorldBytes,
         NesWorldPackProbe? worldPackProbe,
-        NesProgramLinkMode programLinkMode)
+        NesProgramLinkMode programLinkMode,
+        bool shareRepeatedSdkOperations)
     {
         var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
         if (programLinkMode is NesProgramLinkMode.BankedR6 && !layout.EmitMmc3Foundation)
@@ -189,7 +196,8 @@ internal static class NesRomBuilder
             programLinkMode,
             programBanks,
             occupiedWorldBanks.Count,
-            packedWorldBytes?.Length ?? 0);
+            packedWorldBytes?.Length ?? 0,
+            shareRepeatedSdkOperations);
         var prg = prgBuild.Bytes;
         if (layout.EmitMmc3Foundation)
         {
@@ -245,7 +253,8 @@ internal static class NesRomBuilder
         NesProgramLinkMode programLinkMode,
         IReadOnlyList<NesPrgSectionLayout> programBanks,
         int occupiedWorldBankCount,
-        int packedWorldByteCount)
+        int packedWorldByteCount,
+        bool shareRepeatedSdkOperations)
     {
         var longForLoopIds = new HashSet<int>();
         var longWhileLoopIds = new HashSet<int>();
@@ -266,7 +275,8 @@ internal static class NesRomBuilder
                     programLinkMode,
                     programBanks,
                     occupiedWorldBankCount,
-                    packedWorldByteCount);
+                    packedWorldByteCount,
+                    shareRepeatedSdkOperations);
             }
             catch (BranchOutOfRangeException ex)
             {
@@ -298,7 +308,8 @@ internal static class NesRomBuilder
         NesProgramLinkMode programLinkMode,
         IReadOnlyList<NesPrgSectionLayout> programBanks,
         int occupiedWorldBankCount,
-        int packedWorldByteCount)
+        int packedWorldByteCount,
+        bool shareRepeatedSdkOperations)
     {
         var builder = programLinkMode is NesProgramLinkMode.BankedR6
             ? PrgBuilder.CreateSectioned(layout.FixedRuntimeCpuBaseAddress)
@@ -370,7 +381,8 @@ internal static class NesRomBuilder
             program,
             longForLoopIds,
             longWhileLoopIds,
-            frameScheduler);
+            frameScheduler,
+            shareRepeatedSdkOperations);
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {

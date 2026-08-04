@@ -48,6 +48,7 @@ void Main()
     i16 verticalSubpixel = 0;
     i8 velocityY = 0;
     bool grounded = true;
+    bool playerFlip = false;
     bool patrolLeft = false;
     u8 patrolX = 144;
     u8 gameplayTick = 0;
@@ -77,7 +78,7 @@ void Main()
         let playerFrame = grounded ? 0 : 4;
         let patrolScreenX = patrolX;
         let patrolFrame = 1;
-        Sprite.Draw(player_sprite, playerScreenX, playerScreenY, playerFrame, false, 0);
+        Sprite.Draw(player_sprite, playerScreenX, playerScreenY, playerFrame, playerFlip, 0);
         Sprite.Draw(player_sprite, patrolScreenX, 96, patrolFrame, patrolLeft, 0);
         retainedPlayerScreenX = playerScreenX;
         retainedPlayerScreenY = playerScreenY;

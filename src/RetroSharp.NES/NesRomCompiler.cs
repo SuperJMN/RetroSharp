@@ -36,7 +36,8 @@ public static class NesRomCompiler
         SdkPluginRegistry? sdkPluginRegistry = null,
         byte[]? packedWorldOverride = null,
         NesWorldPackProbe? worldPackProbe = null,
-        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null)
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null,
+        bool shareRepeatedSdkOperations = true)
     {
         return CompileSourceCore(
             source,
@@ -49,7 +50,8 @@ public static class NesRomCompiler
             forcedProgramLinkMode: null,
             packedWorldOverride,
             worldPackProbe,
-            generatedRomTablesOverride);
+            generatedRomTablesOverride,
+            shareRepeatedSdkOperations);
     }
 
     internal static byte[] CompileSourceForMmc3TvromTests(
@@ -90,7 +92,8 @@ public static class NesRomCompiler
             NesProgramLinkMode.Fixed,
             packedWorldOverride,
             worldPackProbe,
-            generatedRomTablesOverride: null);
+            generatedRomTablesOverride: null,
+            shareRepeatedSdkOperations: true);
     }
 
     internal static NesRomBuildResult CompileSourceForMmc3TvromCodeBankTestsWithReport(
@@ -114,7 +117,8 @@ public static class NesRomCompiler
             NesProgramLinkMode.BankedR6,
             packedWorldOverride,
             worldPackProbe,
-            generatedRomTablesOverride: null);
+            generatedRomTablesOverride: null,
+            shareRepeatedSdkOperations: true);
     }
 
     private static NesRomBuildResult CompileSourceCore(
@@ -128,7 +132,8 @@ public static class NesRomCompiler
         NesProgramLinkMode? forcedProgramLinkMode,
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe,
-        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride)
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride,
+        bool shareRepeatedSdkOperations)
     {
         var preparedVideoProgram = PrepareVideoProgram(
             source,
@@ -159,7 +164,8 @@ public static class NesRomCompiler
             forcedCartridgeProfile,
             packedWorldOverride,
             worldPackProbe,
-            forcedProgramLinkMode);
+            forcedProgramLinkMode,
+            shareRepeatedSdkOperations);
     }
 
     private static bool RequiresLegacyWorldData(Sdk2DOperation operation) => operation is

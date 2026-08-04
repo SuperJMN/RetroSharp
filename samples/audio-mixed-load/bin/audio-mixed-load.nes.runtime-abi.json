@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "c74eac0d4528d4d58813596c6cc181a9cb93f99fcba03d0fe74f23ed636ce874",
-  "romSha256": "1f21c204c72ec77f084fd4423dbfc2c2e29f301a7ad220a0c100658772e1f97d",
+  "abiFingerprint": "1dbd9f290a7c21c33351e4e48ec0de1461e3074efc3842e0dbe7da0ed1cf6aa4",
+  "romSha256": "690d2ea566adc5a87fef3f5f1b38c20866d9f6be20bce7685670d1691affe27a",
   "ranges": [
     {
       "id": "UserLocals",
@@ -1855,189 +1855,195 @@
       "size": 1
     },
     {
-      "name": "patrolLeft",
+      "name": "playerFlip",
       "type": "bool",
       "address": 12,
       "size": 1
     },
     {
-      "name": "patrolX",
-      "type": "u8",
+      "name": "patrolLeft",
+      "type": "bool",
       "address": 13,
       "size": 1
     },
     {
-      "name": "gameplayTick",
+      "name": "patrolX",
       "type": "u8",
       "address": 14,
       "size": 1
     },
     {
-      "name": "audioTick",
+      "name": "gameplayTick",
       "type": "u8",
       "address": 15,
       "size": 1
     },
     {
-      "name": "sfxCount",
+      "name": "audioTick",
       "type": "u8",
       "address": 16,
       "size": 1
     },
     {
-      "name": "collisionProbeCount",
+      "name": "sfxCount",
       "type": "u8",
       "address": 17,
       "size": 1
     },
     {
-      "name": "collisionCadence",
+      "name": "collisionProbeCount",
       "type": "u8",
       "address": 18,
       "size": 1
     },
     {
+      "name": "collisionCadence",
+      "type": "u8",
+      "address": 19,
+      "size": 1
+    },
+    {
       "name": "retainedPlayerScreenX",
       "type": "i16",
-      "address": 19,
+      "address": 20,
       "size": 2
     },
     {
       "name": "retainedPlayerScreenY",
       "type": "i16",
-      "address": 21,
+      "address": 22,
       "size": 2
     },
     {
       "name": "retainedPlayerFrame",
       "type": "u8",
-      "address": 23,
+      "address": 24,
       "size": 1
     },
     {
       "name": "retainedPatrolScreenX",
       "type": "u8",
-      "address": 24,
+      "address": 25,
       "size": 1
     },
     {
       "name": "retainedPatrolFrame",
       "type": "u8",
-      "address": 25,
+      "address": 26,
       "size": 1
     },
     {
       "name": "retainedPatrolLeft",
       "type": "bool",
-      "address": 26,
+      "address": 27,
       "size": 1
     },
     {
       "name": "publishedPlayerScreenX",
       "type": "i16",
-      "address": 27,
+      "address": 28,
       "size": 2
     },
     {
       "name": "publishedPlayerScreenY",
       "type": "i16",
-      "address": 29,
+      "address": 30,
       "size": 2
     },
     {
       "name": "publishedPlayerFrame",
       "type": "u8",
-      "address": 31,
+      "address": 32,
       "size": 1
     },
     {
       "name": "publishedPatrolScreenX",
       "type": "u8",
-      "address": 32,
+      "address": 33,
       "size": 1
     },
     {
       "name": "publishedPatrolFrame",
       "type": "u8",
-      "address": 33,
+      "address": 34,
       "size": 1
     },
     {
       "name": "publishedPatrolLeft",
       "type": "bool",
-      "address": 34,
+      "address": 35,
       "size": 1
     },
     {
       "name": "playerScreenX",
       "type": "i16",
-      "address": 35,
+      "address": 36,
       "size": 2
     },
     {
       "name": "playerScreenY",
       "type": "i16",
-      "address": 37,
+      "address": 38,
       "size": 2
     },
     {
       "name": "playerFrame",
       "type": "u8",
-      "address": 39,
+      "address": 40,
       "size": 1
     },
     {
       "name": "patrolScreenX",
       "type": "u8",
-      "address": 40,
+      "address": 41,
       "size": 1
     },
     {
       "name": "patrolFrame",
       "type": "u8",
-      "address": 41,
+      "address": 42,
       "size": 1
     },
     {
       "name": "motion",
       "type": "i16",
-      "address": 42,
+      "address": 43,
       "size": 2
     },
     {
       "name": "footProbeY",
       "type": "i16",
-      "address": 44,
+      "address": 45,
       "size": 2
     },
     {
       "name": "wallProbeY",
       "type": "i16",
-      "address": 46,
+      "address": 47,
       "size": 2
     },
     {
       "name": "collisionScreenX",
       "type": "u8",
-      "address": 48,
+      "address": 49,
       "size": 1
     },
     {
       "name": "wallScreenX",
       "type": "u8",
-      "address": 49,
+      "address": 50,
       "size": 1
     },
     {
       "name": "feet",
       "type": "i16",
-      "address": 50,
+      "address": 51,
       "size": 2
     },
     {
       "name": "wall",
       "type": "i16",
-      "address": 52,
+      "address": 53,
       "size": 2
     }
   ]
