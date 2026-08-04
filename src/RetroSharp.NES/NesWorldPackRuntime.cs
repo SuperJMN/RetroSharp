@@ -377,7 +377,8 @@ internal static class NesWorldPackRuntimeEmitter
         NesWorldPackRuntimePlan plan,
         NesWorldPackPlacement? placement,
         NesWorldPackProbe? probe,
-        NesPhysicalFrameScheduler? frameScheduler)
+        NesPhysicalFrameScheduler? frameScheduler,
+        bool optimizeBankedRawAccess = false)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(plan);
@@ -385,7 +386,7 @@ internal static class NesWorldPackRuntimeEmitter
         EmitReadByte(builder, plan, placement);
         EmitValidation(builder, plan);
         EmitPlaneDecoders(builder, plan, placement);
-        EmitLookups(builder, plan, placement);
+        EmitLookups(builder, plan, placement, optimizeBankedRawAccess);
         EmitRuntimeInitialization(builder, plan);
         if (probe is not null)
         {
@@ -508,6 +509,11 @@ internal static class NesWorldPackRuntimeEmitter
             .All(plane => (plane.Offset & 0x1FFF) + plane.DecodedBytes <= 8 * 1_024)
         && plan.Planes.Where((_, index) => index % 2 == 0)
             .Any(plane => plane.Codec == WorldPackCodec.Raw);
+
+    internal static bool SupportsBatchedRawVisualReads(NesWorldPackRuntimePlan plan) =>
+        SupportsDirectRawVisualRead(plan)
+        && plan.Planes.Where((_, index) => index % 2 == 0)
+            .All(plane => plane.Codec == WorldPackCodec.Raw);
 
     private static bool SupportsDirectRawCollisionRead(NesWorldPackRuntimePlan plan) =>
         plan.Planes
@@ -1181,7 +1187,8 @@ internal static class NesWorldPackRuntimeEmitter
     private static void EmitLookups(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
-        NesWorldPackPlacement? placement)
+        NesWorldPackPlacement? placement,
+        bool optimizeBankedRawAccess)
     {
         var coordinates = builder.CreateLabel("worldpack_lookup_coordinates");
         var coordinateBounds = builder.CreateLabel("worldpack_lookup_coordinate_bounds");
@@ -1197,6 +1204,9 @@ internal static class NesWorldPackRuntimeEmitter
         var hasRleCollisionPlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.ElementRle);
         var useFastCoordinates = UsesFastCollisionLookup(plan);
         var useDirectRawVisualRead = placement is not null && SupportsDirectRawVisualRead(plan);
+        var cacheRawVisualCells = optimizeBankedRawAccess
+                                  && useDirectRawVisualRead
+                                  && !hasRleVisualPlanes;
         var fastCoordinates = builder.CreateLabel("worldpack_fast_lookup_coordinates");
 
         builder.Label(NesRomBuilder.WorldPackVisualLookupLabel);
@@ -1217,7 +1227,7 @@ internal static class NesWorldPackRuntimeEmitter
             builder.JumpIf(0xF0, visualRawOnlyValidated);
             builder.Return();
             builder.Label(visualRawOnlyValidated);
-            EmitDirectRawVisualRead(builder, plan, visualIdReady);
+            EmitDirectRawVisualRead(builder, plan, cacheRawVisualCells, visualIdReady);
         }
         else
         {
@@ -1382,7 +1392,7 @@ internal static class NesWorldPackRuntimeEmitter
                 builder.JumpIf(0xF0, visualRawValidated);
                 builder.Return();
                 builder.Label(visualRawValidated);
-                EmitDirectRawVisualRead(builder, plan, visualIdReady);
+                EmitDirectRawVisualRead(builder, plan, cacheRawVisualCells, visualIdReady);
             }
 
             if (!useDirectRawVisualRead)
@@ -1496,7 +1506,12 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Label(NesRomBuilder.WorldPackCollisionLookupLabel);
         if (useFastCoordinates)
         {
-            EmitFastCollisionLookup(builder, plan, placement, fastCoordinates);
+            EmitFastCollisionLookup(
+                builder,
+                plan,
+                placement,
+                fastCoordinates,
+                optimizeBankedRawAccess);
         }
         else
         {
@@ -1883,13 +1898,21 @@ internal static class NesWorldPackRuntimeEmitter
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
         NesWorldPackPlacement? placement,
-        string coordinates)
+        string coordinates,
+        bool optimizeBankedRawAccess)
     {
         var descriptor = plan.Pack.Descriptor;
         var collisionPlanes = plan.Planes.Where((_, index) => index % 2 == 1).ToArray();
         var hasRawPlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.Raw);
         var hasRlePlanes = collisionPlanes.Any(plane => plane.Codec == WorldPackCodec.ElementRle);
         var useDirectRawRead = placement is not null && SupportsDirectRawCollisionRead(plan);
+        var useRawCaches = optimizeBankedRawAccess
+                           && useDirectRawRead
+                           && hasRawPlanes
+                           && !hasRlePlanes;
+        var rawSubcellCacheMiss = builder.CreateLabel("worldpack_fast_collision_raw_subcell_cache_miss");
+        var rawMetatileCacheMiss = builder.CreateLabel("worldpack_fast_collision_raw_metatile_cache_miss");
+        var rawMetatileLoaded = builder.CreateLabel("worldpack_fast_collision_raw_metatile_loaded");
         var coordinateReady = builder.CreateLabel("worldpack_fast_collision_coordinate_ready");
         var rawDirect = builder.CreateLabel("worldpack_fast_collision_raw_direct");
         var rawValidated = builder.CreateLabel("worldpack_fast_collision_raw_validated");
@@ -1904,6 +1927,12 @@ internal static class NesWorldPackRuntimeEmitter
         var idReady = builder.CreateLabel("worldpack_fast_collision_id_ready");
         var cellMiss = builder.CreateLabel("worldpack_fast_collision_cell_miss");
         var malformed = builder.CreateLabel("worldpack_fast_collision_malformed");
+
+        if (useRawCaches)
+        {
+            EmitBankedRawCollisionSubcellCacheLookup(builder, plan, rawSubcellCacheMiss);
+            builder.Label(rawSubcellCacheMiss);
+        }
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYHigh);
         builder.BranchRelative(0xD0, cellMiss);
@@ -1952,7 +1981,23 @@ internal static class NesWorldPackRuntimeEmitter
             builder.Label(rawValidated);
             if (useDirectRawRead)
             {
-                EmitDirectRawCollisionRead(builder, idReady);
+                if (useRawCaches)
+                {
+                    EmitBankedRawCollisionMetatileCacheLookup(
+                        builder,
+                        plan,
+                        rawMetatileCacheMiss,
+                        idReady);
+                    builder.Label(rawMetatileCacheMiss);
+                    EmitDirectRawCollisionRead(builder, rawMetatileLoaded);
+                    builder.Label(rawMetatileLoaded);
+                    EmitBankedRawCollisionMetatileCacheStore(builder, plan);
+                    builder.JumpAbsolute(idReady);
+                }
+                else
+                {
+                    EmitDirectRawCollisionRead(builder, idReady);
+                }
             }
             else
             {
@@ -2058,6 +2103,10 @@ internal static class NesWorldPackRuntimeEmitter
         builder.TransferAToX();
         builder.LdaAbsoluteX(CollisionProfilesLabel);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
+        if (useRawCaches)
+        {
+            EmitBankedRawCollisionSubcellCacheStore(builder, plan);
+        }
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCellResult);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCellXLow);
@@ -2078,11 +2127,21 @@ internal static class NesWorldPackRuntimeEmitter
     private static void EmitDirectRawVisualRead(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
+        bool useBankedCellCache,
         string idReady)
     {
+        var cacheMiss = builder.CreateLabel("worldpack_fast_visual_cell_cache_miss");
+        var ordinaryBankSelection = builder.CreateLabel("worldpack_fast_visual_ordinary_bank_selection");
+        var bulkBankReady = builder.CreateLabel("worldpack_fast_visual_bulk_bank_ready");
         var bankReady = builder.CreateLabel("worldpack_fast_visual_bank_ready");
         var addressReady = builder.CreateLabel("worldpack_fast_visual_address_ready");
         var bankRestored = builder.CreateLabel("worldpack_fast_visual_bank_restored");
+
+        if (useBankedCellCache)
+        {
+            EmitBankedRawVisualCellCacheLookup(builder, plan, cacheMiss, idReady);
+            builder.Label(cacheMiss);
+        }
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
         if (plan.Pack.Descriptor.VisualIdBytes == 2)
@@ -2106,6 +2165,21 @@ internal static class NesWorldPackRuntimeEmitter
         builder.TransferAToX();
         builder.LdaAbsoluteX(R6BankTableLabel);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+        if (useBankedCellCache)
+        {
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadActive);
+            builder.JumpIf(0xF0, ordinaryBankSelection);
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
+            builder.CompareAbsolute(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
+            builder.JumpIf(0xF0, bulkBankReady);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadCurrentBank);
+            builder.CallSubroutine("mmc3_select_r6");
+            builder.Label(bulkBankReady);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.PlaneKind);
+            builder.JumpAbsolute(addressReady);
+            builder.Label(ordinaryBankSelection);
+        }
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
         builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.Codec);
         builder.JumpIf(0xF0, bankReady);
@@ -2149,8 +2223,234 @@ internal static class NesWorldPackRuntimeEmitter
         builder.PullA();
         builder.CallSubroutine("mmc3_select_r6");
         builder.Label(bankRestored);
+        if (useBankedCellCache)
+        {
+            EmitBankedRawVisualCellCacheStore(builder, plan);
+        }
         builder.JumpAbsolute(idReady);
     }
+
+    private static void EmitBankedRawVisualCellCacheLookup(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        string miss,
+        string hit)
+    {
+        var cache = BankedRawVisualCellCache(plan);
+        EmitBankedRawVisualCellCacheIndex(builder);
+        builder.LoadAAbsoluteX(cache.ChunkTag);
+        builder.JumpIf(0xF0, miss);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+        builder.LoadAAbsoluteX(cache.ChunkTag);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.Id);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdLow);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdHigh);
+        builder.JumpAbsolute(hit);
+    }
+
+    private static void EmitBankedRawVisualCellCacheStore(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan)
+    {
+        var cache = BankedRawVisualCellCache(plan);
+        EmitBankedRawVisualCellCacheIndex(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.IdLow);
+        builder.StoreAAbsoluteX(cache.Id);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAAbsoluteX(cache.ChunkTag);
+    }
+
+    private static void EmitBankedRawVisualCellCacheIndex(PrgBuilder builder)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.XorAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.XorAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        builder.AndImmediate(0x3F);
+        builder.TransferAToX();
+    }
+
+    private static BankedRawVisualCellCacheLayout BankedRawVisualCellCache(NesWorldPackRuntimePlan plan)
+    {
+        if (plan.Layout.VisualSlots.Count < 2 ||
+            plan.Layout.VisualSlots[0].Length < 64 ||
+            plan.Layout.VisualSlots[1].Length < 64)
+        {
+            throw new InvalidOperationException("NES banked raw visual cell caching requires two 64-byte visual staging slots.");
+        }
+
+        return new BankedRawVisualCellCacheLayout(
+            plan.Layout.VisualSlots[0].Start,
+            plan.Layout.VisualSlots[1].Start);
+    }
+
+    private readonly record struct BankedRawVisualCellCacheLayout(ushort Id, ushort ChunkTag);
+
+    private const int BankedRawCollisionSubcellCacheEntries = 16;
+    private const int BankedRawCollisionMetatileCacheEntries = 16;
+
+    private static void EmitBankedRawCollisionSubcellCacheLookup(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        string miss)
+    {
+        var cache = BankedRawCollisionSubcellCache(plan);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYHigh);
+        builder.JumpIf(0xD0, miss);
+        EmitBankedRawCollisionSubcellCacheIndex(builder);
+        builder.LoadAAbsoluteX(cache.Valid);
+        builder.JumpIf(0xF0, miss);
+        builder.LoadAAbsoluteX(cache.XLow);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.XHigh);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXHigh);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.YLow);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYLow);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.Result);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
+        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.Return();
+    }
+
+    private static void EmitBankedRawCollisionSubcellCacheStore(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan)
+    {
+        var cache = BankedRawCollisionSubcellCache(plan);
+        EmitBankedRawCollisionSubcellCacheIndex(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
+        builder.StoreAAbsoluteX(cache.Result);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.StoreAAbsoluteX(cache.XLow);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXHigh);
+        builder.StoreAAbsoluteX(cache.XHigh);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYLow);
+        builder.StoreAAbsoluteX(cache.YLow);
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsoluteX(cache.Valid);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
+    }
+
+    private static void EmitBankedRawCollisionSubcellCacheIndex(PrgBuilder builder)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareXLow);
+        builder.XorAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYLow);
+        builder.AndImmediate(BankedRawCollisionSubcellCacheEntries - 1);
+        builder.TransferAToX();
+    }
+
+    private static BankedRawCollisionSubcellCacheLayout BankedRawCollisionSubcellCache(
+        NesWorldPackRuntimePlan plan)
+    {
+        var start = BankedRawCollisionCacheStorageStart(plan);
+        return new BankedRawCollisionSubcellCacheLayout(
+            start,
+            checked((ushort)(start + BankedRawCollisionSubcellCacheEntries)),
+            checked((ushort)(start + BankedRawCollisionSubcellCacheEntries * 2)),
+            checked((ushort)(start + BankedRawCollisionSubcellCacheEntries * 3)),
+            checked((ushort)(start + BankedRawCollisionSubcellCacheEntries * 4)));
+    }
+
+    private static ushort BankedRawCollisionCacheStorageStart(NesWorldPackRuntimePlan plan)
+    {
+        var slot0 = plan.Layout.CollisionSlots[0];
+        var slot1 = plan.Layout.CollisionSlots[1];
+        var requiredBytes = BankedRawCollisionSubcellCacheEntries * 5
+                            + BankedRawCollisionMetatileCacheEntries * 3;
+        if (slot1.Start != slot0.Start + slot0.Length
+            || slot0.Length + slot1.Length < requiredBytes)
+        {
+            throw new InvalidOperationException(
+                $"NES banked raw collision caches require {requiredBytes} contiguous bytes; "
+                + $"collision staging provides {slot0.Length + slot1.Length}.");
+        }
+
+        return slot0.Start;
+    }
+
+    private readonly record struct BankedRawCollisionSubcellCacheLayout(
+        ushort Result,
+        ushort XLow,
+        ushort XHigh,
+        ushort YLow,
+        ushort Valid);
+
+    private static void EmitBankedRawCollisionMetatileCacheLookup(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        string miss,
+        string hit)
+    {
+        var cache = BankedRawCollisionMetatileCache(plan);
+        EmitBankedRawCollisionMetatileCacheIndex(builder);
+        builder.LoadAAbsoluteX(cache.IdTag);
+        builder.JumpIf(0xF0, miss);
+        builder.LoadAAbsoluteX(cache.Chunk);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.Cell);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        builder.JumpIf(0xD0, miss);
+        builder.LoadAAbsoluteX(cache.IdTag);
+        builder.SetCarry();
+        builder.SubtractImmediate(1);
+        builder.JumpAbsolute(hit);
+    }
+
+    private static void EmitBankedRawCollisionMetatileCacheStore(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan)
+    {
+        var cache = BankedRawCollisionMetatileCache(plan);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+        EmitBankedRawCollisionMetatileCacheIndex(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow);
+        builder.StoreAAbsoluteX(cache.Chunk);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        builder.StoreAAbsoluteX(cache.Cell);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAAbsoluteX(cache.IdTag);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.ReadValue);
+    }
+
+    private static void EmitBankedRawCollisionMetatileCacheIndex(PrgBuilder builder)
+    {
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
+        builder.AndImmediate(BankedRawCollisionMetatileCacheEntries - 1);
+        builder.TransferAToX();
+    }
+
+    private static BankedRawCollisionMetatileCacheLayout BankedRawCollisionMetatileCache(
+        NesWorldPackRuntimePlan plan)
+    {
+        var start = checked((ushort)(
+            BankedRawCollisionCacheStorageStart(plan)
+            + BankedRawCollisionSubcellCacheEntries * 5));
+        return new BankedRawCollisionMetatileCacheLayout(
+            start,
+            checked((ushort)(start + BankedRawCollisionMetatileCacheEntries)),
+            checked((ushort)(start + BankedRawCollisionMetatileCacheEntries * 2)));
+    }
+
+    private readonly record struct BankedRawCollisionMetatileCacheLayout(
+        ushort IdTag,
+        ushort Chunk,
+        ushort Cell);
 
     private static void EmitDirectRawCollisionRead(PrgBuilder builder, string idReady)
     {
@@ -2892,7 +3192,12 @@ internal static class NesWorldPackRuntimeEmitter
 
     private static void EmitBeginBulkRead(PrgBuilder builder, NesWorldPackPlacement? placement)
     {
-        if (placement is null)
+        EmitBeginBankedRawReadBatch(builder, placement is not null);
+    }
+
+    internal static void EmitBeginBankedRawReadBatch(PrgBuilder builder, bool enabled)
+    {
+        if (!enabled)
         {
             return;
         }
@@ -2901,6 +3206,23 @@ internal static class NesWorldPackRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadEntryBank);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadCurrentBank);
         builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadActive);
+    }
+
+    internal static void EmitEndBankedRawReadBatch(PrgBuilder builder, bool enabled)
+    {
+        if (!enabled)
+        {
+            return;
+        }
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadEntryBank);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
+        var restored = builder.CreateLabel("nes_packed_edge_batch_bank_restored");
+        builder.JumpIf(0xF0, restored);
+        builder.CallSubroutine("mmc3_select_r6");
+        builder.Label(restored);
+        builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.BulkReadActive);
     }
 

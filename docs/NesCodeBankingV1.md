@@ -74,6 +74,16 @@ rules:
 - fixed `WorldPack` helpers restore the caller's R6 bank and shadow before
   returning to banked gameplay.
 
+The code-banked raw `WorldPack` fast path also reuses target-private staging
+storage as direct-mapped visual, collision-cell, and collision-metatile caches.
+Repeated raw lookups therefore avoid an R6 round trip without changing the
+pack, SDK, or runtime ABI. Packed-camera preparation keeps the selected world
+data bank across one bounded preparation call (an eight- or sixteen-cell
+column slice, or one row) and restores the entry program bank before every
+return to gameplay. Fixed MMC3,
+RLE-backed planes, interrupt handlers, and the VBlank commit path retain their
+previous banking behavior; VBlank still performs no bank selection.
+
 V1 rejects cross-bank `JSR`, address-only references to program labels, and
 program-label relocation addends. User helpers remain inline, while calls from
 banked gameplay to fixed target subroutines remain ordinary `JSR`/`RTS` calls.
@@ -103,6 +113,14 @@ music, and inline receiver code that performs 3,456 increments. The normal
 selector must reserve the world bank first, place gameplay across at least two
 remaining R6 banks without source-authored banking, keep R7 pinned during
 runtime, and let a fixed `WorldPack` read restore the active code bank.
+
+[`validation/fixtures/nes-banked-frame-load-v1`](../validation/fixtures/nes-banked-frame-load-v1)
+is the focused behavioral canary for representative banked frame load. It
+combines packed camera movement, raw `WorldPack` visual and collision reads,
+retained sprites, actor-style work, input, and audio. Its automated observer
+owns build, liveness, progress, banking restoration, and safe PPU/OAM evidence;
+the editable runner and user playback remain the authority for perceived
+smoothness.
 
 Focused evidence is split by owner:
 

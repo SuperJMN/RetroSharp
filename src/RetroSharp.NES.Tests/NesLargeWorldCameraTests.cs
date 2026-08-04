@@ -200,6 +200,74 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
+    public void Code_banked_raw_column_prepare_selects_world_data_once_per_slice_and_restores_program_r6()
+    {
+        var directory = FullStage1ValidationFixture.Directory;
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            FullStage1ValidationFixture.MapPath,
+            NesVideoProgram.FirstSpriteTile);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(
+            FullStage1ValidationFixture.Source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: packed.SerializedBytes);
+        var program = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal));
+        var programBank = checked((byte)program.PhysicalBank);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(programBank);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, programBank);
+        Assert.Equal(
+            (byte)NesWorldPackResult.Success,
+            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+        Assert.Equal(
+            (byte)NesWorldPackResult.Success,
+            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel], 5_000_000).A);
+        cpu.SetRam(CommitAxis, Column);
+        cpu.SetRam(CommitDirection, Positive);
+        cpu.SetRam(CommitWorldEdgeLow, 52);
+        cpu.SetRam(CommitTarget, 20);
+        cpu.SetRam(CommitOrthogonalLow, 0);
+        cpu.SetRam(CommitOrthogonalHigh, 0);
+        cpu.SetRam(CommitPayloadLength, 32);
+
+        cpu.R6BankWrites.Clear();
+        var writesPerSlice = new List<int[]>();
+        var slices = new List<NesRoutineResult>();
+        for (var index = 0; index < NesPackedCameraRuntime.ColumnPrepareCalls(32); index++)
+        {
+            var writesBefore = cpu.R6BankWrites.Count;
+            slices.Add(cpu.RunRoutine(
+                result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+                maxInstructions: 5_000_000));
+            writesPerSlice.Add(cpu.R6BankWrites.Skip(writesBefore).ToArray());
+        }
+
+        Assert.Equal(
+            new byte[]
+            {
+                NesPackedCameraRuntime.PreparePending,
+                NesPackedCameraRuntime.PreparePending,
+                NesPackedCameraRuntime.PreparePending,
+                (byte)NesWorldPackResult.Success,
+            },
+            slices.Select(slice => slice.A));
+        Assert.All(slices, slice => Assert.InRange(slice.Cycles, 1, 29_780));
+        Assert.All(
+            writesPerSlice,
+            writes =>
+            {
+                Assert.Equal(2, writes.Length);
+                Assert.Equal(programBank, writes[^1]);
+            });
+        Assert.Equal(programBank, cpu.CurrentR6Bank);
+        Assert.Equal(programBank, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.BulkReadActive));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
+    }
+
+    [Fact]
     public void Complete_stage1_horizontal_column_prepare_preserves_tiles_and_vertical_attribute_stride()
     {
         var directory = RepositoryDirectory("samples/tiled-hscroll");

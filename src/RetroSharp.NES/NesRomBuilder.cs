@@ -420,7 +420,8 @@ internal static class NesRomBuilder
                 worldPackRuntime,
                 worldPackPlacement,
                 worldPackProbe,
-                program.UsesCameraRuntime ? frameScheduler : null);
+                program.UsesCameraRuntime ? frameScheduler : null,
+                optimizeBankedRawAccess: programLinkMode is NesProgramLinkMode.BankedR6);
         }
         if (layout.EmitMmc3Foundation)
         {
