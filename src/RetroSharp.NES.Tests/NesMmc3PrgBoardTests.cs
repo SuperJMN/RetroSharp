@@ -170,7 +170,8 @@ public sealed class NesMmc3PrgBoardTests
         var settledFrames = cpu.PhysicalFrames;
         cpu.RunFrames(settledFrames + 60);
 
-        Assert.Equal(unchecked((byte)4_992), cpu.Ram(counter));
+        // The generated fold stream ends with counter.value == 8; see the fixture source header.
+        Assert.Equal(8, cpu.Ram(counter));
         Assert.Equal(
             cpu.PhysicalFrames - settledFrames,
             unchecked((byte)(cpu.Ram(ticks) - settledTicks)));

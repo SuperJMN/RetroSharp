@@ -129,14 +129,15 @@ public partial class NesRomCompilerTests
         for (var frame = 1;
              frame <= 900 &&
              (visitedProgramBanks.Count != expectedProgramBanks.Count ||
-              cpu.Ram(valueAddress) != unchecked((byte)3_456));
+              cpu.Ram(valueAddress) != 171);
              frame++)
         {
             cpu.RunFrames(frame);
         }
 
         Assert.Equal(expectedProgramBanks, visitedProgramBanks);
-        Assert.Equal(unchecked((byte)3_456), cpu.Ram(valueAddress));
+        // The generated fold stream ends with counter.value == 171; see the fixture source header.
+        Assert.Equal(171, cpu.Ram(valueAddress));
         Assert.Equal(1, cpu.ResetCount);
         Assert.NotEmpty(cpu.ApuWrites);
         Assert.Equal(1, cpu.CurrentR7Bank);

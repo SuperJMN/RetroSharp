@@ -20,6 +20,7 @@ internal sealed partial class NesRuntimeCompiler
     private readonly HashSet<string> signedByteLocations = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
+    private readonly NesUserFunctionOutliner outliner;
     private readonly Stack<InlineVariableScope> inlineVariableScopes = [];
     private readonly Stack<LoopTarget> loopTargets = [];
     private readonly IReadOnlySet<int> longForLoopIds;
@@ -77,6 +78,7 @@ internal sealed partial class NesRuntimeCompiler
         usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
         sdkOperations = new NesSdkStreamReader(program.SdkProgram);
         callRecorder = new NesUserFunctionCallRecorder(builder);
+        outliner = PlanOutlining(program);
         sdkOperationLowerer = new NesSdkOperationLowerer(
             builder,
             program,
@@ -106,6 +108,7 @@ internal sealed partial class NesRuntimeCompiler
     public void Emit(BlockSyntax block)
     {
         EmitBlock(block);
+        EmitOutlinedUserFunctions();
         sdkOperations.EnsureAllConsumed("NES runtime");
     }
 
@@ -120,6 +123,23 @@ internal sealed partial class NesRuntimeCompiler
     }
 
     internal NesSdkOperationLowerer SdkOperationLowerer => sdkOperationLowerer;
+
+    /// <summary>Cold and one-shot user functions this compiler emitted once and reached by <c>JSR</c>.</summary>
+    internal NesUserFunctionOutliner Outliner => outliner;
+
+    private static NesUserFunctionOutliner PlanOutlining(NesVideoProgram program)
+    {
+        try
+        {
+            return NesUserFunctionOutliner.Plan(program);
+        }
+        catch (InvalidOperationException)
+        {
+            // A malformed program (recursion, unsupported shape) still has to reach the emission
+            // path so it fails with the diagnostic that path already produces.
+            return NesUserFunctionOutliner.Empty;
+        }
+    }
 
     /// <summary>
     /// Per-user-function call accounting for everything this compiler emitted. <paramref name="hasFrameLoop"/>

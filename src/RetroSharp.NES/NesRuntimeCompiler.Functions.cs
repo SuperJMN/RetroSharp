@@ -136,6 +136,21 @@ internal sealed partial class NesRuntimeCompiler
             return false;
         }
 
+        if (outliner.TryOutlineCall(function, call, OutlineOperandToken, out var label))
+        {
+            using (callRecorder.EnterCall(
+                       function.Name,
+                       loopTargets.Count,
+                       ClassifyCallArguments(function, call),
+                       NesUserFunctionEmission.OutlinedCall,
+                       label))
+            {
+                builder.CallSubroutine(label);
+            }
+
+            return true;
+        }
+
         if (!userFunctionCallStack.Add(function.Name))
         {
             throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
@@ -162,6 +177,58 @@ internal sealed partial class NesRuntimeCompiler
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Emits one body per outlined specialization, outside every placement unit so the bodies stay
+    /// fixed-resident and remain reachable by a same-bank <c>JSR</c> from any banked caller.
+    /// Emitting a body can discover further outlined calls, so the queue is drained.
+    /// </summary>
+    internal void EmitOutlinedUserFunctions()
+    {
+        while (outliner.TryDequeueBody(out var body))
+        {
+            builder.Label(body.Label);
+            using (callRecorder.EnterCall(
+                       body.Function.Name,
+                       loopTargets.Count,
+                       ClassifyCallArguments(body.Function, body.Call),
+                       NesUserFunctionEmission.OutlinedBody,
+                       body.Label))
+            {
+                try
+                {
+                    PushInlineVariableScope();
+                    EmitBlock(ParameterSubstitution.Substitute(body.Function, body.Call, "NES"));
+                }
+                finally
+                {
+                    PopInlineVariableScope();
+                }
+            }
+
+            builder.Return();
+        }
+    }
+
+    /// <summary>
+    /// Resolves one call argument to a compile-time operand token, or <see langword="null"/> when it
+    /// would need an argument frame. A constant is its own operand; an identifier is an operand only
+    /// when it names the same storage inside an outlined body as it does at the call site, which is
+    /// exactly the case where inline scopes do not rename it.
+    /// </summary>
+    private string? OutlineOperandToken(ExpressionSyntax argument)
+    {
+        if (argument is IdentifierSyntax identifier)
+        {
+            return string.Equals(ScopedVariableName(identifier.Identifier), identifier.Identifier, StringComparison.Ordinal)
+                ? "name:" + identifier.Identifier
+                : null;
+        }
+
+        return TryConst(argument, out var value)
+            ? "const:" + value.ToString(CultureInfo.InvariantCulture)
+            : null;
     }
 
     private bool TryEmitUserValueFunction(FunctionCall call)

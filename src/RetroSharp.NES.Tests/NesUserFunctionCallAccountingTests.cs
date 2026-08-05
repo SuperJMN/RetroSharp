@@ -176,36 +176,6 @@ public sealed class NesUserFunctionCallAccountingTests
         Assert.True(locate.RepeatsPerFrame);
     }
 
-    [Fact]
-    public void Executable_banking_reports_its_largest_duplication_as_startup_only()
-    {
-        var build = CompileSample(
-            ["samples/executable-banking/executable-banking.rs"],
-            "samples/executable-banking",
-            rootNamespace: null,
-            sourceRoot: null);
-        var report = build.Report.UserFunctionCalls;
-        var step512 = Assert.Single(report.Functions, function => function.Name == "Step512");
-
-        Assert.False(report.HasFrameLoop);
-        Assert.Equal(NesUserFunctionPhase.OneShot, step512.Phase);
-        Assert.Equal(0, step512.CallsPerFrame);
-        Assert.DoesNotContain(report.Functions, function => function.Phase is NesUserFunctionPhase.Hot);
-        Assert.All(
-            report.ForRuntimeWork,
-            call => Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, call.PlacementUnit));
-
-        Assert.Equal(8, step512.EmittedCopies);
-        Assert.Equal(step512.TotalEmittedBytes - step512.EmittedBodyBytes, step512.DuplicatedBytes);
-        Assert.InRange(step512.DuplicatedBytes, 20_000, 30_000);
-        Assert.True(step512.DuplicatedBytes > build.Report.ProgramR6Bytes / 2);
-
-        // Step512 nests Step64 nests Step8, so inclusive bytes overlap; the report's own duplication
-        // total uses the non-overlapping share instead.
-        Assert.True(report.DuplicatedBytes < report.Functions.Sum(function => function.DuplicatedBytes));
-        Assert.InRange(report.DuplicatedBytes, 25_000, build.Report.ProgramR6Bytes);
-    }
-
     private static NesRomBuildResult CompileSource(string source) =>
         RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             source,
@@ -214,6 +184,13 @@ public sealed class NesUserFunctionCallAccountingTests
             null,
             [SdkImportResolver.Portable2D],
             null);
+
+    internal static NesRomBuildResult CompileSampleForTests(
+        string[] sourceRelativePaths,
+        string baseDirectoryRelativePath,
+        string? rootNamespace,
+        string? sourceRoot) =>
+        CompileSample(sourceRelativePaths, baseDirectoryRelativePath, rootNamespace, sourceRoot);
 
     private static NesRomBuildResult CompileSample(
         string[] sourceRelativePaths,

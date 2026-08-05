@@ -37,7 +37,22 @@ internal sealed record NesUserFunctionArguments(
 }
 
 /// <summary>
-/// One inline expansion of a user function, recorded while the runtime compiler emitted it.
+/// How the runtime compiler realised one recorded user-function call.
+/// </summary>
+internal enum NesUserFunctionEmission
+{
+    /// <summary>The body was substituted and emitted at the call site.</summary>
+    Inlined,
+
+    /// <summary>The single shared body an outlined specialization emits, reached by <c>JSR</c>.</summary>
+    OutlinedBody,
+
+    /// <summary>A call site that only emits the <c>JSR</c> into a shared body.</summary>
+    OutlinedCall,
+}
+
+/// <summary>
+/// One emitted expansion or call of a user function, recorded while the runtime compiler emitted it.
 /// <see cref="EmittedBytes"/> is inclusive of nested expansions because that is what outlining
 /// the expansion would remove; <see cref="Parent"/> reconstructs the nesting.
 /// </summary>
@@ -48,8 +63,13 @@ internal sealed record NesUserFunctionExpansion(
     NesPrgPlacementPhase Phase,
     int LoopDepth,
     int EmittedBytes,
-    NesUserFunctionArguments Arguments)
+    NesUserFunctionArguments Arguments,
+    NesUserFunctionEmission Emission = NesUserFunctionEmission.Inlined,
+    string? Specialization = null)
 {
+    /// <summary>True when this recording is code physically emitted for the function's own body.</summary>
+    internal bool IsEmittedBody => Emission is not NesUserFunctionEmission.OutlinedCall;
+
     /// <summary>
     /// True when the call sits inside a loop nested below the placement unit's own loop, so it runs
     /// an unknown number of times per visit instead of exactly once.
@@ -162,6 +182,7 @@ internal static class NesUserFunctionCallAccounting
         var directCalls = DirectCalls(expansions);
         return expansions
             .Select((expansion, index) => (expansion, index))
+            .Where(entry => entry.expansion.IsEmittedBody)
             .GroupBy(entry => entry.expansion.Function, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group =>
@@ -190,13 +211,15 @@ internal static class NesUserFunctionCallAccounting
     {
         ArgumentNullException.ThrowIfNull(expansions);
         var directCalls = DirectCalls(expansions);
+        var bodies = OutlinedBodies(expansions);
         var calls = new List<NesUserFunctionCall>();
         var callStack = new List<string>();
         for (var index = 0; index < expansions.Count; index++)
         {
-            if (expansions[index].Parent < 0)
+            var expansion = expansions[index];
+            if (expansion.Parent < 0 && expansion.Emission is not NesUserFunctionEmission.OutlinedBody)
             {
-                Expand(index, ProgramCaller, expansions, directCalls, callStack, calls);
+                Expand(index, ProgramCaller, expansions, directCalls, bodies, callStack, calls);
             }
         }
 
@@ -208,16 +231,25 @@ internal static class NesUserFunctionCallAccounting
         string caller,
         IReadOnlyList<NesUserFunctionExpansion> expansions,
         IReadOnlyList<IReadOnlyList<int>> directCalls,
+        IReadOnlyDictionary<string, int> bodies,
         List<string> callStack,
-        ICollection<NesUserFunctionCall> calls)
+        ICollection<NesUserFunctionCall> calls,
+        string? placementUnit = null,
+        NesPrgPlacementPhase? phase = null,
+        bool repeats = false)
     {
         var expansion = expansions[index];
+        // An outlined body is emitted outside every placement unit, so the executing context comes
+        // from the call site that reached it rather than from where its bytes physically live.
+        var unit = placementUnit ?? expansion.PlacementUnit;
+        var executingPhase = phase ?? expansion.Phase;
+        var executingRepeats = repeats || expansion.Repeats;
         calls.Add(new NesUserFunctionCall(
             expansion.Function,
             caller,
-            expansion.PlacementUnit,
-            expansion.Phase,
-            expansion.Repeats));
+            unit,
+            executingPhase,
+            executingRepeats));
 
         if (callStack.Contains(expansion.Function, StringComparer.Ordinal))
         {
@@ -230,9 +262,24 @@ internal static class NesUserFunctionCallAccounting
         callStack.Add(expansion.Function);
         try
         {
-            foreach (var callee in directCalls[index])
+            var source = expansion.Emission is NesUserFunctionEmission.OutlinedCall
+                         && expansion.Specialization is { } specialization
+                         && bodies.TryGetValue(specialization, out var bodyIndex)
+                ? bodyIndex
+                : index;
+            foreach (var callee in directCalls[source])
             {
-                Expand(callee, expansion.Function, expansions, directCalls, callStack, calls);
+                Expand(
+                    callee,
+                    expansion.Function,
+                    expansions,
+                    directCalls,
+                    bodies,
+                    callStack,
+                    calls,
+                    unit,
+                    executingPhase,
+                    executingRepeats);
             }
         }
         finally
@@ -250,7 +297,8 @@ internal static class NesUserFunctionCallAccounting
     {
         var emitted = expansions
             .Select((expansion, index) => (expansion, index))
-            .Where(entry => string.Equals(entry.expansion.Function, body.Function, StringComparison.Ordinal))
+            .Where(entry => entry.expansion.IsEmittedBody
+                            && string.Equals(entry.expansion.Function, body.Function, StringComparison.Ordinal))
             .ToArray();
         var calls = runtimeWork
             .Where(call => string.Equals(call.Function, body.Function, StringComparison.Ordinal))
@@ -289,7 +337,7 @@ internal static class NesUserFunctionCallAccounting
         for (var index = 0; index < expansions.Count; index++)
         {
             var parent = expansions[index].Parent;
-            if (parent >= 0)
+            if (parent >= 0 && expansions[index].Emission is NesUserFunctionEmission.Inlined)
             {
                 self[parent] -= expansions[index].EmittedBytes;
             }
@@ -314,6 +362,20 @@ internal static class NesUserFunctionCallAccounting
         return calls;
     }
 
+    private static IReadOnlyDictionary<string, int> OutlinedBodies(
+        IReadOnlyList<NesUserFunctionExpansion> expansions)
+    {
+        var bodies = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var index = 0; index < expansions.Count; index++)
+        {
+            if (expansions[index] is { Emission: NesUserFunctionEmission.OutlinedBody, Specialization: { } label })
+            {
+                bodies[label] = index;
+            }
+        }
+
+        return bodies;
+    }
 }
 
 /// <summary>
@@ -333,10 +395,17 @@ internal sealed class NesUserFunctionCallRecorder(PrgBuilder builder)
             recording.Phase,
             recording.LoopDepth,
             recording.EmittedBytes,
-            recording.Arguments))
+            recording.Arguments,
+            recording.Emission,
+            recording.Specialization))
         .ToArray();
 
-    internal IDisposable EnterCall(string function, int loopDepth, NesUserFunctionArguments arguments)
+    internal IDisposable EnterCall(
+        string function,
+        int loopDepth,
+        NesUserFunctionArguments arguments,
+        NesUserFunctionEmission emission = NesUserFunctionEmission.Inlined,
+        string? specialization = null)
     {
         var recording = new Recording(
             function,
@@ -345,7 +414,9 @@ internal sealed class NesUserFunctionCallRecorder(PrgBuilder builder)
             builder.CurrentPlacementPhase,
             loopDepth,
             arguments,
-            builder.EmittedByteCursor);
+            builder.EmittedByteCursor,
+            emission,
+            specialization);
         recordings.Add(recording);
         active.Push(recordings.Count - 1);
         return new CallScope(this, recording);
@@ -364,7 +435,9 @@ internal sealed class NesUserFunctionCallRecorder(PrgBuilder builder)
         NesPrgPlacementPhase phase,
         int loopDepth,
         NesUserFunctionArguments arguments,
-        int startCursor)
+        int startCursor,
+        NesUserFunctionEmission emission,
+        string? specialization)
     {
         internal string Function { get; } = function;
 
@@ -379,6 +452,10 @@ internal sealed class NesUserFunctionCallRecorder(PrgBuilder builder)
         internal NesUserFunctionArguments Arguments { get; } = arguments;
 
         internal int StartCursor { get; } = startCursor;
+
+        internal NesUserFunctionEmission Emission { get; } = emission;
+
+        internal string? Specialization { get; } = specialization;
 
         internal int EmittedBytes { get; set; }
     }

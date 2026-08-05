@@ -69,7 +69,8 @@ internal sealed record NesPrgBuild(
     SdkCpuWorkReport FrameCpuWork,
     int FixedHeadroomBytes,
     NesProgramBankPlacementReport? BankPlacement,
-    NesUserFunctionCallAccountingReport UserFunctionCalls);
+    NesUserFunctionCallAccountingReport UserFunctionCalls,
+    IReadOnlyList<NesOutlinedUserFunction> OutlinedUserFunctions);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 
@@ -95,7 +96,21 @@ internal sealed record NesRomBuildReport(
     SdkCpuWorkReport CpuWork,
     int FixedHeadroomBytes,
     NesProgramBankPlacementReport? BankPlacement,
-    NesUserFunctionCallAccountingReport UserFunctionCalls);
+    NesUserFunctionCallAccountingReport UserFunctionCalls,
+    IReadOnlyList<NesOutlinedUserFunction> OutlinedUserFunctions);
+
+/// <summary>
+/// One cold or one-shot user function emitted once and reached by <see cref="CallSites"/> JSRs.
+/// <see cref="OverridesInlineHint"/> names the helpers whose <c>inline</c> hint the target chose
+/// to override, so the decision is auditable from a production build report.
+/// </summary>
+internal sealed record NesOutlinedUserFunction(
+    string Function,
+    string Label,
+    ushort CpuAddress,
+    NesUserFunctionPhase Phase,
+    int CallSites,
+    bool OverridesInlineHint);
 
 /// <summary>
 /// One shared SDK operation body emitted once and reached by <see cref="CallSites"/> JSRs.
