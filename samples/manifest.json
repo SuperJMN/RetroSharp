@@ -23,6 +23,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "executable-banking",
+      "path": "samples/executable-banking/executable-banking.rs",
+      "readme": "samples/executable-banking/README.md",
+      "layer": "target-acceptance",
+      "targets": ["nes"]
+    },
+    {
       "id": "falling-blocks",
       "path": "samples/falling-blocks/falling-blocks.retrosharp.json",
       "readme": "samples/falling-blocks/README.md",

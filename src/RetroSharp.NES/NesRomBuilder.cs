@@ -10,6 +10,7 @@ namespace RetroSharp.NES;
 internal static class NesRomBuilder
 {
     internal const string CodeBankedProfileName = "nes-mmc3-tvrom-codebank-v1";
+    internal const string MainPlacementUnitName = "program:main";
     private const string ProgramEntryLabel = "banked_program_entry";
     private const ushort Mmc3BootPaletteAddress = 0xA000;
     private const ushort Mmc3BootNameTableAddress = 0xA020;
@@ -445,19 +446,19 @@ internal static class NesRomBuilder
         if (programLinkMode is NesProgramLinkMode.BankedR6)
         {
             builder.JumpAbsolute(ProgramEntryLabel);
-            using (builder.EnterSection(NesPrgResidence.ProgramR6))
-            {
-                var programStartAddress = builder.CurrentAddress;
-                builder.Label(ProgramEntryLabel);
-                runtimeCompiler.Emit(program.MainBlock);
-                builder.Label("forever");
-                builder.JumpAbsolute("forever");
-                movableProgramBytes = builder.CurrentAddress - programStartAddress;
-            }
         }
-        else
+
+        var programResidence = programLinkMode is NesProgramLinkMode.BankedR6
+            ? NesPrgResidence.ProgramR6
+            : NesPrgResidence.Fixed;
+        using (builder.EnterPlacementUnit(MainPlacementUnitName, programResidence))
         {
             var programStartAddress = builder.CurrentAddress;
+            if (programLinkMode is NesProgramLinkMode.BankedR6)
+            {
+                builder.Label(ProgramEntryLabel);
+            }
+
             runtimeCompiler.Emit(program.MainBlock);
             builder.Label("forever");
             builder.JumpAbsolute("forever");
@@ -685,6 +686,7 @@ internal static class NesRomBuilder
                 .Where(pair => pair.Value.Residence is NesPrgResidence.ProgramR6)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal) ??
             new Dictionary<string, NesPrgSymbol>(StringComparer.Ordinal),
+            linkedProgram?.PlacementUnits ?? builder.PlacementUnits,
             runtimeCompiler.UserVariables,
             DescribeSharedSdkSubroutines(builder),
             frameScheduler.SelectedProfile,
@@ -918,6 +920,7 @@ internal static class NesRomBuilder
             orderedSegments,
             prgBuild.FixedSymbols,
             prgBuild.ProgramSymbols,
+            prgBuild.PlacementUnits,
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
             prgBuild.SharedSdkSubroutines,

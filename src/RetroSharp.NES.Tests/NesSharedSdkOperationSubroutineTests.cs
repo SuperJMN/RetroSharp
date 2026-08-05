@@ -72,12 +72,15 @@ public sealed class NesSharedSdkOperationSubroutineTests
         var helper = Assert.Single(
             shared.Labels,
             pair => pair.Key.StartsWith("nes_sdk_shared_draw_logical_sprite_", StringComparison.Ordinal));
-        Assert.Equal(NesPrgResidence.Fixed, helper.Value.Residence);
+        Assert.Null(helper.Value.PlacementUnitName);
         var calls = shared.Relocations
             .Where(relocation => relocation.Kind is NesPrgRelocationKind.AbsoluteCall && relocation.Label == helper.Key)
             .ToArray();
         Assert.Equal(2, calls.Length);
-        Assert.All(calls, call => Assert.Equal(NesPrgResidence.ProgramR6, call.Residence));
+        var programUnit = Assert.Single(shared.PlacementUnits);
+        Assert.Equal("program:test", programUnit.Name);
+        Assert.Equal(NesPrgResidence.ProgramR6, programUnit.Residence);
+        Assert.All(calls, call => Assert.Equal(programUnit.Name, call.PlacementUnitName));
         Assert.DoesNotContain(
             unrolled.Labels,
             pair => pair.Key.StartsWith("nes_sdk_shared_draw_logical_sprite_", StringComparison.Ordinal));
@@ -231,7 +234,7 @@ public sealed class NesSharedSdkOperationSubroutineTests
             useSequentialOamPublication: false,
             shareRepeatedSdkOperations: shareRepeatedSdkOperations);
         compiler.EmitInitialization();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit("program:test", NesPrgResidence.ProgramR6))
         {
             compiler.Emit(program.MainBlock);
         }
@@ -240,6 +243,7 @@ public sealed class NesSharedSdkOperationSubroutineTests
         return builder.FreezeForLink();
     }
 
-    private static int TotalBytes(NesPrgEmission emission) => emission.Sections.Values.Sum(section => section.Bytes.Length);
+    private static int TotalBytes(NesPrgEmission emission) =>
+        emission.FixedSection.Bytes.Length + emission.PlacementUnits.Sum(unit => unit.Bytes.Length);
 
 }

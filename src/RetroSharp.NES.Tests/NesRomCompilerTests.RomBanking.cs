@@ -207,6 +207,28 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
+    public void Tracked_executable_banking_sample_selects_the_codebank_profile()
+    {
+        var sourcePath = RepositoryFile("samples/executable-banking/executable-banking.rs");
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(sourcePath),
+            Path.GetDirectoryName(sourcePath));
+        var unit = Assert.Single(result.Report.PlacementUnits);
+
+        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, unit.Name);
+        Assert.Equal(NesPrgResidence.ProgramR6, unit.Residence);
+        Assert.Equal(result.Report.ProgramR6Bytes, unit.Size);
+        // Lower bound only: the sample must genuinely span several R6 banks for the banked path to
+        // be exercised. Pinning an upper bound would couple this test to how close the sample sits
+        // to the board's program-bank pool, which grows with codegen and board size.
+        Assert.True(
+            result.Report.Segments.Count(segment =>
+                segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal)) >= 2,
+            "The tracked executable-banking sample must span at least two R6 program banks.");
+    }
+
+    [Fact]
     public void Forced_codebank_link_keeps_gameplay_in_r6_and_runtime_in_fixed_prg()
     {
         const string source = """
@@ -233,6 +255,29 @@ public partial class NesRomCompilerTests
             Assert.InRange(symbol.CpuAddress, 0x8000, 0x9FFF);
         });
         Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, result.Rom[4..8]);
+    }
+
+    [Fact]
+    public void Build_report_lists_the_main_placement_unit_in_both_residences()
+    {
+        const string source = """
+                              void Main() {
+                                  u8 value = 1;
+                                  value += 2;
+                              }
+                              """;
+
+        var fixedBuild = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(source);
+        var bankedBuild = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(source);
+        var fixedUnit = Assert.Single(fixedBuild.Report.PlacementUnits);
+        var bankedUnit = Assert.Single(bankedBuild.Report.PlacementUnits);
+
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, fixedUnit.Name);
+        Assert.Equal(NesPrgResidence.Fixed, fixedUnit.Residence);
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, bankedUnit.Name);
+        Assert.Equal(NesPrgResidence.ProgramR6, bankedUnit.Residence);
+        Assert.Equal(fixedUnit.Size, bankedUnit.Size);
+        Assert.True(fixedUnit.Size > 0);
     }
 
     [Fact]
