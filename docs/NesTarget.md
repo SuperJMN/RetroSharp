@@ -67,15 +67,65 @@ above 152 bytes before emission; incomplete window coverage never claims
 headroom.
 Reachable mapper-0 streams that use `Sprite.Draw(...)` add
 `sprite.publish.transfer` as the numeric `513..514` contributor. The MMC3
-sequential profile instead reports the complete emitted `sprite.publish` loop
-from `NesOamPublicationSchedule`: `13 * retained-bytes + 7` plus exact indexed
-load page-crossing penalties. The current shadow bias crosses for every byte,
-so the corrected cost is 1,071 cycles at 76 bytes and 2,135 at 152 bytes. It
+sequential profile instead reports the complete emitted `sprite.publish`
+publication from `NesOamPublicationSchedule`: `8 * retained-bytes + 6`, the
+cost of the straight-line form it emits, so the cost cannot drift from the
+code. That is 614 cycles at 76 bytes and 1,222 at 152 bytes. It
 does not claim a DMA transfer. Programs with no retained sprite publication
 claim neither. The report also names the remaining
 stable generated/runtime/user-loop unknowns, so arbitrary source loops are not
 assigned fabricated exact costs. There is no public source cycle API, and the
 CLI does not reject current programs merely because coverage is incomplete.
+
+### Video-safe budget
+
+The packed background column commit and the retained-OAM publication run in the
+same hardware VBlank, one after the other. Each used to carry its own isolated
+cap and neither was checked against the other, so a program could be emitted
+whose joint work overran the 2,273-cycle window and continued writing `$2007`
+and `$2004` on rendered scanlines. That is visible corruption on hardware, and
+nothing warned at build time.
+
+`NesFramePlan.RequireVideoSafeBudget(...)` now rejects such a program before
+emission. The estimate walks the same `NesPackedColumnCommit.TileRuns` and
+`AttributeGroups` shape that `NesPackedCameraRuntime` emits, so the two cannot
+disagree about how much work the commit performs. Its terms are:
+
+| Term | CPU cycles | Basis |
+| --- | --- | --- |
+| NMI entry reserve | 192 | Measured entry latency of every packed NES sample is 184..186 cycles from the start of VBlank to the first video-safe store: NMI dispatch, the frame-pending handshake, the `$2002` recheck and the publication-state store. Reserved, never spent. |
+| Frame-boundary bookkeeping | 64 | Frame counter, pending-flag clears and the tail that re-arms the handshake. |
+| Packed commit dispatch | 544 | `JSR` into the commit edge, slot selection, 16-bit tag and payload-length validation, the selected-state publication and slot-stride select. |
+| Static band, per nametable run | 20 | One folded PPUADDR pair. |
+| Static band, per tile | 9 | `LDA payload,X` plus `STA $2007`. |
+| Static band, per attribute nametable | 8 | Reload of the shared attribute high byte. |
+| Static band, per attribute byte | 23 | `STY`/`LDA #`/`ORA`/`STA` address pair plus the payload store. |
+| Sequential OAM publication | `8n + 6` | `NesOamPublicationSchedule`. |
+| `$4014` sprite DMA | 514 | Non-packed and mapper-0 profiles. |
+
+The overrun this replaced is recognisable in a PPU timeline as one retained-OAM
+byte every ~42 dots on scanline 261 and beyond, which is the ~14 CPU cycles per
+byte of the old counted publication loop. The straight-line form is 8 cycles,
+or ~24 dots, and completes inside VBlank.
+
+These are upper bounds, not equalities: `Modelled_video_safe_cost_bounds_measured_consumption`
+pins that the model is at least what `NesTestCpu` observes the emitted ROM
+spend. The diagnostic names the offending `Camera.Init` stream height, the
+retained OAM byte count, the computed cost and the limit; it never silently
+clamps.
+
+The maximum shape the staging layout can express — a 40-row static band with 11
+attribute bytes together with 152 retained OAM bytes — costs about 2,691
+cycles and is rejected. The runner's shipping configuration (40-row band, 23
+hardware sprites) is modelled at 2,211 and measured at 2,162, which is the
+closest any sample sits to the window.
+
+`NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame` (32) and
+`MaxAttributeWritesPerFrame` (11) are a different contract: they bound one
+explicit `Video.StreamMapColumn`/`StreamMapRow` and select the world height
+above which camera scrolling must use the packed runtime. The packed runtime's
+own edge commit is the taller `NesPackedCameraBudget` shape, and its fit is a
+per-program question answered by the video-safe budget above.
 
 GCP-2.3 bounds dynamic fixed-struct-array addressing without changing that
 storage or the runtime ABI. A direct zero-page index now uses a binary
@@ -138,8 +188,12 @@ Logical sprite programs use retained OAM page `$0200`. Mapper-0 and non-packed
 profiles publish it through `$4014` while rendering is in VBlank. MMC3 packed
 profiles avoid AprNes' non-completing page-$02 DMA: they publish only the
 statically used bytes sequentially through `$2004`, after a fresh NMI and
-hardware VBlank check. That path is bounded to 38 hardware sprites/152 bytes
-and 2,135 NTSC CPU cycles. Both paths then reset the statically allocated
+hardware VBlank check. The publication is emitted straight-line rather than as a
+counted loop, so it costs eight CPU cycles per retained byte plus a six-cycle
+`$2003` reset; it is bounded to 38 hardware sprites/152 bytes, or at most 1,222
+NTSC CPU cycles. That publication shares one hardware VBlank with the packed
+background column commit, and the two are budgeted jointly (see *Video-safe
+budget* below) rather than against separate isolated caps. Both paths then reset the statically allocated
 logical call-site bytes to `$FF`, so an unexecuted conditional draw cannot
 retain an earlier sprite. Startup initializes the full shadow and hardware OAM;
 source calls that accept projectile/effect requests after their `Draw()` phase
@@ -149,7 +203,7 @@ explicitly so target-side addressing optimizations do not need to preserve an
 accidental one-frame visibility measurement.
 raw/direct compatibility operations remain separate.
 
-The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. During diagonal movement, the packed path materializes the Y destination once and prefetches the future column before the boundary: the post-crossing edge is `tile+33` to the right or `tile-1` to the left, while the camera remains on its current safe pixel. The direction latch limits the remaining substeps so at least one `Camera.Apply()` occurs before crossing. A resident prefetched column advances and publishes X immediately at the crossing; a pending column retains the last safe pixel and retries, while the non-prefetched path remains reactive. In mapper-backed packed builds, column preparation advances outside VBlank in bounded eight-row slices across source ticks and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. A resident column may interleave between row phases without mutating the row slot. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
+The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. During diagonal movement, the packed path materializes the Y destination once and prefetches the future column before the boundary: the post-crossing edge is `tile+33` to the right or `tile-1` to the left, while the camera remains on its current safe pixel. The direction latch limits the remaining substeps so at least one `Camera.Apply()` occurs before crossing. A resident prefetched column advances and publishes X immediately at the crossing; a pending column retains the last safe pixel and retries, while the non-prefetched path remains reactive. In mapper-backed packed builds, column preparation advances outside VBlank in bounded eight-row slices across source ticks and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 40 column tiles plus 11 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. A static band folds every PPUADDR byte to a compile-time constant combined with the run-time nametable select and address column, so the commit costs roughly 9 CPU cycles per tile and 23 per attribute byte instead of resolving each address through the row tables. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. A resident column may interleave between row phases without mutating the row slot. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
 
 A camera window that exactly fills the visible height (its configured stream height fits the 30-row screen and reaches the bottom visible row) would otherwise draw its bottom tile row against the very bottom scanlines that hardware and most emulators crop as bottom overscan. This is based on the effective camera window, not the complete backing-map height, so a fixed 30-row view over a taller imported world receives the same treatment. The camera scroll restore shifts the scene up one tile row (adds 8 px of vertical scroll) and `Sprite.Draw(...)` offsets sprite Y by the same amount, so the full bottom row lands inside the safe area while staying aligned with sprites; the exposed bottom strip wraps to the empty four-screen sky row. Vertically scrolling windows keep their framing and receive no inset.
 

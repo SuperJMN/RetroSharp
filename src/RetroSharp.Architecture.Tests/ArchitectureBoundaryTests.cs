@@ -97,6 +97,12 @@ public sealed class ArchitectureBoundaryTests
         "src/RetroSharp.Core.Tests/SampleApiQuarantineTests.cs",
         "src/RetroSharp.GameBoy.Tests/GameBoyRunnerSmokeTests.cs",
         "src/RetroSharp.NES.Tests/NesRunnerSmokeTests.cs",
+        // The runner is the acceptance scene for the NES video-safe budget: it is the only
+        // shipping sample that drives a full-height streamed band and retained sprites through
+        // one VBlank. These assert the same smoke contract (boots, keeps running, no unsafe
+        // PPU/OAM writes), never authored gameplay.
+        "src/RetroSharp.NES.Tests/NesVideoSafeBudgetTests.cs",
+        "src/RetroSharp.NES.Tests/NesVideoSafeBudgetProbe.cs",
     ];
 
     [Fact]

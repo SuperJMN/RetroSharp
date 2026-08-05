@@ -258,7 +258,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
     [Theory]
     [InlineData("gb", 4_299, 3_000, 112, 2_609, 770, 367, 82, 298, 554, 8_192, 21, 0)]
-    [InlineData("nes", 7_205, 3_000, 3_000, 7_924, 3_120, 3_120, 90, 358, 614, 2_048, 32, 9)]
+    [InlineData("nes", 7_205, 3_000, 3_000, 7_924, 3_120, 3_120, 90, 358, 614, 2_048, 40, 11)]
     public void Cli_world_budget_report_uses_real_small_and_full_stage1_packs(
         string target,
         int smallPackBytes,
@@ -331,8 +331,16 @@ public sealed class CrossTargetCliAcceptanceTests
             root.GetProperty("diagnostics").EnumerateArray(),
             item => item.GetProperty("category").GetString() == "staging-ram");
         Assert.Equal("worldpack-v1-staging-maximum", stagingDiagnostic.GetProperty("profile").GetString());
+        // Usage is the per-frame commit this world demands; the limit is what the target's edge
+        // commit can publish. They are separate numbers, so the category can actually overflow.
         Assert.Equal(tileWrites, root.GetProperty("vblank").GetProperty("tileWritesUsed").GetInt32());
         Assert.Equal(attributeWrites, root.GetProperty("vblank").GetProperty("attributeWritesUsed").GetInt32());
+        Assert.True(
+            root.GetProperty("vblank").GetProperty("tileWritesUsed").GetInt32()
+            <= root.GetProperty("vblank").GetProperty("tileWriteLimit").GetInt32());
+        Assert.True(
+            root.GetProperty("vblank").GetProperty("attributeWritesUsed").GetInt32()
+            <= root.GetProperty("vblank").GetProperty("attributeWriteLimit").GetInt32());
         Assert.True(root.GetProperty("cartridge").GetProperty("romPrgBytesUsed").GetInt32() > 0);
         Assert.True(root.GetProperty("cartridge").GetProperty("requiredBanks").GetInt32() > 0);
         Assert.Contains(

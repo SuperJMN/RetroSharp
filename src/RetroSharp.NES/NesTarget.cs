@@ -99,8 +99,15 @@ public static class NesTarget
         ScrollAxes: ScrollAxes.Horizontal | ScrollAxes.Vertical,
         SupportsFineScrollX: true,
         SupportsFineScrollY: true,
+        // Portable per-frame background budget: the most tiles and attribute bytes an author may
+        // request through one explicit Video.StreamMapColumn/StreamMapRow, and the world height
+        // above which camera scrolling must use the packed camera runtime. The packed runtime's
+        // own edge commit is a separate, taller shape (up to
+        // NesPackedCameraBudget.MaximumColumnPayloadTiles rows plus
+        // NesPackedCameraBudget.MaximumAttributeBytes attribute bytes) whose fit inside VBlank is
+        // checked jointly with the retained-OAM publication by NesFramePlan.RequireVideoSafeBudget.
         MaxBackgroundTileWritesPerFrame: 32,
-        MaxAttributeWritesPerFrame: 9,
+        MaxAttributeWritesPerFrame: 11,
         SpriteCount: 64,
         SpriteSizeModes: SpriteSizeMode.Sprite8x8 | SpriteSizeMode.Sprite8x16,
         MaxSpritesPerScanline: 8,

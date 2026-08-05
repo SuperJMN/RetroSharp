@@ -243,8 +243,12 @@ public static class WorldBudgetReportFactory
             romLimit,
             bankBytes,
             evaluatedProfile: "gb-simple-mbc1-current",
-            tileWrites: capabilities.MaxBackgroundTileWritesPerFrame,
-            attributeWrites: capabilities.MaxAttributeWritesPerFrame,
+            tileWritesUsed: Math.Min(
+                inspection.Pack.Descriptor.HardwareHeight,
+                capabilities.MaxBackgroundTileWritesPerFrame),
+            tileWriteLimit: capabilities.MaxBackgroundTileWritesPerFrame,
+            attributeWritesUsed: capabilities.MaxAttributeWritesPerFrame,
+            attributeWriteLimit: capabilities.MaxAttributeWritesPerFrame,
             commitShape: "one 21-tile edge; two same-axis GB edges use both accepted peer slots",
             ["gb-rom-only-current", "gb-simple-mbc1-current"]);
     }
@@ -258,6 +262,14 @@ public static class WorldBudgetReportFactory
         var capabilities = RetroSharp.NES.NesTarget.Capabilities;
         var edgeSlotsBytes = checked(2 * RetroSharp.NES.NesPackedCameraBudget.EdgeSlotBytes);
         var tileIndexUsed = checked(inspection.FirstGeneratedTileId + inspection.GeneratedBackgroundTiles);
+        // The packed camera restores the whole buffered band on every streamed column, so the
+        // per-frame demand of this world is its band height, not the portable explicit-stream
+        // capability. The limit is the band the packed runtime is able to publish; whether that
+        // band still fits VBlank once this program's retained sprites are added is a program
+        // question and is enforced where the program is known, in the NES frame plan.
+        var columnTilesUsed = Math.Min(
+            inspection.Pack.Descriptor.HardwareHeight,
+            RetroSharp.NES.NesPackedCameraBudget.MaximumColumnPayloadTiles);
         return Create(
             "nes",
             inspection.Pack,
@@ -276,9 +288,14 @@ public static class WorldBudgetReportFactory
             romLimit: prgLimit,
             bankBytes,
             evaluatedProfile: "nes-mapper-0-current",
-            tileWrites: capabilities.MaxBackgroundTileWritesPerFrame,
-            attributeWrites: capabilities.MaxAttributeWritesPerFrame,
-            commitShape: "up to 40 column tiles or one of four 8-tile row phases, followed by up to 11 attributes",
+            tileWritesUsed: columnTilesUsed,
+            tileWriteLimit: RetroSharp.NES.NesPackedCameraBudget.MaximumColumnPayloadTiles,
+            attributeWritesUsed: Math.Min(
+                RetroSharp.NES.NesPackedCameraBudget.MaximumAttributeBytes,
+                (columnTilesUsed + 3) / 4 + 1),
+            attributeWriteLimit: RetroSharp.NES.NesPackedCameraBudget.MaximumAttributeBytes,
+            commitShape: "up to 40 column tiles or one of four 8-tile row phases, followed by up to " +
+                "11 attributes, sharing one VBlank with the retained-OAM publication",
             ["nes-mapper-0-current", "nes-mmc3-tvrom-v1-accepted-future"]);
     }
 
@@ -300,8 +317,10 @@ public static class WorldBudgetReportFactory
         int romLimit,
         int bankBytes,
         string evaluatedProfile,
-        int tileWrites,
-        int attributeWrites,
+        int tileWritesUsed,
+        int tileWriteLimit,
+        int attributeWritesUsed,
+        int attributeWriteLimit,
         string commitShape,
         IReadOnlyList<string> acceptedProfiles)
     {
@@ -319,8 +338,8 @@ public static class WorldBudgetReportFactory
             tileIndexUsed,
             checked(tileIndexUsed * PatternBytes),
             stagingBytes,
-            tileWrites,
-            attributeWrites);
+            tileWritesUsed,
+            attributeWritesUsed);
         var limits = new WorldBudgetLimits(
             evaluatedProfile,
             WorldBudgetProfileValidator.MaxLogicalExtentPixels,
@@ -328,8 +347,8 @@ public static class WorldBudgetReportFactory
             256,
             residentChrByteLimit,
             stagingLimit,
-            tileWrites,
-            attributeWrites)
+            tileWriteLimit,
+            attributeWriteLimit)
         {
             AddressingProfile = "world-coordinate-i16-v1",
             RomPrgProfile = evaluatedProfile,
@@ -381,7 +400,12 @@ public static class WorldBudgetReportFactory
                 CeilingDivide(romBytes, bankBytes),
                 evaluatedProfile,
                 AllocatedRomBytes: null),
-            new WorldBudgetVBlank(tileWrites, tileWrites, attributeWrites, attributeWrites, commitShape),
+            new WorldBudgetVBlank(
+                tileWritesUsed,
+                tileWriteLimit,
+                attributeWritesUsed,
+                attributeWriteLimit,
+                commitShape),
             acceptedProfiles,
             SelectedProfile: null,
             ProfileRequirements(target, romBytes),

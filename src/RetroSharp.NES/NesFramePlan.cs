@@ -34,6 +34,120 @@ internal sealed record NesFramePlan(
     private const int DefaultCameraRowAttributePhase = 4;
     private const int MaximumSequentialOamBytes = 152;
 
+    /// <summary>
+    /// CPU cycles that elapse between the start of hardware VBlank and the first video-safe store
+    /// a frame is able to perform: NMI dispatch, the frame-pending handshake, the
+    /// <c>$2002</c> recheck and the publication-state store.
+    /// </summary>
+    /// <remarks>
+    /// Measured with <c>NesTestCpu</c> on every shipping NES sample that drives a packed camera:
+    /// entry latency on non-committing frames lands between 184 and 186 cycles. 192 is the
+    /// documented upper bound. It is reserved, never spent, so a program that exactly meets the
+    /// remaining budget still starts writing inside VBlank.
+    /// </remarks>
+    internal const long NmiEntryReserveCycles = 192;
+
+    // Frame-boundary bookkeeping performed inside the video-safe window on every frame:
+    // frame counter, pending-flag clears and the tail that re-arms the handshake.
+    private const long FrameBoundaryOverheadCycles = 64;
+
+    // Dispatch of one packed background column commit before any PPU payload byte moves:
+    // JSR into the commit edge, slot selection, the 16-bit tag and payload-length validation,
+    // the selected-state publication and the slot-stride select.
+    private const long PackedColumnCommitOverheadCycles = 544;
+
+    // Static-band payload coefficients, one per emitted shape in NesPackedColumnCommit.
+    private const long PackedColumnPpuAddressPairCycles = 20;
+    private const long PackedColumnTileWriteCycles = 9;
+    private const long PackedColumnAttributeSelectCycles = 8;
+    private const long PackedColumnAttributeWriteCycles = 23;
+
+    // Camera-relative commits resolve every address at run time through the row tables, so each
+    // write costs materially more than the folded static-band form.
+    private const long CameraRelativePpuAddressPairCycles = 60;
+    private const long CameraRelativeTileWriteCycles = 17;
+    private const long CameraRelativeAttributeWriteCycles = 70;
+    private const long CameraRelativeNameTableRuns = 2;
+
+    // $4014 sprite DMA: 513 cycles plus the store that starts it, rounded up for the odd-cycle
+    // alignment penalty.
+    internal const long OamDmaCycles = 514;
+
+    internal long VideoSafeCycleLimit =>
+        Windows.Single(window => window.Id == SdkCpuWorkWindowIds.VideoSafe).Capacity;
+
+    /// <summary>
+    /// Upper bound on the CPU cycles this frame spends inside the hardware VBlank window,
+    /// counting the NMI entry reserve, frame-boundary bookkeeping, the packed background column
+    /// commit and the retained-OAM publication that share the same window.
+    /// </summary>
+    internal long VideoSafeCycleCost(NesPackedColumnCommit? columnCommit) =>
+        NmiEntryReserveCycles
+        + FrameBoundaryOverheadCycles
+        + (columnCommit is { } commit ? PackedColumnCommitCycles(commit) : 0)
+        + RetainedOamPublicationCycles;
+
+    internal long RetainedOamPublicationCycles => UsesRetainedOam
+        ? UseSequentialOamPublication
+            ? SequentialOamPublicationCycles
+            : OamDmaCycles
+        : 0;
+
+    // Mirrors NesOamPublicationSchedule's straight-line shape: one reset pair plus two stores per
+    // retained byte. The schedule itself is scheduler-owned, so the coefficient is restated here
+    // and pinned by NesFramePlanTests.
+    private long SequentialOamPublicationCycles => checked(RetainedOamByteCount * 8L + 6L);
+
+    /// <summary>
+    /// Rejects a configuration whose per-frame video-safe work cannot complete inside VBlank.
+    /// Without this the compiler emits the overrun silently and the tail of the commit lands on
+    /// rendered scanlines as visible corruption.
+    /// </summary>
+    internal void RequireVideoSafeBudget(NesPackedColumnCommit? columnCommit, string configurationDescription)
+    {
+        var cost = VideoSafeCycleCost(columnCommit);
+        var limit = VideoSafeCycleLimit;
+        if (cost <= limit)
+        {
+            return;
+        }
+
+        var shape = columnCommit is { } commit
+            ? $"{commit.Length} column tiles plus {commit.AttributeCount} attribute bytes"
+            : "no background column commit";
+        var sprites = UsesRetainedOam
+            ? $"{RetainedOamByteCount} retained OAM bytes ({RetainedOamByteCount / 4} hardware sprites)"
+            : "no retained sprites";
+        throw new InvalidOperationException(
+            $"{configurationDescription} does not fit the NTSC video-safe window: publishing {shape} " +
+            $"together with {sprites} costs up to {cost} CPU cycles per frame, but only {limit} are " +
+            $"available (of which {NmiEntryReserveCycles} are reserved for NMI entry). Reduce the " +
+            "streamed band height or the number of retained sprites.");
+    }
+
+    private static long PackedColumnCommitCycles(NesPackedColumnCommit commit)
+    {
+        if (commit.FixedStart is null)
+        {
+            return PackedColumnCommitOverheadCycles
+                + CameraRelativeNameTableRuns * CameraRelativePpuAddressPairCycles
+                + commit.Length * CameraRelativeTileWriteCycles
+                + commit.AttributeCount * CameraRelativeAttributeWriteCycles;
+        }
+
+        var groups = commit.AttributeGroups.ToArray();
+        var nameTableSelects = groups
+            .Select(group => group.Row / NesPackedCameraRuntime.NameTableRows)
+            .Aggregate((Count: 0, Previous: -1), (state, half) =>
+                half == state.Previous ? state : (state.Count + 1, half))
+            .Count;
+        return PackedColumnCommitOverheadCycles
+            + commit.TileRuns.Count() * PackedColumnPpuAddressPairCycles
+            + commit.Length * PackedColumnTileWriteCycles
+            + nameTableSelects * PackedColumnAttributeSelectCycles
+            + groups.Length * PackedColumnAttributeWriteCycles;
+    }
+
     internal static NesFramePlan Create(
         NesVideoProgram program,
         NesCartridgeLayout layout,
@@ -134,7 +248,7 @@ internal sealed record NesFramePlan(
                 SdkCpuWorkWindowIds.VideoSafe));
         }
 
-        return new NesFramePlan(
+        var frame = new NesFramePlan(
             cartridgeProfile,
             useFourScreenNametables,
             usesRetainedOam,
@@ -156,6 +270,10 @@ internal sealed record NesFramePlan(
                     SdkCpuWorkWindowIds.VideoSafe,
                     DefaultCameraRowAttributePhase + 1)]
                 : []);
+        // A program with no packed camera still shares VBlank between the frame boundary and the
+        // retained-OAM publication, so the floor of the joint budget is checked here.
+        frame.RequireVideoSafeBudget(null, $"NES {cartridgeProfile} frame plan");
+        return frame;
     }
 
     internal SdkCpuWorkReport ProjectCpuWork(SdkCpuWorkReport wholeFrame)
