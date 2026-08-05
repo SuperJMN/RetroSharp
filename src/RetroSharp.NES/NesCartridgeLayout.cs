@@ -31,6 +31,7 @@ internal enum NesLinkConstraint
     Mmc3WorldPackCapacity,
     Mmc3WorldPackAddressability,
     Mmc3BankNumberCeiling,
+    Mmc3HotPhaseSize,
     FixedPrg,
     Dpcm,
 }
@@ -65,7 +66,9 @@ internal sealed record NesPrgBuild(
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
     IReadOnlyList<NesSharedSdkSubroutine> SharedSdkSubroutines,
     string FrameProfile,
-    SdkCpuWorkReport FrameCpuWork);
+    SdkCpuWorkReport FrameCpuWork,
+    int FixedHeadroomBytes,
+    NesProgramBankPlacementReport? BankPlacement);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 
@@ -88,7 +91,9 @@ internal sealed record NesRomBuildReport(
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
     IReadOnlyList<NesRuntimeRegion> RuntimeRegions,
     IReadOnlyList<NesSharedSdkSubroutine> SharedSdkSubroutines,
-    SdkCpuWorkReport CpuWork);
+    SdkCpuWorkReport CpuWork,
+    int FixedHeadroomBytes,
+    NesProgramBankPlacementReport? BankPlacement);
 
 /// <summary>
 /// One shared SDK operation body emitted once and reached by <see cref="CallSites"/> JSRs.

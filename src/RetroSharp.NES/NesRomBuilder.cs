@@ -618,6 +618,11 @@ internal static class NesRomBuilder
             {
                 throw LinkConstraint(NesLinkConstraint.FixedPrg, exception.Message);
             }
+            catch (NesHotPhaseBankCapacityException exception)
+            {
+                // A larger board adds R6 banks but never widens one, so this never escalates.
+                throw LinkConstraint(NesLinkConstraint.Mmc3HotPhaseSize, exception.Message);
+            }
 
             code = linkedProgram.FixedBytes;
             foreach (var segment in linkedProgram.ProgramSegments)
@@ -707,7 +712,10 @@ internal static class NesRomBuilder
             runtimeCompiler.UserVariables,
             DescribeSharedSdkSubroutines(builder),
             frameScheduler.SelectedProfile,
-            frameScheduler.CreateCpuWorkReport(NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram)));
+            frameScheduler.CreateCpuWorkReport(NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram)),
+            checked(layout.FixedTrailerStartAddress - layout.FixedRuntimeCpuBaseAddress
+                - fixedPayloadBeforeTrailer - (linkedProgram?.FixedVeneerBytes ?? 0)),
+            linkedProgram?.BankPlacement);
     }
 
     private static IReadOnlyList<NesSharedSdkSubroutine> DescribeSharedSdkSubroutines(PrgBuilder builder) =>
@@ -941,7 +949,9 @@ internal static class NesRomBuilder
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
             prgBuild.SharedSdkSubroutines,
-            prgBuild.FrameCpuWork);
+            prgBuild.FrameCpuWork,
+            prgBuild.FixedHeadroomBytes,
+            prgBuild.BankPlacement);
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(

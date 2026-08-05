@@ -26,7 +26,27 @@ internal sealed record NesPrgLinkResult(
     IReadOnlyList<NesPrgPlacementUnit> PlacementUnits,
     int FixedVeneerBytes,
     int ProgramBytes,
-    int RequiredProgramBanks);
+    int RequiredProgramBanks,
+    NesProgramBankPlacementReport BankPlacement);
+
+/// <summary>One phase placement unit's physical R6 banks, in placement order.</summary>
+internal sealed record NesProgramPhaseBankPlacement(
+    string UnitName,
+    NesPrgPlacementPhase Phase,
+    IReadOnlyList<int> PhysicalBanks,
+    int Bytes);
+
+/// <summary>
+/// Phase-to-bank assignment evidence for a banked link: where every phase landed, which physical
+/// bank owns the hot frame phase, how much R6 remains, and how many bytes placement duplicated.
+/// </summary>
+internal sealed record NesProgramBankPlacementReport(
+    IReadOnlyList<NesProgramPhaseBankPlacement> Phases,
+    int? HotPhasePhysicalBank,
+    string? HotPhaseUnitName,
+    int HotPhaseBytes,
+    int ProgramR6HeadroomBytes,
+    int DuplicatedSharedBytes);
 
 internal sealed class NesProgramBankCapacityException(
     int programBytes,
@@ -49,8 +69,9 @@ internal sealed class NesFixedVeneerCapacityException(int veneerBytes, int avail
 internal static class NesPrgLinker
 {
     private const ushort ProgramCpuBaseAddress = 0x8000;
-    private const int ProgramBankSize = 8 * 1_024;
-    private const int FallthroughJumpSize = 3;
+    private const int ProgramBankSize = NesProgramBankPlanner.ProgramBankSize;
+    private const int FallthroughJumpSize = NesProgramBankPlanner.BankEdgeJumpSize;
+    private const int ExpandedBranchSize = 5;
     private const int VeneerSize = 12;
 
     private sealed class MutableAtom(
@@ -80,7 +101,8 @@ internal static class NesPrgLinker
     private sealed record ProgramPlacement(
         IReadOnlyList<PlacedAtom> Atoms,
         IReadOnlyList<int> UsedBytesByBank,
-        int RequiredBanks);
+        int RequiredBanks,
+        NesProgramBankPlan Plan);
 
     private sealed record ResolvedSymbol(
         NesPrgResidence? Residence,
@@ -178,6 +200,7 @@ internal static class NesPrgLinker
                 layout.ProgramBanks.Count);
         }
 
+        var bankPlacement = DescribeBankPlacement(placement.Plan, layout, linkedProgramBytes);
         var veneerTargets = CollectVeneerTargets(emission, placement, symbols, layout);
         var fixedPayloadOffset = layout.FixedPayloadEndAddress - emission.FixedBaseAddress;
         var fixedTrailerOffset = layout.FixedTrailerStartAddress - emission.FixedBaseAddress;
@@ -276,8 +299,29 @@ internal static class NesPrgLinker
             DescribePlacementUnits(emission, placement),
             requiredVeneerBytes,
             programBuffers.Sum(buffer => buffer.Length),
-            placement.RequiredBanks);
+            placement.RequiredBanks,
+            bankPlacement);
     }
+
+    private static NesProgramBankPlacementReport DescribeBankPlacement(
+        NesProgramBankPlan plan,
+        NesPrgLinkLayout layout,
+        int linkedProgramBytes) =>
+        new(
+            plan.Phases
+                .Select(phase => new NesProgramPhaseBankPlacement(
+                    phase.UnitName,
+                    phase.Phase,
+                    phase.BankIndexes.Select(index => layout.ProgramBanks[index].PhysicalBank).ToArray(),
+                    phase.Bytes))
+                .ToArray(),
+            plan.HotBankIndex is { } hotBankIndex
+                ? layout.ProgramBanks[hotBankIndex].PhysicalBank
+                : null,
+            plan.HotUnitName,
+            plan.HotUnitBytes,
+            checked((layout.ProgramBanks.Count * ProgramBankSize) - linkedProgramBytes),
+            plan.DuplicatedSharedBytes);
 
     private static void ValidateProgramAtoms(NesPrgPlacementUnitEmission unit)
     {
@@ -302,47 +346,28 @@ internal static class NesPrgLinker
 
     private static ProgramPlacement PlaceProgram(IReadOnlyList<MutablePlacementUnit> units)
     {
-        var atomCount = units.Sum(unit => unit.Atoms.Count);
-        if (atomCount == 0)
-        {
-            return new ProgramPlacement([], [], RequiredBanks: 0);
-        }
+        var plan = NesProgramBankPlanner.Plan(units
+            .Select(unit => new NesProgramBankUnit(
+                unit.Source.Name,
+                unit.Source.Phase,
+                unit.Atoms
+                    .Select(atom => new NesProgramBankAtom(
+                        atom.Source.Offset,
+                        atom.Expanded ? ExpandedBranchSize : atom.Source.Length))
+                    .ToArray()))
+            .ToArray());
 
-        var placed = new List<PlacedAtom>(atomCount);
-        var used = new List<int>();
-        var bankIndex = 0;
-        var offset = 0;
-        var atomIndex = 0;
-        foreach (var unit in units)
-        {
-            foreach (var atom in unit.Atoms)
-            {
-                var length = atom.Expanded ? 5 : atom.Source.Length;
-                var isFinalAtom = atomIndex == atomCount - 1;
-                var bankCapacity = isFinalAtom
-                    ? ProgramBankSize
-                    : ProgramBankSize - FallthroughJumpSize;
-                if (length > bankCapacity)
-                {
-                    throw new InvalidOperationException(
-                        $"NES banked program atom in unit '{unit.Source.Name}' at source offset {atom.Source.Offset} is {length} bytes; an indivisible atom may use at most {bankCapacity} bytes in this position.");
-                }
-
-                if (offset + length > bankCapacity)
-                {
-                    used.Add(offset + FallthroughJumpSize);
-                    bankIndex++;
-                    offset = 0;
-                }
-
-                placed.Add(new PlacedAtom(atom, bankIndex, offset, length));
-                offset += length;
-                atomIndex++;
-            }
-        }
-
-        used.Add(offset);
-        return new ProgramPlacement(placed, used, bankIndex + 1);
+        return new ProgramPlacement(
+            plan.Atoms
+                .Select(slot => new PlacedAtom(
+                    units[slot.UnitIndex].Atoms[slot.AtomIndex],
+                    slot.BankIndex,
+                    slot.Offset,
+                    slot.Length))
+                .ToArray(),
+            plan.UsedBytesByBank,
+            plan.RequiredBanks,
+            plan);
     }
 
     private static IReadOnlyList<NesPrgPlacementUnit> DescribePlacementUnits(

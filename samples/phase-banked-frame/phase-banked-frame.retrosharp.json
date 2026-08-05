@@ -1,0 +1,11 @@
+{
+  "targets": ["nes"],
+  "outputs": {
+    "nes": "bin/phase-banked-frame.nes"
+  },
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": [
+    "src/scene.rs",
+    "src/main.rs"
+  ]
+}
