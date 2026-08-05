@@ -11,6 +11,9 @@ internal static class NesRomBuilder
 {
     internal const string CodeBankedProfileName = "nes-mmc3-tvrom-codebank-v1";
     internal const string MainPlacementUnitName = "program:main";
+    internal const string MainInitPlacementUnitName = MainPlacementUnitName + ":init";
+    internal const string MainFramePlacementUnitName = MainPlacementUnitName + ":frame";
+    internal const string MainTailPlacementUnitName = MainPlacementUnitName + ":tail";
     private const string ProgramEntryLabel = "banked_program_entry";
     private const ushort Mmc3BootPaletteAddress = 0xA000;
     private const ushort Mmc3BootNameTableAddress = 0xA020;
@@ -451,19 +454,33 @@ internal static class NesRomBuilder
         var programResidence = programLinkMode is NesProgramLinkMode.BankedR6
             ? NesPrgResidence.ProgramR6
             : NesPrgResidence.Fixed;
-        using (builder.EnterPlacementUnit(MainPlacementUnitName, programResidence))
+        var placementPlan = NesProgramPhaseAnalyzer.Analyze(program);
+        var emittedProgramEntry = false;
+        foreach (var unit in placementPlan.Units)
         {
-            var programStartAddress = builder.CurrentAddress;
-            if (programLinkMode is NesProgramLinkMode.BankedR6)
+            using (builder.EnterPlacementUnit(unit.Name, programResidence, unit.Phase))
             {
-                builder.Label(ProgramEntryLabel);
-            }
+                if (!emittedProgramEntry)
+                {
+                    if (programLinkMode is NesProgramLinkMode.BankedR6)
+                    {
+                        builder.Label(ProgramEntryLabel);
+                    }
 
-            runtimeCompiler.Emit(program.MainBlock);
-            builder.Label("forever");
-            builder.JumpAbsolute("forever");
-            movableProgramBytes = builder.CurrentAddress - programStartAddress;
+                    emittedProgramEntry = true;
+                }
+
+                runtimeCompiler.EmitPlacementUnit(unit.Block);
+                if (unit.EmitsTerminalIdleLoop)
+                {
+                    builder.Label("forever");
+                    builder.JumpAbsolute("forever");
+                }
+            }
         }
+
+        runtimeCompiler.EnsureProgramConsumed();
+        movableProgramBytes = builder.PlacementUnits.Sum(unit => unit.Size);
 
         runtimeCompiler.EmitReferencedSubroutines();
         if (worldPackRuntime is not null)

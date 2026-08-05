@@ -216,8 +216,9 @@ public partial class NesRomCompilerTests
         var unit = Assert.Single(result.Report.PlacementUnits);
 
         Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
-        Assert.Equal(NesRomBuilder.MainPlacementUnitName, unit.Name);
+        Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, unit.Name);
         Assert.Equal(NesPrgResidence.ProgramR6, unit.Residence);
+        Assert.Equal(NesPrgPlacementPhase.OneShot, unit.Phase);
         Assert.Equal(result.Report.ProgramR6Bytes, unit.Size);
         // Lower bound only: the sample must genuinely span several R6 banks for the banked path to
         // be exercised. Pinning an upper bound would couple this test to how close the sample sits
@@ -258,7 +259,7 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
-    public void Build_report_lists_the_main_placement_unit_in_both_residences()
+    public void Build_report_lists_main_phase_placement_units_in_both_residences()
     {
         const string source = """
                               void Main() {
@@ -272,12 +273,111 @@ public partial class NesRomCompilerTests
         var fixedUnit = Assert.Single(fixedBuild.Report.PlacementUnits);
         var bankedUnit = Assert.Single(bankedBuild.Report.PlacementUnits);
 
-        Assert.Equal(NesRomBuilder.MainPlacementUnitName, fixedUnit.Name);
+        Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, fixedUnit.Name);
         Assert.Equal(NesPrgResidence.Fixed, fixedUnit.Residence);
-        Assert.Equal(NesRomBuilder.MainPlacementUnitName, bankedUnit.Name);
+        Assert.Equal(NesPrgPlacementPhase.OneShot, fixedUnit.Phase);
+        Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, bankedUnit.Name);
         Assert.Equal(NesPrgResidence.ProgramR6, bankedUnit.Residence);
+        Assert.Equal(NesPrgPlacementPhase.OneShot, bankedUnit.Phase);
         Assert.Equal(fixedUnit.Size, bankedUnit.Size);
         Assert.True(fixedUnit.Size > 0);
+    }
+
+    [Fact]
+    public void Runner_shaped_source_reports_cold_init_hot_frame_and_cold_tail_units()
+    {
+        const string source = """
+                              [intrinsic("wait_frame")]
+                              extern void wait_frame();
+
+                              [intrinsic("poll_input")]
+                              extern void poll_input();
+
+                              void FrameStep() {
+                                  poll_input();
+                                  wait_frame();
+                                  return;
+                              }
+
+                              void Main() {
+                                  u8 value = 0;
+                                  while (true) {
+                                      value += 1;
+                                      FrameStep();
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(source);
+
+        Assert.Collection(
+            result.Report.PlacementUnits,
+            unit =>
+            {
+                Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, unit.Name);
+                Assert.Equal(NesPrgResidence.Fixed, unit.Residence);
+                Assert.Equal(NesPrgPlacementPhase.Cold, unit.Phase);
+                Assert.True(unit.Size > 0);
+            },
+            unit =>
+            {
+                Assert.Equal(NesRomBuilder.MainFramePlacementUnitName, unit.Name);
+                Assert.Equal(NesPrgResidence.Fixed, unit.Residence);
+                Assert.Equal(NesPrgPlacementPhase.Hot, unit.Phase);
+                Assert.True(unit.Size > 0);
+            },
+            unit =>
+            {
+                Assert.Equal(NesRomBuilder.MainTailPlacementUnitName, unit.Name);
+                Assert.Equal(NesPrgResidence.Fixed, unit.Residence);
+                Assert.Equal(NesPrgPlacementPhase.Cold, unit.Phase);
+                Assert.True(unit.Size > 0);
+            });
+    }
+
+    [Fact]
+    public void Static_drawing_sample_reports_one_shot_without_hot_phase()
+    {
+        var sourcePath = RepositoryFile("samples/static-drawing/drawing.rs");
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(sourcePath),
+            Path.GetDirectoryName(sourcePath));
+        var unit = Assert.Single(result.Report.PlacementUnits);
+
+        Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, unit.Name);
+        Assert.Equal(NesPrgPlacementPhase.OneShot, unit.Phase);
+        Assert.DoesNotContain(result.Report.PlacementUnits, unit => unit.Phase is NesPrgPlacementPhase.Hot);
+    }
+
+    [Fact]
+    public void Phase_analyzer_reports_recursive_call_graphs_explicitly()
+    {
+        const string source = """
+                              void Main() {
+                                  A();
+                                  return;
+                              }
+
+                              void A() {
+                                  B();
+                                  return;
+                              }
+
+                              void B() {
+                                  A();
+                                  return;
+                              }
+                              """;
+        var program = NesSdkOperationBoundaryTests.ParseLoweredProgram(source);
+        var main = program.Functions.Single(function => function.Name == "Main");
+        var functions = program.Functions.ToDictionary(function => function.Name, StringComparer.Ordinal);
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => NesProgramPhaseAnalyzer.Analyze(main.Block, functions, NesTarget.Intrinsics));
+
+        Assert.Contains("NES phase analysis does not support recursive user function call cycle", exception.Message);
+        Assert.Contains("A -> B -> A", exception.Message);
     }
 
     [Fact]

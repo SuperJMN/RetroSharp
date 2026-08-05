@@ -77,16 +77,20 @@ both in one bank. The linker gives the program the remaining banks in physical
 order. A build with no pack may use the whole R6 pool; every pack segment
 reduces that program pool by one whole bank.
 
-The movable program is emitted as named placement units with a residence on
-each unit. The current program has one stable unit, `program:main`, containing
-the flattened `Main` stream, including inline-expanded user, receiver, and
-value helpers, followed by its terminal loop. It remains `ProgramR6` in the
-code-banked profile and `Fixed` in the earlier flat profiles. The banked linker
-keeps `ProgramR6` units distinct through placement and currently visits them in
+The movable program is emitted as named placement units with a residence and an
+inferred phase on each unit. `Main` is split in source order into
+`program:main:init` for top-level setup before the first perpetual frame loop,
+`program:main:frame` for the first top-level `while (true)` that reaches the
+wait-frame intrinsic, and `program:main:tail` for source statements after that
+loop plus the compiler-generated terminal idle loop. Programs with no such
+frame loop emit a single `program:main:init` unit reported as `OneShot` rather
+than manufacturing a hot phase. All units remain `ProgramR6` in the code-banked
+profile and `Fixed` in the earlier flat profiles. The banked linker keeps
+`ProgramR6` units distinct through placement and currently visits them in
 emission order, so unit boundaries do not reorder code or change bank cuts.
 Named `Fixed` units are rejected by the sectioned builder/linker until a fixed
-placement policy defines their real offsets; phase classification and placement
-policy remain later work. A repeated
+placement policy defines their real offsets; phase-based placement policy
+remains later work. A repeated
 multi-piece `DrawLogicalSprite` shape stores its runtime operands in
 `NesRuntimeMemoryLayout` scratch and calls one fixed-resident target helper;
 single-use and one-piece shapes remain inline when a call would not save code.
@@ -151,15 +155,15 @@ beyond the R6 banks of the selected board, and it only selects a larger board
 after the current one proves its pool is exhausted.
 
 The internal `NesRomBuildReport` identifies the selected profile and exposes
-placement-unit names, residences, and linked sizes (including branch expansion
-and any bank-edge fallthrough owned by the unit) together with `PrgRomSize`,
-`ProgramR6Bytes`, `FixedVeneerBytes`, `program:r6:*` segments, and bank-aware
-symbols. R6 exhaustion reports the `WorldPack` banks and bytes, program banks
-and linked bytes, and the selected board's physical pool — for example
-`[0, 3, 4, 5]` on 64 KiB. A `WorldPack` that outgrows that pool reports its own
-capacity diagnostic; the banked reader indexes segments from bits 13-15 of a
-16-bit offset, so one physical pack stays within eight R6 segments even on a
-larger board. Fixed veneer exhaustion and unsupported relocation shapes fail
+placement-unit names, residences, inferred phases, and linked sizes (including
+branch expansion and any bank-edge fallthrough owned by the unit) together with
+`PrgRomSize`, `ProgramR6Bytes`, `FixedVeneerBytes`, `program:r6:*` segments, and
+bank-aware symbols. R6 exhaustion reports the `WorldPack` banks and bytes,
+program banks and linked bytes, and the selected board's physical pool — for
+example `[0, 3, 4, 5]` on 64 KiB. A `WorldPack` that outgrows that pool reports
+its own capacity diagnostic; the banked reader indexes segments from bits 13-15
+of a 16-bit offset, so one physical pack stays within eight R6 segments even on
+a larger board. Fixed veneer exhaustion and unsupported relocation shapes fail
 explicitly. These linker details do not change the public
 `retrosharp.nes.runtime-abi` v1 sidecar or its schema.
 

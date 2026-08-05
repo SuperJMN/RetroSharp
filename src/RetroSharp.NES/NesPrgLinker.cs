@@ -369,7 +369,8 @@ internal static class NesPrgLinker
             .Select(unit => new NesPrgPlacementUnit(
                 unit.Name,
                 unit.Residence,
-                linkedSizes[unit.Name]))
+                linkedSizes[unit.Name],
+                unit.Phase))
             .ToArray();
     }
 
