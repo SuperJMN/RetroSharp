@@ -96,10 +96,16 @@ GCP-3.1 report keeps it as stable unknown coverage until the owning
 The descriptor records NES sprite, palette, X/Y fine-scroll, horizontal background-column streaming, four-screen camera movement, vertical row streaming, and camera-relative collision-query support. Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over NES target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`), while the collector still records the matching `Sdk2DOperation` values for validation and frame-budget boundaries.
 
 Those collected operations remain complete for capability validation, while a
-reachability-aligned view is the authoritative production lowering stream.
-`NesVideoProgram` retains both, `NesSdkStreamReader` checks each migrated
-statement/value call and rejects mismatches or leftovers, and one
-stateful `NesSdkOperationLowerer` owns the emitted frame/input, sprite/OAM,
+reachability-aligned `Sdk2DProgram` is the authoritative production lowering
+stream. `NesVideoProgram` retains both. `NesSdkStreamReader` owns one stack of
+main and named subroutine stream frames, checks each migrated statement/value
+call, and rejects mismatches or leftovers. `NesSdkProgramOperations` projects
+collected bodies once for code emission and expands every subroutine call for
+runtime-work accounting, so a shared body does not make executed calls
+disappear from CPU-budget inputs. The current empty subroutine selection keeps
+NES output identical while preparing the stream boundary for user-function
+outlining. A single stateful `NesSdkOperationLowerer` owns the emitted
+frame/input, sprite/OAM,
 camera/streaming, packed scheduling, and collision bytes. The syntax runtime
 compiler supplies only source-expression and storage primitives through
 `NesSdkLoweringContext`. Cartridge selection/link layout, syntax/control-flow

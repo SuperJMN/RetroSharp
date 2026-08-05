@@ -14,6 +14,7 @@ public sealed class NesSdkLoweringArchitectureTests
         new("src/RetroSharp.NES/NesOamPublicationSchedule.cs", "Sequential retained OAM bytes and cost have one scheduler-owned module.", [typeof(NesOamPublicationSchedule)]),
         new("src/RetroSharp.NES/NesRuntimeCompiler.cs", "Runtime compilation has a dedicated physical navigation root.", [typeof(NesRuntimeCompiler)]),
         new("src/RetroSharp.NES/NesSdkStreamReader.cs", "Collected SDK stream consumption has a dedicated physical navigation root.", [typeof(NesSdkStreamReader)]),
+        new("src/RetroSharp.NES/NesSdkProgramOperations.cs", "Collected and executed SDK operation projections have one owner.", [typeof(NesSdkProgramOperations)]),
         new("src/RetroSharp.NES/NesSdkOperationLowerer.cs", "Portable SDK emission has a dedicated physical navigation root.", [typeof(NesSdkOperationLowerer)]),
         new("src/RetroSharp.NES/PrgBuilder.cs", "NES PRG byte building has a dedicated physical navigation root.", [typeof(PrgBuilder)]),
     ];

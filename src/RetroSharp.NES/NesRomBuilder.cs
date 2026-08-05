@@ -648,7 +648,7 @@ internal static class NesRomBuilder
             runtimeCompiler.UserVariables,
             DescribeSharedSdkSubroutines(builder),
             frameScheduler.SelectedProfile,
-            frameScheduler.CreateCpuWorkReport(program.SdkOperationStream));
+            frameScheduler.CreateCpuWorkReport(NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram)));
     }
 
     private static IReadOnlyList<NesSharedSdkSubroutine> DescribeSharedSdkSubroutines(PrgBuilder builder) =>

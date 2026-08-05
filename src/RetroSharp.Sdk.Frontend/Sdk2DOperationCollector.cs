@@ -62,7 +62,8 @@ public static class Sdk2DOperationCollector
 
     // Collects a program split into a main stream plus per-subroutine streams for
     // the named functions. When subroutineNames is empty the main stream is a flat
-    // sequence of Op items equivalent to Collect(...), so targets stay byte-identical.
+    // sequence of Op items equivalent to Collect(...) by default, or to
+    // CollectReachable(...) when unreachable statements are explicitly skipped.
     public static Sdk2DProgram CollectProgram(
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
@@ -70,9 +71,17 @@ public static class Sdk2DOperationCollector
         Target2DCapabilities capabilities,
         IReadOnlySet<string> subroutineNames,
         TargetIntrinsicCatalog? targetIntrinsics = null,
-        SdkResourceDeclarationRegistry? resourceDeclarations = null)
+        SdkResourceDeclarationRegistry? resourceDeclarations = null,
+        bool skipUnreachableStatements = false)
     {
-        var collector = new Collector(functions, targetName, capabilities, subroutineNames, targetIntrinsics, resourceDeclarations);
+        var collector = new Collector(
+            functions,
+            targetName,
+            capabilities,
+            subroutineNames,
+            targetIntrinsics,
+            resourceDeclarations,
+            skipUnreachableStatements: skipUnreachableStatements);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }

@@ -454,7 +454,7 @@ internal sealed class NesVideoProgram
 
     public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
 
-    public required IReadOnlyList<Sdk2DOperation> SdkOperationStream { get; init; }
+    public required Sdk2DProgram SdkProgram { get; init; }
 
     public int ResolveSpritePaletteBaseSlot(string spriteId, int requestedBaseSlot)
     {
@@ -487,13 +487,15 @@ internal sealed class NesVideoProgram
             NesTarget.Capabilities,
             targetIntrinsics,
             resourceDeclarations);
-        var sdkOperationStream = Sdk2DOperationCollector.CollectReachable(
+        var sdkProgram = Sdk2DOperationCollector.CollectProgram(
             main.Block,
             functions,
             "NES",
             NesTarget.Capabilities,
+            new HashSet<string>(StringComparer.Ordinal),
             targetIntrinsics,
-            resourceDeclarations);
+            resourceDeclarations,
+            skipUnreachableStatements: true);
         var result = new NesVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
@@ -506,7 +508,7 @@ internal sealed class NesVideoProgram
             TargetIntrinsics = targetIntrinsics,
             ResourceDeclarations = resourceDeclarations,
             SdkOperations = sdkOperations,
-            SdkOperationStream = sdkOperationStream,
+            SdkProgram = sdkProgram,
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
