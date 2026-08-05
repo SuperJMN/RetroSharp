@@ -572,9 +572,16 @@ internal sealed class PrgBuilder
                 return recordedFixedSection.Bytes.Count;
             }
 
-            var offset = currentPlacementUnit.Residence is NesPrgResidence.Fixed
-                ? recordedFixedSection.Bytes.Count
-                : 0;
+            // Sectioned PRG rejects Fixed placement units in EnterPlacementUnit, so a unit always
+            // starts at the beginning of its residence stream. Fixed units would additionally need
+            // the offset of the fixed bytes emitted before them, which the linker does not preserve.
+            if (currentPlacementUnit.Residence is NesPrgResidence.Fixed)
+            {
+                throw new InvalidOperationException(
+                    $"NES sectioned PRG cannot address Fixed placement unit '{currentPlacementUnit.Name}' until fixed placement policy is implemented.");
+            }
+
+            var offset = 0;
             foreach (var unit in recordedPlacementUnits)
             {
                 if (ReferenceEquals(unit, currentPlacementUnit))

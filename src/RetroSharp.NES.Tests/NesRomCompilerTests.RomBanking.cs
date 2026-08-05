@@ -219,11 +219,13 @@ public partial class NesRomCompilerTests
         Assert.Equal(NesRomBuilder.MainPlacementUnitName, unit.Name);
         Assert.Equal(NesPrgResidence.ProgramR6, unit.Residence);
         Assert.Equal(result.Report.ProgramR6Bytes, unit.Size);
-        Assert.InRange(
+        // Lower bound only: the sample must genuinely span several R6 banks for the banked path to
+        // be exercised. Pinning an upper bound would couple this test to how close the sample sits
+        // to the board's program-bank pool, which grows with codegen and board size.
+        Assert.True(
             result.Report.Segments.Count(segment =>
-                segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal)),
-            2,
-            4);
+                segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal)) >= 2,
+            "The tracked executable-banking sample must span at least two R6 program banks.");
     }
 
     [Fact]
