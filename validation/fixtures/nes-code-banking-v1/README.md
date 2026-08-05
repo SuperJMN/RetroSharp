@@ -1,8 +1,10 @@
 # NES code-banking v1 fixture
 
-This fixture is the stable executable-banking canary. Its compact hierarchy of
-inline receiver helpers expands to 3,456 runtime increments without adding a
-function ABI. It also owns a small Tiled `WorldPack` and pinned NES music, so a
+This fixture is the stable executable-banking canary. `Main` runs a generated
+stream of 260 distinct branch folds over a running `u16` mixer; every fold has
+its own constants, so the program bulk is irreducible and survives any body
+sharing or user-function outlining the target performs. It also owns a small
+Tiled `WorldPack` and pinned NES music, so a
 successful link must reserve the WorldPack's whole R6 bank first, place gameplay
 across at least two remaining R6 banks, keep audio in R7, and leave reset,
 interrupts, DPCM, and banking helpers fixed.

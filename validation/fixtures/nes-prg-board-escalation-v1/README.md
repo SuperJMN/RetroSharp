@@ -1,10 +1,10 @@
 # NES PRG board escalation v1 fixture
 
 This fixture is the stable canary for MMC3 PRG board selection. It is the
-`nes-code-banking-v1` shape scaled up: the same inline receiver hierarchy
-expands to 4,992 runtime increments, and it still owns a small Tiled
-`WorldPack` plus pinned NES music. A steady frame loop then advances one
-logical tick per physical frame.
+`nes-code-banking-v1` shape scaled up: the same irreducible fold stream grown to
+400 distinct branch folds, and it still owns a small Tiled `WorldPack` plus
+pinned NES music. A steady frame loop then advances one logical tick per
+physical frame.
 
 That combination cannot link on the 64 KiB board. The pack claims one whole R6
 bank, leaving three of the four R6 banks — 24 KiB — for a gameplay stream that
@@ -17,7 +17,7 @@ bank 0, gameplay occupies the following banks in physical order, audio stays
 pinned in R7, and reset, interrupts, DPCM, and banking helpers stay in the top
 two fixed banks at `$C000-$FFFF`.
 
-The heavy inline stream deliberately runs before `Video.Init()`, so the canary
+The heavy stream deliberately runs before `Video.Init()`, so the canary
 stresses board selection rather than a one-off mid-frame commit. Its automated
 observer owns link, boot, tick keep-up against physical frames, and zero unsafe
 PPU/OAM writes.

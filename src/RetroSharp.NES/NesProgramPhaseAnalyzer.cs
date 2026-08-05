@@ -104,6 +104,207 @@ internal static class NesProgramPhaseAnalyzer
         return NesVideoProgram.ConstValue(expression, "while condition") != 0;
     }
 
+    internal static void VisitBlockCalls(BlockSyntax block, Action<string> call)
+    {
+        foreach (var statement in block.Statements)
+        {
+            VisitStatementCalls(statement, call);
+        }
+    }
+
+    private static void VisitStatementCalls(StatementSyntax statement, Action<string> call)
+    {
+        switch (statement)
+        {
+            case ConstDeclarationSyntax constDeclaration:
+                VisitExpressionCalls(constDeclaration.Value, call);
+                break;
+            case DeclarationSyntax declaration:
+                VisitMaybeExpressionCalls(declaration.ArrayLength, call);
+                VisitMaybeExpressionCalls(declaration.Initialization, call);
+                break;
+            case ExpressionStatementSyntax expressionStatement:
+                VisitExpressionCalls(expressionStatement.Expression, call);
+                break;
+            case WhileSyntax whileSyntax:
+                VisitExpressionCalls(whileSyntax.Condition, call);
+                VisitBlockCalls(whileSyntax.Body, call);
+                break;
+            case DoWhileSyntax doWhileSyntax:
+                VisitBlockCalls(doWhileSyntax.Body, call);
+                VisitExpressionCalls(doWhileSyntax.Condition, call);
+                break;
+            case RangeForSyntax rangeForSyntax:
+                VisitExpressionCalls(rangeForSyntax.Start, call);
+                VisitExpressionCalls(rangeForSyntax.End, call);
+                VisitBlockCalls(rangeForSyntax.Body, call);
+                break;
+            case ForSyntax forSyntax:
+                if (forSyntax.Initializer.HasValue)
+                {
+                    VisitStatementCalls(forSyntax.Initializer.Value, call);
+                }
+
+                VisitMaybeExpressionCalls(forSyntax.Condition, call);
+                VisitMaybeExpressionCalls(forSyntax.Increment, call);
+                VisitBlockCalls(forSyntax.Body, call);
+                break;
+            case IfElseSyntax ifElseSyntax:
+                VisitExpressionCalls(ifElseSyntax.Condition, call);
+                VisitBlockCalls(ifElseSyntax.ThenBlock, call);
+                if (ifElseSyntax.ElseBlock.HasValue)
+                {
+                    VisitBlockCalls(ifElseSyntax.ElseBlock.Value, call);
+                }
+
+                break;
+            case SwitchSyntax switchSyntax:
+                VisitExpressionCalls(switchSyntax.Subject, call);
+                foreach (var switchCase in switchSyntax.Cases)
+                {
+                    foreach (var pattern in switchCase.Patterns)
+                    {
+                        VisitSwitchCasePatternCalls(pattern, call);
+                    }
+
+                    VisitBlockCalls(switchCase.Block, call);
+                }
+
+                if (switchSyntax.DefaultBlock.HasValue)
+                {
+                    VisitBlockCalls(switchSyntax.DefaultBlock.Value, call);
+                }
+
+                break;
+            case ReturnSyntax returnSyntax:
+                VisitMaybeExpressionCalls(returnSyntax.Expression, call);
+                break;
+        }
+    }
+
+    private static void VisitExpressionCalls(ExpressionSyntax expression, Action<string> call)
+    {
+        switch (expression)
+        {
+            case FunctionCall functionCall:
+                call(functionCall.Name);
+                foreach (var parameter in functionCall.Parameters)
+                {
+                    VisitExpressionCalls(parameter, call);
+                }
+
+                break;
+            case QualifiedCallSyntax qualifiedCall:
+                foreach (var parameter in qualifiedCall.Parameters)
+                {
+                    VisitExpressionCalls(parameter, call);
+                }
+
+                break;
+            case NamedArgumentSyntax namedArgument:
+                VisitExpressionCalls(namedArgument.Expression, call);
+                break;
+            case AssignmentSyntax assignment:
+                VisitLValueCalls(assignment.Left, call);
+                VisitExpressionCalls(assignment.Right, call);
+                break;
+            case PostfixMutationSyntax postfixMutation:
+                VisitLValueCalls(postfixMutation.Target, call);
+                break;
+            case MemberAccessSyntax memberAccess:
+                VisitExpressionCalls(memberAccess.Target, call);
+                break;
+            case IndexExpressionSyntax indexExpression:
+                VisitExpressionCalls(indexExpression.Index, call);
+                break;
+            case CastSyntax cast:
+                VisitExpressionCalls(cast.Expression, call);
+                break;
+            case UnaryExpressionSyntax unary:
+                VisitExpressionCalls(unary.Operand, call);
+                break;
+            case BinaryExpressionSyntax binary:
+                VisitExpressionCalls(binary.Left, call);
+                VisitExpressionCalls(binary.Right, call);
+                break;
+            case ConditionalExpressionSyntax conditional:
+                VisitExpressionCalls(conditional.Condition, call);
+                VisitExpressionCalls(conditional.WhenTrue, call);
+                VisitExpressionCalls(conditional.WhenFalse, call);
+                break;
+            case SwitchExpressionSyntax switchExpression:
+                VisitExpressionCalls(switchExpression.Subject, call);
+                foreach (var arm in switchExpression.Arms)
+                {
+                    foreach (var pattern in arm.Patterns)
+                    {
+                        VisitSwitchCasePatternCalls(pattern, call);
+                    }
+
+                    VisitExpressionCalls(arm.Value, call);
+                }
+
+                VisitMaybeExpressionCalls(switchExpression.DefaultValue, call);
+                break;
+            case PipelineExpressionSyntax pipeline:
+                VisitExpressionCalls(pipeline.Value, call);
+                foreach (var step in pipeline.Steps)
+                {
+                    call(step.FunctionName);
+                    foreach (var argument in step.Arguments)
+                    {
+                        VisitExpressionCalls(argument, call);
+                    }
+                }
+
+                break;
+            case ArrayInitializerSyntax arrayInitializer:
+                foreach (var element in arrayInitializer.Elements)
+                {
+                    VisitExpressionCalls(element, call);
+                }
+
+                break;
+            case StructInitializerSyntax structInitializer:
+                foreach (var field in structInitializer.Fields)
+                {
+                    VisitExpressionCalls(field.Expression, call);
+                }
+
+                break;
+        }
+    }
+
+    private static void VisitSwitchCasePatternCalls(SwitchCasePatternSyntax pattern, Action<string> call)
+    {
+        VisitExpressionCalls(pattern.Start, call);
+        VisitMaybeExpressionCalls(pattern.End, call);
+    }
+
+    private static void VisitMaybeExpressionCalls(Maybe<ExpressionSyntax> expression, Action<string> call)
+    {
+        if (expression.HasValue)
+        {
+            VisitExpressionCalls(expression.Value, call);
+        }
+    }
+
+    private static void VisitLValueCalls(LValue lValue, Action<string> call)
+    {
+        switch (lValue)
+        {
+            case PointerDerefLValue pointer:
+                VisitExpressionCalls(pointer.Expression, call);
+                break;
+            case IndexLValue index:
+                VisitExpressionCalls(index.Index, call);
+                break;
+            case MemberAccessLValue member:
+                VisitExpressionCalls(member.MemberAccess, call);
+                break;
+        }
+    }
+
     private sealed class AnalysisContext(
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         TargetIntrinsicCatalog targetIntrinsics)
@@ -320,205 +521,5 @@ internal static class NesProgramPhaseAnalyzer
                 _ => false,
             };
 
-        private static void VisitBlockCalls(BlockSyntax block, Action<string> call)
-        {
-            foreach (var statement in block.Statements)
-            {
-                VisitStatementCalls(statement, call);
-            }
-        }
-
-        private static void VisitStatementCalls(StatementSyntax statement, Action<string> call)
-        {
-            switch (statement)
-            {
-                case ConstDeclarationSyntax constDeclaration:
-                    VisitExpressionCalls(constDeclaration.Value, call);
-                    break;
-                case DeclarationSyntax declaration:
-                    VisitMaybeExpressionCalls(declaration.ArrayLength, call);
-                    VisitMaybeExpressionCalls(declaration.Initialization, call);
-                    break;
-                case ExpressionStatementSyntax expressionStatement:
-                    VisitExpressionCalls(expressionStatement.Expression, call);
-                    break;
-                case WhileSyntax whileSyntax:
-                    VisitExpressionCalls(whileSyntax.Condition, call);
-                    VisitBlockCalls(whileSyntax.Body, call);
-                    break;
-                case DoWhileSyntax doWhileSyntax:
-                    VisitBlockCalls(doWhileSyntax.Body, call);
-                    VisitExpressionCalls(doWhileSyntax.Condition, call);
-                    break;
-                case RangeForSyntax rangeForSyntax:
-                    VisitExpressionCalls(rangeForSyntax.Start, call);
-                    VisitExpressionCalls(rangeForSyntax.End, call);
-                    VisitBlockCalls(rangeForSyntax.Body, call);
-                    break;
-                case ForSyntax forSyntax:
-                    if (forSyntax.Initializer.HasValue)
-                    {
-                        VisitStatementCalls(forSyntax.Initializer.Value, call);
-                    }
-
-                    VisitMaybeExpressionCalls(forSyntax.Condition, call);
-                    VisitMaybeExpressionCalls(forSyntax.Increment, call);
-                    VisitBlockCalls(forSyntax.Body, call);
-                    break;
-                case IfElseSyntax ifElseSyntax:
-                    VisitExpressionCalls(ifElseSyntax.Condition, call);
-                    VisitBlockCalls(ifElseSyntax.ThenBlock, call);
-                    if (ifElseSyntax.ElseBlock.HasValue)
-                    {
-                        VisitBlockCalls(ifElseSyntax.ElseBlock.Value, call);
-                    }
-
-                    break;
-                case SwitchSyntax switchSyntax:
-                    VisitExpressionCalls(switchSyntax.Subject, call);
-                    foreach (var switchCase in switchSyntax.Cases)
-                    {
-                        foreach (var pattern in switchCase.Patterns)
-                        {
-                            VisitSwitchCasePatternCalls(pattern, call);
-                        }
-
-                        VisitBlockCalls(switchCase.Block, call);
-                    }
-
-                    if (switchSyntax.DefaultBlock.HasValue)
-                    {
-                        VisitBlockCalls(switchSyntax.DefaultBlock.Value, call);
-                    }
-
-                    break;
-                case ReturnSyntax returnSyntax:
-                    VisitMaybeExpressionCalls(returnSyntax.Expression, call);
-                    break;
-            }
-        }
-
-        private static void VisitExpressionCalls(ExpressionSyntax expression, Action<string> call)
-        {
-            switch (expression)
-            {
-                case FunctionCall functionCall:
-                    call(functionCall.Name);
-                    foreach (var parameter in functionCall.Parameters)
-                    {
-                        VisitExpressionCalls(parameter, call);
-                    }
-
-                    break;
-                case QualifiedCallSyntax qualifiedCall:
-                    foreach (var parameter in qualifiedCall.Parameters)
-                    {
-                        VisitExpressionCalls(parameter, call);
-                    }
-
-                    break;
-                case NamedArgumentSyntax namedArgument:
-                    VisitExpressionCalls(namedArgument.Expression, call);
-                    break;
-                case AssignmentSyntax assignment:
-                    VisitLValueCalls(assignment.Left, call);
-                    VisitExpressionCalls(assignment.Right, call);
-                    break;
-                case PostfixMutationSyntax postfixMutation:
-                    VisitLValueCalls(postfixMutation.Target, call);
-                    break;
-                case MemberAccessSyntax memberAccess:
-                    VisitExpressionCalls(memberAccess.Target, call);
-                    break;
-                case IndexExpressionSyntax indexExpression:
-                    VisitExpressionCalls(indexExpression.Index, call);
-                    break;
-                case CastSyntax cast:
-                    VisitExpressionCalls(cast.Expression, call);
-                    break;
-                case UnaryExpressionSyntax unary:
-                    VisitExpressionCalls(unary.Operand, call);
-                    break;
-                case BinaryExpressionSyntax binary:
-                    VisitExpressionCalls(binary.Left, call);
-                    VisitExpressionCalls(binary.Right, call);
-                    break;
-                case ConditionalExpressionSyntax conditional:
-                    VisitExpressionCalls(conditional.Condition, call);
-                    VisitExpressionCalls(conditional.WhenTrue, call);
-                    VisitExpressionCalls(conditional.WhenFalse, call);
-                    break;
-                case SwitchExpressionSyntax switchExpression:
-                    VisitExpressionCalls(switchExpression.Subject, call);
-                    foreach (var arm in switchExpression.Arms)
-                    {
-                        foreach (var pattern in arm.Patterns)
-                        {
-                            VisitSwitchCasePatternCalls(pattern, call);
-                        }
-
-                        VisitExpressionCalls(arm.Value, call);
-                    }
-
-                    VisitMaybeExpressionCalls(switchExpression.DefaultValue, call);
-                    break;
-                case PipelineExpressionSyntax pipeline:
-                    VisitExpressionCalls(pipeline.Value, call);
-                    foreach (var step in pipeline.Steps)
-                    {
-                        call(step.FunctionName);
-                        foreach (var argument in step.Arguments)
-                        {
-                            VisitExpressionCalls(argument, call);
-                        }
-                    }
-
-                    break;
-                case ArrayInitializerSyntax arrayInitializer:
-                    foreach (var element in arrayInitializer.Elements)
-                    {
-                        VisitExpressionCalls(element, call);
-                    }
-
-                    break;
-                case StructInitializerSyntax structInitializer:
-                    foreach (var field in structInitializer.Fields)
-                    {
-                        VisitExpressionCalls(field.Expression, call);
-                    }
-
-                    break;
-            }
-        }
-
-        private static void VisitSwitchCasePatternCalls(SwitchCasePatternSyntax pattern, Action<string> call)
-        {
-            VisitExpressionCalls(pattern.Start, call);
-            VisitMaybeExpressionCalls(pattern.End, call);
-        }
-
-        private static void VisitMaybeExpressionCalls(Maybe<ExpressionSyntax> expression, Action<string> call)
-        {
-            if (expression.HasValue)
-            {
-                VisitExpressionCalls(expression.Value, call);
-            }
-        }
-
-        private static void VisitLValueCalls(LValue lValue, Action<string> call)
-        {
-            switch (lValue)
-            {
-                case PointerDerefLValue pointer:
-                    VisitExpressionCalls(pointer.Expression, call);
-                    break;
-                case IndexLValue index:
-                    VisitExpressionCalls(index.Index, call);
-                    break;
-                case MemberAccessLValue member:
-                    VisitExpressionCalls(member.MemberAccess, call);
-                    break;
-            }
-        }
     }
 }

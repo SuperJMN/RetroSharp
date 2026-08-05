@@ -28,10 +28,12 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 ## Why the candidate forces the code-banked profile
 
 `PrepareLevel(...)` is one-shot level preparation that runs before the first frame. It is
-bulky on purpose: it pushes the movable program past what the constant 16 KiB fixed PRG
-region can hold, so the normal final-link ladder falls through the exact mapper-0 link and
-the fixed-execution MMC3 link and selects `nes-mmc3-tvrom-codebank-v1`. The source names no
-bank and no board.
+bulky on purpose: it carries a generated stream of 80 distinct branch folds over a running
+`u16` mixer. Every fold has its own constants, so the bulk is irreducible and no amount of
+body sharing or user-function outlining can shrink it away. It pushes the movable program
+past what the constant 16 KiB fixed PRG region can hold, so the normal final-link ladder
+falls through the exact mapper-0 link and the fixed-execution MMC3 link and selects
+`nes-mmc3-tvrom-codebank-v1`. The source names no bank and no board.
 
 ## What this sample discriminates
 

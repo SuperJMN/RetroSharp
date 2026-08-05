@@ -482,6 +482,9 @@ internal static class NesRomBuilder
         runtimeCompiler.EnsureProgramConsumed();
         movableProgramBytes = builder.PlacementUnits.Sum(unit => unit.Size);
 
+        // Outlined bodies stay outside every placement unit, so they are fixed-resident and every
+        // banked caller reaches them with a same-bank JSR.
+        runtimeCompiler.EmitOutlinedUserFunctions();
         runtimeCompiler.EmitReferencedSubroutines();
         if (worldPackRuntime is not null)
         {
@@ -717,7 +720,28 @@ internal static class NesRomBuilder
                 - fixedPayloadBeforeTrailer - (linkedProgram?.FixedVeneerBytes ?? 0)),
             linkedProgram?.BankPlacement,
             runtimeCompiler.CreateCallAccountingReport(
-                placementPlan.Units.Any(unit => unit.Phase is NesPrgPlacementPhase.Hot)));
+                placementPlan.Units.Any(unit => unit.Phase is NesPrgPlacementPhase.Hot)),
+            DescribeOutlinedUserFunctions(builder, runtimeCompiler.Outliner));
+    }
+
+    private static IReadOnlyList<NesOutlinedUserFunction> DescribeOutlinedUserFunctions(
+        PrgBuilder builder,
+        NesUserFunctionOutliner outliner)
+    {
+        var decisions = outliner.Decisions.ToDictionary(
+            decision => decision.Function,
+            StringComparer.Ordinal);
+        return outliner.Bodies
+            .Select(body => new NesOutlinedUserFunction(
+                body.Function.Name,
+                body.Label,
+                builder.AddressOfLabel(body.Label),
+                body.Phase,
+                builder.SubroutineCallSites.GetValueOrDefault(body.Label),
+                decisions.TryGetValue(body.Function.Name, out var decision) && decision.OverridesInlineHint))
+            .OrderBy(outlined => outlined.Function, StringComparer.Ordinal)
+            .ThenBy(outlined => outlined.Label, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static IReadOnlyList<NesSharedSdkSubroutine> DescribeSharedSdkSubroutines(PrgBuilder builder) =>
@@ -954,7 +978,8 @@ internal static class NesRomBuilder
             prgBuild.FrameCpuWork,
             prgBuild.FixedHeadroomBytes,
             prgBuild.BankPlacement,
-            prgBuild.UserFunctionCalls);
+            prgBuild.UserFunctionCalls,
+            prgBuild.OutlinedUserFunctions);
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(

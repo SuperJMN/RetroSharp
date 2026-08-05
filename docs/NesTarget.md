@@ -113,8 +113,8 @@ shape; the module then reports `Collected` bodies once and expands
 `ForRuntimeWork` over the recorded expansion tree, so a future shared body
 cannot hide executed calls from per-frame accounting. The internal
 `NesRomBuildReport.UserFunctionCalls` exposes per-function copies, call sites,
-calls per frame, and the duplication bytes that inline expansion costs today.
-It is diagnostic only: no source syntax, CLI option, emitted byte, or
+calls per frame, and the duplication bytes that inline expansion still costs.
+It is diagnostic only: no source syntax, CLI option, or
 `retrosharp.nes.runtime-abi` v1 field changes.
 
 A single stateful `NesSdkOperationLowerer` owns the emitted
@@ -164,6 +164,53 @@ limitation in the runtime-subset overview: all actor pool sizes now project
 inactive and off-window actors to hidden coordinates through stable definition
 call sites, while the post-publication `$FF` reset removes definition call sites
 that did not execute in the next frame.
+
+## Cold And One-Shot User-Function Outlining
+
+`NesUserFunctionOutliner` decides once per program which user functions are
+emitted as a single body reached by `JSR` instead of being substituted at every
+call site. A function is outlined when all of the following hold:
+
+- it is a declared, non-`extern` `void` function (value helpers keep the
+  expression substitution path, and an `inline` value helper is never
+  overridable);
+- its phase from `NesProgramPhaseAnalyzer` is `Cold` or `OneShot`, so it is
+  never reached from the frame placement unit. Frame-loop functions stay inline
+  until a cost model justifies paying call overhead per frame;
+- it has more than one static call site, because a single call would only add
+  the `JSR`/`RTS` bytes;
+- its transitive call closure contains no target intrinsic, resource
+  declaration, or built-in tilemap/stream statement. `NesSdkStreamReader`
+  replays `Sdk2DProgram` operations positionally, so a body emitted once but
+  executed many times would consume the wrong operations;
+- every argument at that call site is a compile-time operand: a folded constant,
+  or an identifier that names the same storage inside the body as it does at the
+  call site. Any other call site of the same function falls back to inline
+  expansion.
+
+The calling convention is `JSR label` / `RTS` with no argument marshalling.
+Compile-time operands are monomorphised into the specialization instead: the
+first shape gets `user_fn_<Name>`, further shapes get `user_fn_<Name>__<n>`.
+Nothing is pushed, no parameter frame is reserved, and zero-page pressure is
+unchanged. Functions that need a *computed* runtime argument therefore stay
+inline; giving them a real argument frame is a separate slice.
+
+Outlined bodies are emitted outside every placement unit, so they stay
+fixed-resident and every banked caller reaches them with a same-bank `JSR`.
+`NesRomBuildReport.OutlinedUserFunctions` names each emitted body, its label,
+CPU address, phase, call-site count, and whether it overrode an `inline` hint.
+Overriding `inline` on a cold `void` helper is deliberate: the helper's `inline`
+hint buys nothing measurable on a startup path, and the duplication it costs is
+the dominant PRG consumer in banked programs.
+
+Accounting keeps #516's two projections intact across outlining. An outlined
+function reports `EmittedCopies == 1` and `DuplicatedBytes == 0`, while `Calls`
+and `CallsPerFrame` still count every executed call by expanding each `JSR`
+through the body it targets. The `JSR` bytes are charged to the caller.
+
+`TryEmitGeneratedRomTableLookup` short-circuits before the user-function path,
+so pure functions compiled to ROM tables are invisible to this accounting and
+are neither candidates nor reported duplication.
 
 ## Supported Video API
 
@@ -226,7 +273,7 @@ Explicit casts validate that the requested target is a supported scalar local ty
 
 `++` and `--` are statement-only source sugar over `+= 1` and `-= 1`. They can be used as standalone statements or as the increment in a `for` loop, and lower to the same direct zero-page load/arithmetic/store sequences as the expanded compound assignment.
 
-Current user helper calls are source-level inline expansion. Parameters are substituted before target lowering, and helpers whose body is exactly one `return expr;` can be used where a byte expression is expected. Expression-bodied helpers such as `u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;` normalize to that same single-return shape. Named arguments are matched to helper parameters before substitution, so `step(amount: 5, value: 4)` lowers like `step(4, 5)`. Default parameter values are substituted at the call site before lowering; a helper such as `u8 step(u8 value, u8 amount = value + 1) => value + amount;` emits the same bytes for `step(value: 4)` and `step(4)` as for `step(4, 5)`. They improve reuse without adding call/return code, stack traffic, hidden zero-page storage, or a runtime ABI requirement.
+User helper calls are source-level inline expansion by default. Parameters are substituted before target lowering, and helpers whose body is exactly one `return expr;` can be used where a byte expression is expected. `void` helpers that only run outside the frame loop and are called from more than one site are instead emitted once and reached by `JSR`; see [Cold And One-Shot User-Function Outlining](#cold-and-one-shot-user-function-outlining) for the exact rule and its limits. Expression-bodied helpers such as `u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;` normalize to that same single-return shape. Named arguments are matched to helper parameters before substitution, so `step(amount: 5, value: 4)` lowers like `step(4, 5)`. Default parameter values are substituted at the call site before lowering; a helper such as `u8 step(u8 value, u8 amount = value + 1) => value + amount;` emits the same bytes for `step(value: 4)` and `step(4)` as for `step(4, 5)`. They improve reuse without adding call/return code, stack traffic, hidden zero-page storage, or a runtime ABI requirement.
 
 `for` loops are also source-level structure over direct branches. The initializer emits once, a supported relational condition such as `i < 3` lowers to `LDA`/`CMP` plus a relative branch out of the loop when the loop end is within the 6502 branch range, the body emits normally, and the increment emits before an absolute jump back to the condition. If the false branch would exceed the +/-127 byte relative-branch range, only that loop gets a local long-branch trampoline. `while` loops use the same condition-lowering path as `if`/`do while`/short `for` loops: `while (false)` emits no body, `while (true)` emits a direct infinite loop, and runtime byte-backed conditions such as `while (x < 3)` branch out of the loop before the body when the condition becomes false.
 
