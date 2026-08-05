@@ -82,11 +82,15 @@ public sealed class NesPrgLinkerTests
     public void Cross_bank_branch_and_fallthrough_share_one_veneer_without_splitting_atoms()
     {
         var builder = CreateBuilder();
-        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit("program:first", NesPrgResidence.ProgramR6))
         {
             builder.Label("branch");
             builder.BranchRelative(0xD0, "second_bank"); // BNE
             builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 8).ToArray());
+        }
+
+        using (builder.EnterPlacementUnit("program:second", NesPrgResidence.ProgramR6))
+        {
             builder.Label("second_bank");
             builder.Emit(0xA9, 0x7E, 0x85, 0x10);
         }
@@ -105,6 +109,52 @@ public sealed class NesPrgLinkerTests
         Assert.Equal(3, result.Symbols["second_bank"].PhysicalBank);
         Assert.Equal((ushort)0x8000, result.Symbols["second_bank"].CpuAddress);
         Assert.Equal(12, result.FixedVeneerBytes);
+        Assert.Equal(
+            [
+                new NesPrgPlacementUnit("program:first", NesPrgResidence.ProgramR6, ProgramBankSize),
+                new NesPrgPlacementUnit("program:second", NesPrgResidence.ProgramR6, 4),
+            ],
+            result.PlacementUnits);
+        Assert.Equal(result.ProgramBytes, result.PlacementUnits.Sum(unit => unit.Size));
+    }
+
+    [Fact]
+    public void Sectioned_builder_rejects_fixed_placement_units_until_their_placement_is_defined()
+    {
+        var builder = CreateBuilder();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => builder.EnterPlacementUnit("fixed:future", NesPrgResidence.Fixed));
+
+        Assert.Equal(
+            "NES sectioned PRG does not support Fixed placement unit 'fixed:future' until fixed placement policy is implemented.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Unit_end_label_resolves_to_the_next_unit_after_a_bank_cut()
+    {
+        var builder = CreateBuilder();
+        builder.JumpAbsolute("next_unit");
+        using (builder.EnterPlacementUnit("program:first", NesPrgResidence.ProgramR6))
+        {
+            builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 3).ToArray());
+            builder.Label("next_unit");
+        }
+
+        using (builder.EnterPlacementUnit("program:second", NesPrgResidence.ProgramR6))
+        {
+            builder.Emit(0xEA, 0xEA, 0xEA, 0xEA);
+        }
+
+        var result = Link(
+            builder,
+            checked((ushort)builder.CurrentAddress),
+            ProgramBank(0),
+            ProgramBank(3));
+
+        Assert.Equal(3, result.Symbols["next_unit"].PhysicalBank);
+        Assert.Equal((ushort)0x8000, result.Symbols["next_unit"].CpuAddress);
     }
 
     [Fact]

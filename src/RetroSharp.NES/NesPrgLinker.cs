@@ -53,33 +53,23 @@ internal static class NesPrgLinker
     private const int FallthroughJumpSize = 3;
     private const int VeneerSize = 12;
 
-    private sealed record LinkLabelDefinition(
-        NesPrgResidence? Residence,
-        int Offset,
-        ushort? ExternalAddress);
+    private sealed class MutableAtom(
+        NesPrgPlacementUnitEmission unit,
+        NesPrgAtom source,
+        NesPrgRelocation? branchRelocation)
+    {
+        internal NesPrgPlacementUnitEmission Unit { get; } = unit;
 
-    private sealed record LinkRelocation(
-        NesPrgResidence Residence,
-        int Offset,
-        string Label,
-        int Addend,
-        NesPrgRelocationKind Kind);
+        internal NesPrgAtom Source { get; } = source;
 
-    private sealed record LinkEmission(
-        ushort FixedBaseAddress,
-        NesPrgSectionEmission FixedSection,
-        NesPrgSectionEmission ProgramSection,
-        IReadOnlyDictionary<string, LinkLabelDefinition> Labels,
-        IReadOnlyList<LinkRelocation> Relocations);
+        internal NesPrgRelocation? BranchRelocation { get; } = branchRelocation;
 
-    private sealed record ResidenceStream(
-        NesPrgSectionEmission Section,
-        IReadOnlyDictionary<string, int> UnitOffsets);
+        internal bool Expanded { get; set; }
+    }
 
-    private sealed record MutableAtom(
-        NesPrgAtom Source,
-        LinkRelocation? BranchRelocation,
-        bool Expanded);
+    private sealed record MutablePlacementUnit(
+        NesPrgPlacementUnitEmission Source,
+        IReadOnlyList<MutableAtom> Atoms);
 
     private sealed record PlacedAtom(
         MutableAtom Atom,
@@ -106,42 +96,59 @@ internal static class NesPrgLinker
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(layout);
 
-        var sourceEmission = builder.FreezeForLink();
-        var emission = NormalizeEmission(sourceEmission);
-        var fixedSection = emission.FixedSection;
-        var programSection = emission.ProgramSection;
-        ValidateProgramAtoms(programSection);
+        var emission = builder.FreezeForLink();
+        var unsupportedFixedUnit = emission.PlacementUnits.FirstOrDefault(
+            unit => unit.Residence is NesPrgResidence.Fixed);
+        if (unsupportedFixedUnit is not null)
+        {
+            throw new InvalidOperationException(
+                $"NES banked linker does not support Fixed placement unit '{unsupportedFixedUnit.Name}' until fixed placement policy is implemented.");
+        }
 
-        var branchRelocations = emission.Relocations
-            .Where(relocation =>
-                relocation.Residence is NesPrgResidence.ProgramR6 &&
-                relocation.Kind is NesPrgRelocationKind.RelativeBranch)
-            .ToDictionary(
-                relocation => FindContainingAtom(programSection.Atoms, relocation.Offset).Offset,
-                relocation => relocation);
-        var mutableAtoms = programSection.Atoms
-            .Select(atom => new MutableAtom(
-                atom,
-                branchRelocations.GetValueOrDefault(atom.Offset),
-                Expanded: false))
+        var programUnits = emission.PlacementUnits
+            .Where(unit => unit.Residence is NesPrgResidence.ProgramR6)
+            .ToArray();
+        foreach (var unit in programUnits)
+        {
+            ValidateProgramAtoms(unit);
+        }
+
+        var mutableUnits = programUnits
+            .Select(unit =>
+            {
+                var branchRelocations = emission.Relocations
+                    .Where(relocation =>
+                        relocation.PlacementUnitName == unit.Name &&
+                        relocation.Kind is NesPrgRelocationKind.RelativeBranch)
+                    .ToDictionary(
+                        relocation => FindContainingAtom(unit, relocation.Offset).Offset,
+                        relocation => relocation);
+                return new MutablePlacementUnit(
+                    unit,
+                    unit.Atoms
+                        .Select(atom => new MutableAtom(
+                            unit,
+                            atom,
+                            branchRelocations.GetValueOrDefault(atom.Offset)))
+                        .ToArray());
+            })
             .ToArray();
 
         ProgramPlacement placement;
         IReadOnlyDictionary<string, ResolvedSymbol> symbols;
         while (true)
         {
-            placement = PlaceProgram(mutableAtoms);
+            placement = PlaceProgram(mutableUnits);
             symbols = ResolveSymbols(emission, placement, layout);
             var grew = false;
-            for (var index = 0; index < mutableAtoms.Length; index++)
+            foreach (var placed in placement.Atoms)
             {
-                var atom = mutableAtoms[index];
+                var atom = placed.Atom;
                 if (atom.Expanded || atom.BranchRelocation is null)
                 {
                     continue;
                 }
 
-                var placed = placement.Atoms[index];
                 var target = ResolveTarget(symbols, atom.BranchRelocation);
                 var branchFrom = ProgramCpuBaseAddress + placed.Offset + 2;
                 var delta = target.CpuAddress - branchFrom;
@@ -152,7 +159,7 @@ internal static class NesPrgLinker
                     continue;
                 }
 
-                mutableAtoms[index] = atom with { Expanded = true };
+                atom.Expanded = true;
                 grew = true;
             }
 
@@ -200,7 +207,7 @@ internal static class NesPrgLinker
             })
             .ToDictionary(item => item.Target, item => item.Address);
 
-        var fixedBytes = fixedSection.Bytes.ToArray();
+        var fixedBytes = emission.FixedSection.Bytes.ToArray();
         for (var index = 0; index < orderedVeneers.Length; index++)
         {
             WriteVeneer(
@@ -219,14 +226,16 @@ internal static class NesPrgLinker
             var destination = programBuffers[placed.BankIndex].AsSpan(placed.Offset, placed.Length);
             if (placed.Atom.Expanded)
             {
-                var sourceOpcode = programSection.Bytes[placed.Atom.Source.Offset];
+                var sourceOpcode = placed.Atom.Unit.Bytes[placed.Atom.Source.Offset];
                 destination[0] = InvertBranch(sourceOpcode);
                 destination[1] = 0x03;
                 destination[2] = 0x4C;
             }
             else
             {
-                programSection.Bytes.AsSpan(placed.Atom.Source.Offset, placed.Atom.Source.Length).CopyTo(destination);
+                placed.Atom.Unit.Bytes
+                    .AsSpan(placed.Atom.Source.Offset, placed.Atom.Source.Length)
+                    .CopyTo(destination);
             }
         }
 
@@ -264,174 +273,116 @@ internal static class NesPrgLinker
             fixedBytes,
             programSegments,
             publicSymbols,
-            sourceEmission.PlacementUnits
-                .Select(unit => new NesPrgPlacementUnit(unit.Name, unit.Residence, unit.Bytes.Length))
-                .ToArray(),
+            DescribePlacementUnits(emission, placement),
             requiredVeneerBytes,
             programBuffers.Sum(buffer => buffer.Length),
             placement.RequiredBanks);
     }
 
-    private static LinkEmission NormalizeEmission(NesPrgEmission emission)
-    {
-        var unitsByName = emission.PlacementUnits.ToDictionary(unit => unit.Name, StringComparer.Ordinal);
-        var fixedStream = BuildResidenceStream(emission, NesPrgResidence.Fixed);
-        var programStream = BuildResidenceStream(emission, NesPrgResidence.ProgramR6);
-        var streams = new Dictionary<NesPrgResidence, ResidenceStream>
-        {
-            [NesPrgResidence.Fixed] = fixedStream,
-            [NesPrgResidence.ProgramR6] = programStream,
-        };
-        var labels = emission.Labels.ToDictionary(
-            pair => pair.Key,
-            pair =>
-            {
-                var definition = pair.Value;
-                if (definition.ExternalAddress is not null)
-                {
-                    return new LinkLabelDefinition(
-                        Residence: null,
-                        Offset: 0,
-                        definition.ExternalAddress);
-                }
-
-                if (definition.PlacementUnitName is null)
-                {
-                    return new LinkLabelDefinition(
-                        NesPrgResidence.Fixed,
-                        definition.Offset,
-                        ExternalAddress: null);
-                }
-
-                var unit = unitsByName[definition.PlacementUnitName];
-                return new LinkLabelDefinition(
-                    unit.Residence,
-                    checked(streams[unit.Residence].UnitOffsets[unit.Name] + definition.Offset),
-                    ExternalAddress: null);
-            },
-            StringComparer.Ordinal);
-        var relocations = emission.Relocations
-            .Select(relocation =>
-            {
-                if (relocation.PlacementUnitName is null)
-                {
-                    return new LinkRelocation(
-                        NesPrgResidence.Fixed,
-                        relocation.Offset,
-                        relocation.Label,
-                        relocation.Addend,
-                        relocation.Kind);
-                }
-
-                var unit = unitsByName[relocation.PlacementUnitName];
-                return new LinkRelocation(
-                    unit.Residence,
-                    checked(streams[unit.Residence].UnitOffsets[unit.Name] + relocation.Offset),
-                    relocation.Label,
-                    relocation.Addend,
-                    relocation.Kind);
-            })
-            .ToArray();
-        return new LinkEmission(
-            emission.FixedBaseAddress,
-            fixedStream.Section,
-            programStream.Section,
-            labels,
-            relocations);
-    }
-
-    private static ResidenceStream BuildResidenceStream(
-        NesPrgEmission emission,
-        NesPrgResidence residence)
-    {
-        var bytes = residence is NesPrgResidence.Fixed
-            ? emission.FixedSection.Bytes.ToList()
-            : [];
-        var atoms = residence is NesPrgResidence.Fixed
-            ? emission.FixedSection.Atoms.ToList()
-            : [];
-        var unitOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var unit in emission.PlacementUnits.Where(unit => unit.Residence == residence))
-        {
-            var unitOffset = bytes.Count;
-            unitOffsets.Add(unit.Name, unitOffset);
-            bytes.AddRange(unit.Bytes);
-            atoms.AddRange(unit.Atoms.Select(atom => atom with { Offset = checked(unitOffset + atom.Offset) }));
-        }
-
-        return new ResidenceStream(
-            new NesPrgSectionEmission(bytes.ToArray(), atoms.ToArray()),
-            unitOffsets);
-    }
-
-    private static void ValidateProgramAtoms(NesPrgSectionEmission program)
+    private static void ValidateProgramAtoms(NesPrgPlacementUnitEmission unit)
     {
         var expectedOffset = 0;
-        foreach (var atom in program.Atoms)
+        foreach (var atom in unit.Atoms)
         {
             if (atom.Offset != expectedOffset || atom.Length <= 0)
             {
                 throw new InvalidOperationException(
-                    $"NES banked program atoms are not contiguous at source offset {expectedOffset}.");
+                    $"NES banked program unit '{unit.Name}' has non-contiguous atoms at source offset {expectedOffset}.");
             }
 
             expectedOffset = checked(expectedOffset + atom.Length);
         }
 
-        if (expectedOffset != program.Bytes.Length)
+        if (expectedOffset != unit.Bytes.Length)
         {
             throw new InvalidOperationException(
-                $"NES banked program atoms cover {expectedOffset} bytes, but the emitted stream contains {program.Bytes.Length} bytes.");
+                $"NES banked program unit '{unit.Name}' has atoms covering {expectedOffset} bytes, but its emitted stream contains {unit.Bytes.Length} bytes.");
         }
     }
 
-    private static ProgramPlacement PlaceProgram(IReadOnlyList<MutableAtom> atoms)
+    private static ProgramPlacement PlaceProgram(IReadOnlyList<MutablePlacementUnit> units)
     {
-        if (atoms.Count == 0)
+        var atomCount = units.Sum(unit => unit.Atoms.Count);
+        if (atomCount == 0)
         {
             return new ProgramPlacement([], [], RequiredBanks: 0);
         }
 
-        var placed = new List<PlacedAtom>(atoms.Count);
+        var placed = new List<PlacedAtom>(atomCount);
         var used = new List<int>();
         var bankIndex = 0;
         var offset = 0;
-        for (var atomIndex = 0; atomIndex < atoms.Count; atomIndex++)
+        var atomIndex = 0;
+        foreach (var unit in units)
         {
-            var atom = atoms[atomIndex];
-            var length = atom.Expanded ? 5 : atom.Source.Length;
-            var isFinalAtom = atomIndex == atoms.Count - 1;
-            var bankCapacity = isFinalAtom
-                ? ProgramBankSize
-                : ProgramBankSize - FallthroughJumpSize;
-            if (length > bankCapacity)
+            foreach (var atom in unit.Atoms)
             {
-                throw new InvalidOperationException(
-                    $"NES banked program atom at source offset {atom.Source.Offset} is {length} bytes; an indivisible atom may use at most {bankCapacity} bytes in this position.");
-            }
+                var length = atom.Expanded ? 5 : atom.Source.Length;
+                var isFinalAtom = atomIndex == atomCount - 1;
+                var bankCapacity = isFinalAtom
+                    ? ProgramBankSize
+                    : ProgramBankSize - FallthroughJumpSize;
+                if (length > bankCapacity)
+                {
+                    throw new InvalidOperationException(
+                        $"NES banked program atom in unit '{unit.Source.Name}' at source offset {atom.Source.Offset} is {length} bytes; an indivisible atom may use at most {bankCapacity} bytes in this position.");
+                }
 
-            if (offset + length > bankCapacity)
-            {
-                used.Add(offset + FallthroughJumpSize);
-                bankIndex++;
-                offset = 0;
-            }
+                if (offset + length > bankCapacity)
+                {
+                    used.Add(offset + FallthroughJumpSize);
+                    bankIndex++;
+                    offset = 0;
+                }
 
-            placed.Add(new PlacedAtom(atom, bankIndex, offset, length));
-            offset += length;
+                placed.Add(new PlacedAtom(atom, bankIndex, offset, length));
+                offset += length;
+                atomIndex++;
+            }
         }
 
         used.Add(offset);
         return new ProgramPlacement(placed, used, bankIndex + 1);
     }
 
+    private static IReadOnlyList<NesPrgPlacementUnit> DescribePlacementUnits(
+        NesPrgEmission emission,
+        ProgramPlacement placement)
+    {
+        var linkedSizes = emission.PlacementUnits.ToDictionary(
+            unit => unit.Name,
+            _ => 0,
+            StringComparer.Ordinal);
+        foreach (var placed in placement.Atoms)
+        {
+            linkedSizes[placed.Atom.Unit.Name] = checked(
+                linkedSizes[placed.Atom.Unit.Name] + placed.Length);
+        }
+
+        for (var bankIndex = 0; bankIndex + 1 < placement.RequiredBanks; bankIndex++)
+        {
+            var owner = placement.Atoms.Last(atom => atom.BankIndex == bankIndex).Atom.Unit.Name;
+            linkedSizes[owner] = checked(linkedSizes[owner] + FallthroughJumpSize);
+        }
+
+        return emission.PlacementUnits
+            .Select(unit => new NesPrgPlacementUnit(
+                unit.Name,
+                unit.Residence,
+                linkedSizes[unit.Name]))
+            .ToArray();
+    }
+
     private static IReadOnlyDictionary<string, ResolvedSymbol> ResolveSymbols(
-        LinkEmission emission,
+        NesPrgEmission emission,
         ProgramPlacement placement,
         NesPrgLinkLayout layout)
     {
-        var programStarts = placement.Atoms.ToDictionary(item => item.Atom.Source.Offset);
-        var last = placement.Atoms.LastOrDefault();
+        var programStarts = placement.Atoms.ToDictionary(
+            item => (item.Atom.Unit.Name, item.Atom.Source.Offset));
+        var unitsByName = emission.PlacementUnits.ToDictionary(
+            unit => unit.Name,
+            StringComparer.Ordinal);
         var resolved = new Dictionary<string, ResolvedSymbol>(StringComparer.Ordinal);
         foreach (var pair in emission.Labels)
         {
@@ -447,7 +398,7 @@ internal static class NesPrgLinker
                 continue;
             }
 
-            if (definition.Residence is NesPrgResidence.Fixed)
+            if (definition.PlacementUnitName is null)
             {
                 resolved[pair.Key] = new ResolvedSymbol(
                     NesPrgResidence.Fixed,
@@ -459,18 +410,19 @@ internal static class NesPrgLinker
             }
 
             PlacedAtom location;
-            if (programStarts.TryGetValue(definition.Offset, out var atStart))
+            var unitName = definition.PlacementUnitName;
+            if (programStarts.TryGetValue((unitName, definition.Offset), out var atStart))
             {
                 location = atStart;
             }
-            else if (last is not null && definition.Offset == last.Atom.Source.Offset + last.Atom.Source.Length)
+            else if (definition.Offset == unitsByName[unitName].Bytes.Length)
             {
-                location = last with { Offset = last.Offset + last.Length };
+                location = ResolveUnitEnd(emission, placement, unitName);
             }
             else
             {
                 throw new InvalidOperationException(
-                    $"NES banked program label '{pair.Key}' at source offset {definition.Offset} does not lie on an atom boundary.");
+                    $"NES banked program label '{pair.Key}' in unit '{unitName}' at source offset {definition.Offset} does not lie on an atom boundary.");
             }
 
             var bank = location.BankIndex < layout.ProgramBanks.Count
@@ -487,8 +439,35 @@ internal static class NesPrgLinker
         return resolved;
     }
 
+    private static PlacedAtom ResolveUnitEnd(
+        NesPrgEmission emission,
+        ProgramPlacement placement,
+        string unitName)
+    {
+        var unitOrder = emission.PlacementUnits
+            .Select((unit, index) => new { unit.Name, Index = index })
+            .ToDictionary(item => item.Name, item => item.Index, StringComparer.Ordinal);
+        var unitIndex = unitOrder[unitName];
+        var next = placement.Atoms.FirstOrDefault(
+            atom => unitOrder[atom.Atom.Unit.Name] > unitIndex);
+        if (next is not null)
+        {
+            return next;
+        }
+
+        var previous = placement.Atoms.LastOrDefault(
+            atom => unitOrder[atom.Atom.Unit.Name] <= unitIndex);
+        if (previous is not null)
+        {
+            return previous with { Offset = previous.Offset + previous.Length };
+        }
+
+        throw new InvalidOperationException(
+            $"NES banked program unit '{unitName}' has no emitted location for its end label.");
+    }
+
     private static HashSet<VeneerTarget> CollectVeneerTargets(
-        LinkEmission emission,
+        NesPrgEmission emission,
         ProgramPlacement placement,
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
         NesPrgLinkLayout layout)
@@ -518,8 +497,8 @@ internal static class NesPrgLinker
                     $"NES banked program label '{relocation.Label}' cannot be used as an address-only relocation in v1.");
             }
 
-            var sourceBank = relocation.Residence is NesPrgResidence.ProgramR6
-                ? FindPlacedAtom(placement, relocation.Offset).BankIndex
+            var sourceBank = relocation.PlacementUnitName is not null
+                ? FindPlacedAtom(placement, relocation).BankIndex
                 : (int?)null;
             if (relocation.Kind is NesPrgRelocationKind.AbsoluteCall && sourceBank != target.BankIndex)
             {
@@ -527,7 +506,7 @@ internal static class NesPrgLinker
                     $"NES banked program does not support cross-bank JSR to '{relocation.Label}' in v1.");
             }
 
-            var needsVeneer = relocation.Residence is NesPrgResidence.Fixed ||
+            var needsVeneer = relocation.PlacementUnitName is null ||
                                sourceBank != target.BankIndex;
             if (needsVeneer &&
                 (relocation.Kind is NesPrgRelocationKind.AbsoluteJump or NesPrgRelocationKind.RelativeBranch))
@@ -555,7 +534,7 @@ internal static class NesPrgLinker
     }
 
     private static void ApplyRelocations(
-        LinkEmission emission,
+        NesPrgEmission emission,
         ProgramPlacement placement,
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
         IReadOnlyDictionary<VeneerTarget, ushort> veneerAddresses,
@@ -565,13 +544,13 @@ internal static class NesPrgLinker
         foreach (var relocation in emission.Relocations)
         {
             var target = ResolveTarget(symbols, relocation);
-            if (relocation.Residence is NesPrgResidence.Fixed)
+            if (relocation.PlacementUnitName is null)
             {
                 ApplyFixedRelocation(relocation, target, veneerAddresses, fixedBytes, emission.FixedBaseAddress);
                 continue;
             }
 
-            var placed = FindPlacedAtom(placement, relocation.Offset);
+            var placed = FindPlacedAtom(placement, relocation);
             var destination = programBuffers[placed.BankIndex];
             if (relocation.Kind is NesPrgRelocationKind.RelativeBranch)
             {
@@ -631,7 +610,7 @@ internal static class NesPrgLinker
     }
 
     private static void ApplyFixedRelocation(
-        LinkRelocation relocation,
+        NesPrgRelocation relocation,
         ResolvedSymbol target,
         IReadOnlyDictionary<VeneerTarget, ushort> veneerAddresses,
         byte[] fixedBytes,
@@ -698,7 +677,7 @@ internal static class NesPrgLinker
         return target.CpuAddress;
     }
 
-    private static void RejectProgramAddressTarget(LinkRelocation relocation, ResolvedSymbol target)
+    private static void RejectProgramAddressTarget(NesPrgRelocation relocation, ResolvedSymbol target)
     {
         if (target.Residence is NesPrgResidence.ProgramR6)
         {
@@ -709,7 +688,7 @@ internal static class NesPrgLinker
 
     private static ResolvedSymbol ResolveTarget(
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
-        LinkRelocation relocation)
+        NesPrgRelocation relocation)
     {
         var target = ResolveNamedSymbol(symbols, relocation.Label);
         if (target.Residence is NesPrgResidence.ProgramR6 && relocation.Addend != 0)
@@ -728,17 +707,20 @@ internal static class NesPrgLinker
             ? symbol
             : throw new InvalidOperationException($"Unknown NES PRG label '{label}'.");
 
-    private static PlacedAtom FindPlacedAtom(ProgramPlacement placement, int sourceOffset) =>
+    private static PlacedAtom FindPlacedAtom(
+        ProgramPlacement placement,
+        NesPrgRelocation relocation) =>
         placement.Atoms.FirstOrDefault(atom =>
-            sourceOffset >= atom.Atom.Source.Offset &&
-            sourceOffset < atom.Atom.Source.Offset + atom.Atom.Source.Length)
+            atom.Atom.Unit.Name == relocation.PlacementUnitName &&
+            relocation.Offset >= atom.Atom.Source.Offset &&
+            relocation.Offset < atom.Atom.Source.Offset + atom.Atom.Source.Length)
         ?? throw new InvalidOperationException(
-            $"NES banked relocation at source offset {sourceOffset} is not contained by an emitted atom.");
+            $"NES banked relocation in unit '{relocation.PlacementUnitName}' at source offset {relocation.Offset} is not contained by an emitted atom.");
 
-    private static NesPrgAtom FindContainingAtom(IReadOnlyList<NesPrgAtom> atoms, int sourceOffset) =>
-        atoms.FirstOrDefault(atom => sourceOffset >= atom.Offset && sourceOffset < atom.Offset + atom.Length)
+    private static NesPrgAtom FindContainingAtom(NesPrgPlacementUnitEmission unit, int sourceOffset) =>
+        unit.Atoms.FirstOrDefault(atom => sourceOffset >= atom.Offset && sourceOffset < atom.Offset + atom.Length)
         ?? throw new InvalidOperationException(
-            $"NES banked relocation at source offset {sourceOffset} is not contained by an emitted atom.");
+            $"NES banked relocation in unit '{unit.Name}' at source offset {sourceOffset} is not contained by an emitted atom.");
 
     private static byte InvertBranch(byte opcode) => opcode switch
     {
@@ -787,7 +769,7 @@ internal static class NesPrgLinker
         byte[] bytes,
         int offset,
         ushort address,
-        LinkRelocation relocation)
+        NesPrgRelocation relocation)
     {
         var resolved = checked(address + relocation.Addend);
         bytes[offset] = relocation.Kind is NesPrgRelocationKind.HighByte

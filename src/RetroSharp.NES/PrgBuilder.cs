@@ -179,6 +179,12 @@ internal sealed class PrgBuilder
     internal IDisposable EnterPlacementUnit(string name, NesPrgResidence residence)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (sectioned && residence is NesPrgResidence.Fixed)
+        {
+            throw new InvalidOperationException(
+                $"NES sectioned PRG does not support Fixed placement unit '{name}' until fixed placement policy is implemented.");
+        }
+
         if (currentPlacementUnit is not null)
         {
             throw new InvalidOperationException(
@@ -538,14 +544,13 @@ internal sealed class PrgBuilder
             return externalAddress;
         }
 
-        if (definition.PlacementUnitName is { } placementUnitName &&
-            placementUnitsByName[placementUnitName].Residence is not NesPrgResidence.Fixed)
+        if (definition.PlacementUnitName is not null)
         {
             throw new InvalidOperationException(
                 $"NES banked program label '{label}' requires a physical bank as well as a CPU address.");
         }
 
-        return checked((ushort)(baseAddress + FixedOffsetOf(definition)));
+        return checked((ushort)(baseAddress + definition.Offset));
     }
 
     private List<byte> CurrentBytes => sectioned
@@ -647,31 +652,6 @@ internal sealed class PrgBuilder
         }
 
         currentPlacementUnit = null;
-    }
-
-    private int FixedOffsetOf(NesPrgLabelDefinition definition)
-    {
-        if (definition.PlacementUnitName is null)
-        {
-            return definition.Offset;
-        }
-
-        var target = placementUnitsByName[definition.PlacementUnitName];
-        var offset = recordedFixedSection.Bytes.Count;
-        foreach (var unit in recordedPlacementUnits)
-        {
-            if (ReferenceEquals(unit, target))
-            {
-                return checked(offset + definition.Offset);
-            }
-
-            if (unit.Residence is NesPrgResidence.Fixed)
-            {
-                offset = checked(offset + unit.Section.Bytes.Count);
-            }
-        }
-
-        throw new InvalidOperationException($"Unknown NES PRG placement unit '{definition.PlacementUnitName}'.");
     }
 
     private static byte CheckedByte(int value)

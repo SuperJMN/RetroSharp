@@ -81,9 +81,11 @@ The movable program is emitted as named placement units with a residence on
 each unit. The current program has one stable unit, `program:main`, containing
 the flattened `Main` stream, including inline-expanded user, receiver, and
 value helpers, followed by its terminal loop. It remains `ProgramR6` in the
-code-banked profile and `Fixed` in the earlier profiles. The linker currently
-concatenates units in emission order within their residence, so unit boundaries
-do not reorder code or change bank cuts; phase classification and placement
+code-banked profile and `Fixed` in the earlier flat profiles. The banked linker
+keeps `ProgramR6` units distinct through placement and currently visits them in
+emission order, so unit boundaries do not reorder code or change bank cuts.
+Named `Fixed` units are rejected by the sectioned builder/linker until a fixed
+placement policy defines their real offsets; phase classification and placement
 policy remain later work. A repeated
 multi-piece `DrawLogicalSprite` shape stores its runtime operands in
 `NesRuntimeMemoryLayout` scratch and calls one fixed-resident target helper;
@@ -149,7 +151,8 @@ beyond the R6 banks of the selected board, and it only selects a larger board
 after the current one proves its pool is exhausted.
 
 The internal `NesRomBuildReport` identifies the selected profile and exposes
-placement-unit names, residences, and emitted sizes together with `PrgRomSize`,
+placement-unit names, residences, and linked sizes (including branch expansion
+and any bank-edge fallthrough owned by the unit) together with `PrgRomSize`,
 `ProgramR6Bytes`, `FixedVeneerBytes`, `program:r6:*` segments, and bank-aware
 symbols. R6 exhaustion reports the `WorldPack` banks and bytes, program banks
 and linked bytes, and the selected board's physical pool — for example
@@ -161,6 +164,12 @@ explicitly. These linker details do not change the public
 `retrosharp.nes.runtime-abi` v1 sidecar or its schema.
 
 ## Stable evidence
+
+[`samples/executable-banking`](../samples/executable-banking) is the tracked
+build canary for automatic executable banking. Its compact nested inline source
+expands beyond fixed PRG capacity, so the normal selector must choose
+`nes-mmc3-tvrom-codebank-v1` and emit the tracked NES ROM through the real
+sample-generation path.
 
 [`validation/fixtures/nes-code-banking-v1`](../validation/fixtures/nes-code-banking-v1)
 is the versioned canary. It combines a small Tiled `WorldPack`, pinned NES

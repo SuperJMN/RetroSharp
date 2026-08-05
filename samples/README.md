@@ -32,7 +32,9 @@ Focused samples are the stable behavioral canaries. In particular,
 `platformer-landing` and `oneway-platform` own platformer collision and landing;
 the `tiled-hscroll-*`, `tiled-vertical-scroll`, and `deadzone-follow` samples own
 streaming and camera behavior; and `audio-mixed-load` owns mixed audio, sprite,
-camera, and cadence load. Full-stage pack and layout contracts use the versioned
+camera, and cadence load. The NES-only `executable-banking` sample owns the
+tracked automatic-selection path for `nes-mmc3-tvrom-codebank-v1`. Full-stage
+pack and layout contracts use the versioned
 fixtures under `validation/fixtures/`, not the runner. Shared canaries consume
 assets from `samples/shared/platformer-assets`; no sample outside the runner may
 depend on `samples/runner/assets`.

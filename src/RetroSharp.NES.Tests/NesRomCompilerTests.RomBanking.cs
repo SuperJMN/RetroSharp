@@ -207,6 +207,26 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
+    public void Tracked_executable_banking_sample_selects_the_codebank_profile()
+    {
+        var sourcePath = RepositoryFile("samples/executable-banking/executable-banking.rs");
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(sourcePath),
+            Path.GetDirectoryName(sourcePath));
+        var unit = Assert.Single(result.Report.PlacementUnits);
+
+        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, unit.Name);
+        Assert.Equal(NesPrgResidence.ProgramR6, unit.Residence);
+        Assert.Equal(result.Report.ProgramR6Bytes, unit.Size);
+        Assert.InRange(
+            result.Report.Segments.Count(segment =>
+                segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal)),
+            2,
+            4);
+    }
+
+    [Fact]
     public void Forced_codebank_link_keeps_gameplay_in_r6_and_runtime_in_fixed_prg()
     {
         const string source = """
