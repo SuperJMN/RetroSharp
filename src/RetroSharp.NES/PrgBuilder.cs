@@ -6,6 +6,14 @@ internal enum NesPrgResidence
     ProgramR6,
 }
 
+internal enum NesPrgPlacementPhase
+{
+    Unknown,
+    Cold,
+    Hot,
+    OneShot,
+}
+
 internal enum NesPrgRelocationKind
 {
     AbsoluteAddress,
@@ -37,13 +45,15 @@ internal sealed record NesPrgSectionEmission(
 internal sealed record NesPrgPlacementUnitEmission(
     string Name,
     NesPrgResidence Residence,
+    NesPrgPlacementPhase Phase,
     byte[] Bytes,
     IReadOnlyList<NesPrgAtom> Atoms);
 
 internal sealed record NesPrgPlacementUnit(
     string Name,
     NesPrgResidence Residence,
-    int Size);
+    int Size,
+    NesPrgPlacementPhase Phase = NesPrgPlacementPhase.Unknown);
 
 internal sealed record NesPrgEmission(
     ushort FixedBaseAddress,
@@ -64,11 +74,14 @@ internal sealed class PrgBuilder
     private sealed class RecordedPlacementUnit(
         string name,
         NesPrgResidence residence,
+        NesPrgPlacementPhase phase,
         int flatStartOffset)
     {
         public string Name { get; } = name;
 
         public NesPrgResidence Residence { get; } = residence;
+
+        public NesPrgPlacementPhase Phase { get; } = phase;
 
         public int FlatStartOffset { get; } = flatStartOffset;
 
@@ -132,7 +145,8 @@ internal sealed class PrgBuilder
             unit.Residence,
             sectioned
                 ? unit.Section.Bytes.Count
-                : unit.FlatSize ?? bytes.Count - unit.FlatStartOffset))
+                : unit.FlatSize ?? bytes.Count - unit.FlatStartOffset,
+            unit.Phase))
         .ToArray();
 
     public void Label(string name)
@@ -176,7 +190,10 @@ internal sealed class PrgBuilder
         EmitRecordedAtom(values);
     }
 
-    internal IDisposable EnterPlacementUnit(string name, NesPrgResidence residence)
+    internal IDisposable EnterPlacementUnit(
+        string name,
+        NesPrgResidence residence,
+        NesPrgPlacementPhase phase = NesPrgPlacementPhase.Unknown)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (sectioned && residence is NesPrgResidence.Fixed)
@@ -196,7 +213,7 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"NES PRG placement unit '{name}' has already been emitted.");
         }
 
-        var unit = new RecordedPlacementUnit(name, residence, bytes.Count);
+        var unit = new RecordedPlacementUnit(name, residence, phase, bytes.Count);
         recordedPlacementUnits.Add(unit);
         placementUnitsByName.Add(name, unit);
         currentPlacementUnit = unit;
@@ -217,6 +234,7 @@ internal sealed class PrgBuilder
                 .Select(unit => new NesPrgPlacementUnitEmission(
                     unit.Name,
                     unit.Residence,
+                    unit.Phase,
                     unit.Section.Bytes.ToArray(),
                     unit.Section.Atoms.ToArray()))
                 .ToArray(),

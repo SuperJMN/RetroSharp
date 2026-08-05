@@ -107,6 +107,16 @@ internal sealed partial class NesRuntimeCompiler
         sdkOperations.EnsureAllConsumed("NES runtime");
     }
 
+    internal void EmitPlacementUnit(BlockSyntax block)
+    {
+        EmitBlock(block);
+    }
+
+    internal void EnsureProgramConsumed()
+    {
+        sdkOperations.EnsureAllConsumed("NES runtime");
+    }
+
     internal NesSdkOperationLowerer SdkOperationLowerer => sdkOperationLowerer;
 
     private void EmitAudioStateInitialization()
