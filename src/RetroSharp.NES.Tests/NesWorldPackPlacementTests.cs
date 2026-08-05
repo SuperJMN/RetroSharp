@@ -61,7 +61,7 @@ public sealed class NesWorldPackPlacementTests
             () => NesWorldPackPlacement.Create(bytes, sections));
 
         Assert.Equal(
-            "NES WorldPack requires 16385 bytes, but the ordered R6 sections provide 16384 bytes.",
+            "NES WorldPack requires 16385 bytes, but this board's R6 pool of 2 section(s) provides 16384 bytes.",
             exception.Message);
     }
 

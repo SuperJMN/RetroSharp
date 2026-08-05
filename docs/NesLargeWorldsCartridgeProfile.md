@@ -227,8 +227,10 @@ The target translates `segmentIndex = relativeOffset / 8192` and
 it does not add padding or rewrite the canonical v1 envelope. The banked reader
 derives that segment index from bits 13-15 of a 16-bit offset, so one physical
 pack spans at most eight R6 segments (64 KiB) even on a larger board; beyond
-that, placement fails with an explicit capacity diagnostic. A header section,
-directory, encoded plane, or chunk payload may cross a segment boundary. The
+that, placement fails with its own reader-ceiling diagnostic, which is not an R6
+pool shortage and therefore never promotes the build to a larger board. A header
+section, directory, encoded plane, or chunk payload may cross a segment
+boundary. The
 raw 7,920-byte fallback used by the current `stage1` analysis may remain in one
 segment, but it does not establish a general one-window restriction.
 

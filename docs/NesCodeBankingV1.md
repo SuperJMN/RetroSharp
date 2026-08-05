@@ -30,13 +30,20 @@ select code banking or a larger board. A later combined R6-capacity failure also
 keeps its owning diagnostic. A successful earlier attempt returns directly, so
 code banking does not rewrite fitting mapper-0 or data-only MMC3 images.
 
+A `WorldPack` failure is split by cause, because only one of the two causes more
+banks can fix. A pack the current board's R6 pool cannot hold reports that pool
+and escalates under step 4. A pack past the banked reader's eight-segment
+(64 KiB) addressing ceiling fails identically on every board, so it reports the
+reader limit and is never retried on a larger one.
+
 ## PRG boards
 
 The MMC3 layout is generated from a bank count rather than listed as eight fixed
 sections. Supported boards are 64, 128, 256 and 512 KiB — 8, 16, 32 and 64
 physical 8 KiB banks. 512 KiB is the hardware ceiling because MMC3 R6/R7
 bank-select values are 6-bit; a board needing a bank number above 63 fails with
-an explicit diagnostic instead of truncating.
+its own explicit diagnostic instead of truncating, and that ceiling is never a
+promotion signal because no larger board exists on this mapper.
 
 Board choice is a target-private final-link decision. There is no source, SDK,
 CLI, or manifest bank or board selector, and step 4 above never skips a smaller

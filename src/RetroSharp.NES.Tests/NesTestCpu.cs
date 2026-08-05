@@ -566,7 +566,15 @@ internal sealed class NesTestCpu
             < 0xE000 => (byte)(prgBankCount - 2),
             _ => (byte)(prgBankCount - 1),
         };
-        return prg[(bank % prgBankCount) * 0x2000 + (address & 0x1FFF)];
+        if (bank >= prgBankCount)
+        {
+            // Hardware would alias here; the harness reports it so a linker bug that selects a
+            // bank the image does not contain cannot pass as a silently wrapped read.
+            throw new InvalidOperationException(
+                $"NES test CPU read ${address:X4} through PRG bank {bank}, beyond the {prgBankCount}-bank image.");
+        }
+
+        return prg[bank * 0x2000 + (address & 0x1FFF)];
     }
 
     private void Write(ushort address, byte value, int busCycleOffset)

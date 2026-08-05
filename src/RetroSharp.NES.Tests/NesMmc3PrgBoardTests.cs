@@ -224,4 +224,75 @@ public sealed class NesMmc3PrgBoardTests
 
     private static ushort ReadWord(ReadOnlySpan<byte> prg, int offset) =>
         (ushort)(prg[offset] | (prg[offset + 1] << 8));
+
+    /// <summary>
+    /// A pack the current board's R6 pool cannot hold is what step 4 of the selection contract
+    /// escalates on, and the diagnostic must report that board's real pool.
+    /// </summary>
+    [Fact]
+    public void A_pack_larger_than_the_r6_pool_reports_that_pool_and_asks_for_a_larger_board()
+    {
+        var pool = R6Sections(8);
+        var pack = new byte[(pool.Count * 8 * 1_024) + 1];
+
+        var failure = Assert.Throws<InvalidOperationException>(() => NesWorldPackPlacement.Create(pack, pool));
+
+        Assert.True(NesRomBuilder.RequiresLargerPrgBoard(failure));
+        Assert.Contains($"{pack.Length} bytes", failure.Message, StringComparison.Ordinal);
+        Assert.Contains($"provides {pool.Count * 8 * 1_024} bytes", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The banked reader indexes segments from bits 13-15 of a 16-bit offset, so a pack past eight
+    /// segments fails the same way on every board. It must name that limit and must not escalate.
+    /// </summary>
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void A_pack_past_the_readers_eight_segment_ceiling_never_asks_for_a_larger_board(int prgBankCount)
+    {
+        var pool = R6Sections(prgBankCount);
+        var pack = new byte[NesWorldPackPlacement.MaximumAddressablePackBytes + 1];
+
+        var failure = Assert.Throws<InvalidOperationException>(() => NesWorldPackPlacement.Create(pack, pool));
+
+        Assert.False(NesRomBuilder.RequiresLargerPrgBoard(failure));
+        Assert.Contains("at most 8 R6 segments (65536 bytes)", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("larger PRG board cannot lift this limit", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_largest_addressable_pack_still_places_on_a_board_with_enough_banks()
+    {
+        var pack = new byte[NesWorldPackPlacement.MaximumAddressablePackBytes];
+
+        var placement = NesWorldPackPlacement.Create(pack, R6Sections(16));
+
+        Assert.Equal(8, placement.Segments.Count);
+        Assert.Equal(pack.Length, placement.Segments.Sum(segment => segment.Length));
+        Assert.Equal(new[] { 0, 3, 4, 5, 6, 7, 8, 9 }, placement.Segments.Select(segment => segment.PhysicalBank));
+        Assert.Equal(0, placement.TranslateOffset(0).PhysicalBank);
+        Assert.Equal(9, placement.TranslateOffset(pack.Length - 1).PhysicalBank);
+    }
+
+    /// <summary>
+    /// A board past the mapper's 6-bit bank number is unbuildable, so it must not be mistaken for
+    /// an R6 pool shortage that a bigger board could resolve.
+    /// </summary>
+    [Fact]
+    public void The_six_bit_bank_number_ceiling_is_not_a_larger_board_signal()
+    {
+        var failure = NesLinkConstraints.Failure(NesLinkConstraint.Mmc3BankNumberCeiling, "ceiling");
+
+        Assert.False(NesRomBuilder.RequiresLargerPrgBoard(failure));
+    }
+
+    private static IReadOnlyList<NesPrgSectionLayout> R6Sections(int prgBankCount) =>
+        NesCartridgeLayout
+            .Create(NesCartridgeProfile.Mmc3Tvrom, useFourScreenNametables: true, prgBankCount)
+            .PrgSections
+            .Where(section => section.Kind is NesPrgSectionKind.WorldR6)
+            .OrderBy(section => section.PhysicalOffset)
+            .ToArray();
 }

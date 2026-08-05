@@ -29,6 +29,8 @@ internal enum NesLinkConstraint
     Mmc3ProgramPrg,
     Mmc3R6Capacity,
     Mmc3WorldPackCapacity,
+    Mmc3WorldPackAddressability,
+    Mmc3BankNumberCeiling,
     FixedPrg,
     Dpcm,
 }
@@ -203,11 +205,12 @@ internal sealed record NesCartridgeLayout(
                     Mmc3PrgBankCounts.Select(count => $"{count * Mmc3PrgBankSize / 1_024} KiB"))} PRG boards.");
         }
 
-        // MMC3 R6/R7 bank-select values are 6-bit, so no emitted bank number may exceed 63.
+        // MMC3 R6/R7 bank-select values are 6-bit, so no emitted bank number may exceed 63. A
+        // board past that ceiling is unbuildable on this mapper, so it is not a promotion signal.
         if (prgBankCount - 1 > Mmc3MaximumBankNumber)
         {
             throw NesLinkConstraints.Failure(
-                NesLinkConstraint.Mmc3R6Capacity,
+                NesLinkConstraint.Mmc3BankNumberCeiling,
                 $"NES MMC3/TVROM PRG board of {prgBankCount} banks needs bank number {prgBankCount - 1}, " +
                 $"beyond the mapper's 6-bit maximum of {Mmc3MaximumBankNumber}.");
         }
