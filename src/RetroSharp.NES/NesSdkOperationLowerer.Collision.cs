@@ -765,7 +765,7 @@ internal sealed partial class NesSdkOperationLowerer
             return new Dictionary<SharedCameraAabbShape, string>();
         }
 
-        var shapes = program.SdkOperationStream
+        var shapes = NesSdkProgramOperations.Collected(program.SdkProgram)
             .Select(TrySharedCameraAabbShape)
             .Where(shape => shape is not null)
             .Select(shape => shape!.Value)

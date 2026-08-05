@@ -58,14 +58,15 @@ internal sealed record NesFramePlan(
         bool useSequentialOamPublication)
     {
         ArgumentNullException.ThrowIfNull(program);
+        var collectedOperations = NesSdkProgramOperations.Collected(program.SdkProgram);
         var retainedOamByteCount = Math.Min(
             256,
-            program.SdkOperationStream
+            collectedOperations
                 .OfType<Sdk2DOperation.DrawLogicalSprite>()
                 .Sum(operation => program.SpriteAssets[operation.SpriteId].Pieces.Count * 4));
         return Create(
             cartridgeProfile,
-            program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.WaitFrame),
+            collectedOperations.Any(operation => operation is Sdk2DOperation.WaitFrame),
             retainedOamByteCount > 0,
             retainedOamByteCount,
             usesPackedCameraRuntime,

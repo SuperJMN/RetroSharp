@@ -74,7 +74,7 @@ internal sealed partial class NesRuntimeCompiler
         this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
         this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
         usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
-        sdkOperations = new NesSdkStreamReader(program.SdkOperationStream);
+        sdkOperations = new NesSdkStreamReader(program.SdkProgram);
         sdkOperationLowerer = new NesSdkOperationLowerer(
             builder,
             program,

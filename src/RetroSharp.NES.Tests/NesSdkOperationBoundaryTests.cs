@@ -143,13 +143,15 @@ public sealed class NesSdkOperationBoundaryTests
                               """;
         var program = NesVideoProgram.FromProgram(ParseLoweredProgram(source));
         typeof(NesVideoProgram)
-            .GetProperty(nameof(NesVideoProgram.SdkOperationStream))!
+            .GetProperty(nameof(NesVideoProgram.SdkProgram))!
             .SetValue(
                 program,
-                new Sdk2DOperation[]
-                {
-                    new Sdk2DOperation.SetCameraPosition(8, 0, ScrollAxes.Horizontal),
-                });
+                new Sdk2DProgram(
+                    [
+                        new Sdk2DStreamItem.Op(
+                            new Sdk2DOperation.SetCameraPosition(8, 0, ScrollAxes.Horizontal)),
+                    ],
+                    new Dictionary<string, IReadOnlyList<Sdk2DStreamItem>>(StringComparer.Ordinal)));
         var builder = new PrgBuilder();
         var compiler = new NesRuntimeCompiler(builder, program);
 

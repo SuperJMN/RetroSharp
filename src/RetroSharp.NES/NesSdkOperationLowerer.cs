@@ -168,7 +168,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private IReadOnlyDictionary<SharedDrawLogicalSpriteShape, string> CreateSharedDrawLogicalSpriteSubroutines()
     {
-        var shapes = program.SdkOperationStream
+        var shapes = NesSdkProgramOperations.Collected(program.SdkProgram)
             .OfType<Sdk2DOperation.DrawLogicalSprite>()
             .Select(SharedDrawLogicalSpriteShapeFor)
             .ToArray();
@@ -249,7 +249,7 @@ internal sealed partial class NesSdkOperationLowerer
         return value;
     }
 
-        internal void EmitReferencedSubroutines()
+    internal void EmitReferencedSubroutines()
     {
         EmitReferencedSharedDrawLogicalSpriteSubroutines();
         EmitReferencedSharedCameraAabbSubroutines();
