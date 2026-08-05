@@ -27,6 +27,7 @@ internal sealed partial class NesRuntimeCompiler
     private readonly bool usePackedCamera;
     private readonly NesSdkStreamReader sdkOperations;
     private readonly NesSdkOperationLowerer sdkOperationLowerer;
+    private readonly NesUserFunctionCallRecorder callRecorder;
     private byte nextVariableAddress = checked((byte)NesRuntimeMemoryLayout.UserLocals.Start);
     private int nextForLoopId;
     private int nextWhileLoopId;
@@ -75,6 +76,7 @@ internal sealed partial class NesRuntimeCompiler
         this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
         usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
         sdkOperations = new NesSdkStreamReader(program.SdkProgram);
+        callRecorder = new NesUserFunctionCallRecorder(builder);
         sdkOperationLowerer = new NesSdkOperationLowerer(
             builder,
             program,
@@ -118,6 +120,14 @@ internal sealed partial class NesRuntimeCompiler
     }
 
     internal NesSdkOperationLowerer SdkOperationLowerer => sdkOperationLowerer;
+
+    /// <summary>
+    /// Per-user-function call accounting for everything this compiler emitted. <paramref name="hasFrameLoop"/>
+    /// comes from the placement plan so a program without a frame loop reports one-shot work instead
+    /// of a manufactured hot phase.
+    /// </summary>
+    internal NesUserFunctionCallAccountingReport CreateCallAccountingReport(bool hasFrameLoop) =>
+        NesUserFunctionCallAccounting.Create(callRecorder.Expansions, hasFrameLoop);
 
     private void EmitAudioStateInitialization()
     {

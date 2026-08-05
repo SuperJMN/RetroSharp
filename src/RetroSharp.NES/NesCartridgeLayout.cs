@@ -68,7 +68,8 @@ internal sealed record NesPrgBuild(
     string FrameProfile,
     SdkCpuWorkReport FrameCpuWork,
     int FixedHeadroomBytes,
-    NesProgramBankPlacementReport? BankPlacement);
+    NesProgramBankPlacementReport? BankPlacement,
+    NesUserFunctionCallAccountingReport UserFunctionCalls);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 
@@ -93,7 +94,8 @@ internal sealed record NesRomBuildReport(
     IReadOnlyList<NesSharedSdkSubroutine> SharedSdkSubroutines,
     SdkCpuWorkReport CpuWork,
     int FixedHeadroomBytes,
-    NesProgramBankPlacementReport? BankPlacement);
+    NesProgramBankPlacementReport? BankPlacement,
+    NesUserFunctionCallAccountingReport UserFunctionCalls);
 
 /// <summary>
 /// One shared SDK operation body emitted once and reached by <see cref="CallSites"/> JSRs.

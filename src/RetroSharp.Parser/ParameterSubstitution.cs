@@ -24,6 +24,16 @@ public static class ParameterSubstitution
         return ConstantFolder.FoldConstants(Substitute(returnSyntax.Expression.Value, substitutions));
     }
 
+    /// <summary>
+    /// Binds call arguments (positional, named, and defaults) to parameters using exactly the rules
+    /// inline substitution uses, so an observer can classify argument shape without duplicating them.
+    /// </summary>
+    public static IReadOnlyDictionary<string, ExpressionSyntax> BindParameters(
+        FunctionSyntax function,
+        FunctionCall call,
+        string targetName) =>
+        BuildSubstitutions(function, call, targetName);
+
     private static IReadOnlyDictionary<string, ExpressionSyntax> BuildSubstitutions(FunctionSyntax function, FunctionCall call, string targetName)
     {
         var parameters = function.Parameters.ToList();
