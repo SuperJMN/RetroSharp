@@ -86,17 +86,49 @@ loop plus the compiler-generated terminal idle loop. Programs with no such
 frame loop emit a single `program:main:init` unit reported as `OneShot` rather
 than manufacturing a hot phase. All units remain `ProgramR6` in the code-banked
 profile and `Fixed` in the earlier flat profiles. The banked linker keeps
-`ProgramR6` units distinct through placement and currently visits them in
-emission order, so unit boundaries do not reorder code or change bank cuts.
+`ProgramR6` units distinct through placement and assigns them to R6 banks by
+phase (see "Phase placement policy" below).
 Named `Fixed` units are rejected by the sectioned builder/linker until a fixed
-placement policy defines their real offsets; phase-based placement policy
-remains later work. A repeated
+placement policy defines their real offsets. A repeated
 multi-piece `DrawLogicalSprite` shape stores its runtime operands in
 `NesRuntimeMemoryLayout` scratch and calls one fixed-resident target helper;
 single-use and one-piece shapes remain inline when a call would not save code.
 This is target-owned SDK lowering, not a user-function ABI. Startup, runtime
 initialization, target subroutines, `WorldPack` and MMC3 helpers, generated ROM
 tables, DPCM, NMI/IRQ/reset code, and vectors remain fixed.
+
+## Phase placement policy
+
+`NesProgramBankPlanner.Plan(...)` is the deep module that turns the analyzer's
+phase-classified units into an R6 bank assignment. It takes the units in
+emission order with their indivisible atoms and returns one plan: a bank and
+offset per atom, used bytes per bank, the required bank count, a per-phase
+bank/byte summary, and the hot phase's bank. Bin packing, atom indivisibility,
+the bank-edge reserve, and hot-phase wholeness live inside it; `NesPrgLinker`
+consumes the plan and does not re-derive placement, and neither `PrgBuilder` nor
+`NesRomBuilder` participates in placement decisions.
+
+The policy is:
+
+- units are placed in emission order, so the linear bank-to-bank fallthrough
+  chain the linker writes stays valid and no unit is reordered;
+- the `Hot` unit is indivisible at unit granularity: it is never split across a
+  bank cut. If it does not fit in the remaining space of the current bank, that
+  bank is closed early (its bank-edge jump still lands immediately after its
+  last atom) and the hot unit starts at offset 0 of a fresh bank;
+- `Cold` and `OneShot` units keep the ordinary atom-granular fill, so cold code
+  still shares and straddles banks freely and the early close costs at most the
+  tail of one cold bank;
+- a `Hot` unit larger than a whole bank is a hard diagnostic, not an escalation:
+  the fixed PRG region is a constant 16 KiB at every board size and larger
+  boards only add R6 banks, so no board makes a bank wider. `NesRomBuilder`
+  reports it as the `Mmc3HotPhaseSize` link constraint, which is deliberately
+  outside the board-escalation set.
+
+V1 duplicates no shared bytes into phase banks. Shared SDK helper bodies are
+fixed-resident and are reached by ordinary bank-neutral `JSR`, so duplicating
+them into an R6 bank could only add bytes; `DuplicatedSharedBytes` is therefore
+structurally `0` in v1 rather than a tuning knob.
 
 ## Linker module
 
@@ -157,17 +189,34 @@ after the current one proves its pool is exhausted.
 The internal `NesRomBuildReport` identifies the selected profile and exposes
 placement-unit names, residences, inferred phases, and linked sizes (including
 branch expansion and any bank-edge fallthrough owned by the unit) together with
-`PrgRomSize`, `ProgramR6Bytes`, `FixedVeneerBytes`, `program:r6:*` segments, and
-bank-aware symbols. R6 exhaustion reports the `WorldPack` banks and bytes,
+`PrgRomSize`, `ProgramR6Bytes`, `FixedVeneerBytes`, `FixedHeadroomBytes`,
+`program:r6:*` segments, and bank-aware symbols. A banked build also reports
+`BankPlacement`: the physical bank(s) and byte count of every phase, the hot
+phase's name, size and physical bank, remaining R6 headroom, and duplicated
+shared bytes. R6 exhaustion reports the `WorldPack` banks and bytes,
 program banks and linked bytes, and the selected board's physical pool — for
-example `[0, 3, 4, 5]` on 64 KiB. A `WorldPack` that outgrows that pool reports
-its own capacity diagnostic; the banked reader indexes segments from bits 13-15
-of a 16-bit offset, so one physical pack stays within eight R6 segments even on
-a larger board. Fixed veneer exhaustion and unsupported relocation shapes fail
-explicitly. These linker details do not change the public
-`retrosharp.nes.runtime-abi` v1 sidecar or its schema.
+example `[0, 3, 4, 5]` on 64 KiB. A hot phase larger than one 8 KiB bank fails
+as `Mmc3HotPhaseSize` without escalating the board. A `WorldPack` that outgrows
+that pool reports its own capacity diagnostic; the banked reader indexes
+segments from bits 13-15 of a 16-bit offset, so one physical pack stays within
+eight R6 segments even on a larger board. Fixed veneer exhaustion and
+unsupported relocation shapes fail explicitly. These linker details do not
+change the public `retrosharp.nes.runtime-abi` v1 sidecar or its schema.
 
 ## Stable evidence
+
+[`samples/phase-banked-frame`](../samples/phase-banked-frame) is the tracked
+canary pair for phase placement. The candidate and the control share one
+`src/scene.rs` frame loop and differ only in one-shot cold init, so the control
+is an honest steady-state baseline for the same gameplay work. The candidate's
+cold init is bulky enough that a raw emission-order fill would cut the hot
+frame phase across a bank boundary. `NesPhaseBankPlacementCanaryTests` owns the
+evidence: automatic selection of `nes-mmc3-tvrom-codebank-v1`, the hot phase
+whole in a single R6 bank distinct from the cold init bank, the discriminating
+straddle margin, positive R6 and fixed headroom, zero duplicated shared bytes,
+steady-state execution that never leaves the hot bank, one logical tick per
+physical frame, zero unsafe PPU/OAM writes, and an upper-bound active-tick
+budget derived from the control. It pins no ROM bytes and no exact cycle count.
 
 [`samples/executable-banking`](../samples/executable-banking) is the tracked
 build canary for automatic executable banking. Its compact nested inline source

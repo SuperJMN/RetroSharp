@@ -30,6 +30,20 @@
       "targets": ["nes"]
     },
     {
+      "id": "phase-banked-frame",
+      "path": "samples/phase-banked-frame/phase-banked-frame.retrosharp.json",
+      "readme": "samples/phase-banked-frame/README.md",
+      "layer": "target-acceptance",
+      "targets": ["nes"]
+    },
+    {
+      "id": "phase-banked-frame-control",
+      "path": "samples/phase-banked-frame/phase-banked-frame-control.retrosharp.json",
+      "readme": "samples/phase-banked-frame/README.md",
+      "layer": "target-acceptance",
+      "targets": ["nes"]
+    },
+    {
       "id": "falling-blocks",
       "path": "samples/falling-blocks/falling-blocks.retrosharp.json",
       "readme": "samples/falling-blocks/README.md",

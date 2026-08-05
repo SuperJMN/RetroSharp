@@ -35,7 +35,10 @@ public sealed class SampleApiQuarantineTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
+        // A candidate/control sample pair may share one physical source file across its two project
+        // manifests, so classification is a set relation rather than a one-to-one listing.
         var manifestSources = manifest.Samples.SelectMany(SampleSourcePaths)
+            .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
 
