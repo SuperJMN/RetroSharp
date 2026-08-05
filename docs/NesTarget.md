@@ -104,7 +104,20 @@ collected bodies once for code emission and expands every subroutine call for
 runtime-work accounting, so a shared body does not make executed calls
 disappear from CPU-budget inputs. The current empty subroutine selection keeps
 NES output identical while preparing the stream boundary for user-function
-outlining. A single stateful `NesSdkOperationLowerer` owns the emitted
+outlining.
+
+`NesUserFunctionCallAccounting` applies the same two-projection shape to user
+functions. Emission records every inline user-function expansion with its
+placement unit, inferred phase, loop depth, emitted-byte span, and argument
+shape; the module then reports `Collected` bodies once and expands
+`ForRuntimeWork` over the recorded expansion tree, so a future shared body
+cannot hide executed calls from per-frame accounting. The internal
+`NesRomBuildReport.UserFunctionCalls` exposes per-function copies, call sites,
+calls per frame, and the duplication bytes that inline expansion costs today.
+It is diagnostic only: no source syntax, CLI option, emitted byte, or
+`retrosharp.nes.runtime-abi` v1 field changes.
+
+A single stateful `NesSdkOperationLowerer` owns the emitted
 frame/input, sprite/OAM,
 camera/streaming, packed scheduling, and collision bytes. The syntax runtime
 compiler supplies only source-expression and storage primitives through

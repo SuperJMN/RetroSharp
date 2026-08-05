@@ -143,12 +143,21 @@ internal sealed partial class NesRuntimeCompiler
 
         try
         {
-            PushInlineVariableScope();
-            EmitBlock(ParameterSubstitution.Substitute(function, call, "NES"));
+            using (callRecorder.EnterCall(function.Name, loopTargets.Count, ClassifyCallArguments(function, call)))
+            {
+                try
+                {
+                    PushInlineVariableScope();
+                    EmitBlock(ParameterSubstitution.Substitute(function, call, "NES"));
+                }
+                finally
+                {
+                    PopInlineVariableScope();
+                }
+            }
         }
         finally
         {
-            PopInlineVariableScope();
             userFunctionCallStack.Remove(function.Name);
         }
 
@@ -179,7 +188,10 @@ internal sealed partial class NesRuntimeCompiler
 
         try
         {
-            EmitExpressionToA(ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"));
+            using (callRecorder.EnterCall(function.Name, loopTargets.Count, ClassifyCallArguments(function, call)))
+            {
+                EmitExpressionToA(ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"));
+            }
         }
         finally
         {

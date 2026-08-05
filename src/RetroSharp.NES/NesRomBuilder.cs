@@ -715,7 +715,9 @@ internal static class NesRomBuilder
             frameScheduler.CreateCpuWorkReport(NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram)),
             checked(layout.FixedTrailerStartAddress - layout.FixedRuntimeCpuBaseAddress
                 - fixedPayloadBeforeTrailer - (linkedProgram?.FixedVeneerBytes ?? 0)),
-            linkedProgram?.BankPlacement);
+            linkedProgram?.BankPlacement,
+            runtimeCompiler.CreateCallAccountingReport(
+                placementPlan.Units.Any(unit => unit.Phase is NesPrgPlacementPhase.Hot)));
     }
 
     private static IReadOnlyList<NesSharedSdkSubroutine> DescribeSharedSdkSubroutines(PrgBuilder builder) =>
@@ -951,7 +953,8 @@ internal static class NesRomBuilder
             prgBuild.SharedSdkSubroutines,
             prgBuild.FrameCpuWork,
             prgBuild.FixedHeadroomBytes,
-            prgBuild.BankPlacement);
+            prgBuild.BankPlacement,
+            prgBuild.UserFunctionCalls);
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(

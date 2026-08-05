@@ -139,6 +139,19 @@ internal sealed class PrgBuilder
         ? (CurrentResidence is NesPrgResidence.ProgramR6 ? 0x8000 : baseAddress) + CurrentResidenceOffset
         : baseAddress + bytes.Count;
 
+    /// <summary>
+    /// Monotone byte cursor of the section currently being emitted, so that an observer can size an
+    /// emitted region without depending on residence-relative CPU addresses.
+    /// </summary>
+    internal int EmittedByteCursor => CurrentBytes.Count;
+
+    internal string CurrentPlacementUnitLabel => currentPlacementUnit?.Name ?? FixedPlacementUnitLabel;
+
+    internal NesPrgPlacementPhase CurrentPlacementPhase =>
+        currentPlacementUnit?.Phase ?? NesPrgPlacementPhase.Unknown;
+
+    internal const string FixedPlacementUnitLabel = "fixed";
+
     internal IReadOnlyList<NesPrgPlacementUnit> PlacementUnits => recordedPlacementUnits
         .Select(unit => new NesPrgPlacementUnit(
             unit.Name,
