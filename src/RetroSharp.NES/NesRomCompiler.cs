@@ -104,7 +104,8 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null,
         byte[]? packedWorldOverride = null,
-        NesWorldPackProbe? worldPackProbe = null)
+        NesWorldPackProbe? worldPackProbe = null,
+        int mmc3PrgBankCount = NesCartridgeLayout.Mmc3SmallestPrgBankCount)
     {
         return CompileSourceCore(
             source,
@@ -118,7 +119,8 @@ public static class NesRomCompiler
             packedWorldOverride,
             worldPackProbe,
             generatedRomTablesOverride: null,
-            shareRepeatedSdkOperations: true);
+            shareRepeatedSdkOperations: true,
+            mmc3PrgBankCount);
     }
 
     private static NesRomBuildResult CompileSourceCore(
@@ -133,7 +135,8 @@ public static class NesRomCompiler
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe,
         IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride,
-        bool shareRepeatedSdkOperations)
+        bool shareRepeatedSdkOperations,
+        int mmc3PrgBankCount = NesCartridgeLayout.Mmc3SmallestPrgBankCount)
     {
         var preparedVideoProgram = PrepareVideoProgram(
             source,
@@ -165,7 +168,8 @@ public static class NesRomCompiler
             packedWorldOverride,
             worldPackProbe,
             forcedProgramLinkMode,
-            shareRepeatedSdkOperations);
+            shareRepeatedSdkOperations,
+            mmc3PrgBankCount);
     }
 
     private static bool RequiresLegacyWorldData(Sdk2DOperation operation) => operation is

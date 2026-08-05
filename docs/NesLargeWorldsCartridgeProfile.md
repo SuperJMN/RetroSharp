@@ -173,7 +173,7 @@ disabled, uploads it, then pins R7 to physical bank 1 before normal runtime.
 
 ## iNES and bank shape
 
-The v1 header is:
+The v1 header for the smallest board is:
 
 | Byte | Value | Meaning |
 | ---: | ---: | --- |
@@ -183,6 +183,11 @@ The v1 header is:
 | 6 | `0x48` | Mapper low nibble 4 plus four-screen flag |
 | 7 | `0x00` | Mapper high nibble 0; iNES 1.0 |
 | 8-15 | `00` | No trainer/battery contract or NES 2.0 extension |
+
+Byte 4 follows the emitted image. The board is chosen at final link from 64,
+128, 256 and 512 KiB, so byte 4 is `04`, `08`, `10` or `20`; every other header
+byte, including mapper and mirroring, is identical across boards. See
+[`NesCodeBankingV1.md`](NesCodeBankingV1.md) for the selection contract.
 
 The CPU view after initialization is:
 
@@ -195,16 +200,22 @@ The CPU view after initialization is:
 | 6 | `$C000-$DFFF` fixed in PRG mode 0 | First physical half of fixed execution/DPCM region |
 | 7 | `$E000-$FFFF` fixed | Second physical half; vectors at `$FFFA-$FFFF` |
 
-Reset enters through bank 7. Before enabling rendering, audio, or NMI, reset
-sets MMC3 PRG mode 0, maps R6 to the initial world bank, maps R7 to boot bank 2,
-maps the eight CHR-ROM 1 KiB pages linearly, disables/acknowledges mapper IRQs
-through `$E000`, and initializes both software bank shadows. Startup uploads
-palette/nametables and then pins R7 to bank 1 before normal audio/gameplay.
+The roles are generated from the bank count, not listed per board. Banks 1 and 2
+keep their R7 duties, the top two physical banks are always the fixed
+`$C000-$FFFF` region, and every bank a larger board adds joins the R6 pool. On a
+128 KiB board the pool is `0, 3-13` and the fixed region is banks 14-15.
+
+Reset enters through the last bank. Before enabling rendering, audio, or NMI,
+reset sets MMC3 PRG mode 0, maps R6 to the initial world bank, maps R7 to boot
+bank 2, maps the eight CHR-ROM 1 KiB pages linearly, disables/acknowledges
+mapper IRQs through `$E000`, and initializes both software bank shadows. Startup
+uploads palette/nametables and then pins R7 to bank 1 before normal
+audio/gameplay.
 
 ### World-data continuation policy
 
-The 8 KiB R6 CPU window is not a `WorldPack` length limit. Within the fixed
-64 KiB TVROM v1 capacity, the final linker places one canonical pack across
+The 8 KiB R6 CPU window is not a `WorldPack` length limit. Within the selected
+board's R6 capacity, the final linker places one canonical pack across
 an ordered list of R6-owned 8 KiB continuation segments. R7-pinned or boot data
 may make the physical bank ids non-contiguous, so placement records the exact
 logical-segment-to-physical-bank mapping rather than assuming
@@ -213,7 +224,10 @@ logical-segment-to-physical-bank mapping rather than assuming
 Every serialized offset remains the original 32-bit pack-relative byte offset.
 The target translates `segmentIndex = relativeOffset / 8192` and
 `windowOffset = relativeOffset % 8192` through the linker-owned segment list;
-it does not add padding or rewrite the canonical v1 envelope. A header section,
+it does not add padding or rewrite the canonical v1 envelope. The banked reader
+derives that segment index from bits 13-15 of a 16-bit offset, so one physical
+pack spans at most eight R6 segments (64 KiB) even on a larger board; beyond
+that, placement fails with an explicit capacity diagnostic. A header section,
 directory, encoded plane, or chunk payload may cross a segment boundary. The
 raw 7,920-byte fallback used by the current `stage1` analysis may remain in one
 segment, but it does not establish a general one-window restriction.

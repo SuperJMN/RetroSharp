@@ -14,6 +14,12 @@ internal sealed class NesWorldPackPlacement
     private const int R6WindowStart = 0x8000;
     private const int R6WindowSize = 8 * 1_024;
 
+    /// <summary>
+    /// The banked reader derives the owning segment from bits 13-15 of a 16-bit pack offset, so a
+    /// physical pack spans at most eight R6 segments regardless of how many banks the board has.
+    /// </summary>
+    private const int MaximumAddressableSegments = 8;
+
     private NesWorldPackPlacement(byte[] serializedBytes, IReadOnlyList<NesWorldPackSegment> segments)
     {
         SerializedBytes = serializedBytes;
@@ -64,7 +70,7 @@ internal sealed class NesWorldPackPlacement
                     $"NES WorldPack R6 section in physical bank {section.PhysicalBank} must be a positive in-bank range of at most {R6WindowSize} bytes.");
             }
 
-            if (relativeOffset >= serializedBytes.Length)
+            if (relativeOffset >= serializedBytes.Length || segments.Count == MaximumAddressableSegments)
             {
                 break;
             }
@@ -81,7 +87,8 @@ internal sealed class NesWorldPackPlacement
 
         if (relativeOffset != serializedBytes.Length)
         {
-            throw new InvalidOperationException(
+            throw NesLinkConstraints.Failure(
+                NesLinkConstraint.Mmc3WorldPackCapacity,
                 $"NES WorldPack requires {serializedBytes.Length} bytes, but the ordered R6 sections provide {relativeOffset} bytes.");
         }
 

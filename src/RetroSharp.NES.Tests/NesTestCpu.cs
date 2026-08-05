@@ -34,6 +34,7 @@ internal sealed class NesTestCpu
     private const long PpuCyclesPerFrame = 341 * 262;
     private const long PpuCyclesUntilVblank = (341 * 241) + 1;
     private readonly byte[] prg;
+    private readonly int prgBankCount;
     private readonly byte[] ram = new byte[0x800];
     private readonly byte[] ppuMemory = new byte[0x4000];
     private readonly byte[] oam = new byte[0x100];
@@ -81,6 +82,7 @@ internal sealed class NesTestCpu
         verticalMirroring = (rom[6] & 0x01) != 0;
         var prgLength = rom[4] * 16 * 1_024;
         prg = rom.AsSpan(16, prgLength).ToArray();
+        prgBankCount = prgLength / 0x2000;
         var chrLength = rom[5] * 8 * 1_024;
         var chr = chrLength == 0 ? new byte[8 * 1_024] : rom.AsSpan(16 + prgLength, chrLength).ToArray();
         chr.CopyTo(ppuMemory, 0);
@@ -555,14 +557,16 @@ internal sealed class NesTestCpu
             return prg[(address - 0x8000) % prg.Length];
         }
 
+        // MMC3 PRG mode 0 fixes $C000-$DFFF to the second-to-last physical bank and $E000-$FFFF to
+        // the last one, so both follow the board size instead of a 64 KiB assumption.
         var bank = address switch
         {
             < 0xA000 => CurrentR6Bank,
             < 0xC000 => CurrentR7Bank,
-            < 0xE000 => (byte)6,
-            _ => (byte)7,
+            < 0xE000 => (byte)(prgBankCount - 2),
+            _ => (byte)(prgBankCount - 1),
         };
-        return prg[bank * 0x2000 + (address & 0x1FFF)];
+        return prg[(bank % prgBankCount) * 0x2000 + (address & 0x1FFF)];
     }
 
     private void Write(ushort address, byte value, int busCycleOffset)

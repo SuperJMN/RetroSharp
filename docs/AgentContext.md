@@ -76,7 +76,7 @@ instead of keeping a second copy. Load only the one route that owns the task.
 | What owns functional cadence and transient observations? | `FunctionalRomAcceptance.md`; per-scenario acceptance records are under `history/` |
 | What is the generated-code CPU-work contract? | `GeneratedCodeCpuWorkContract.md` |
 | Is the task about large maps or data banking? | `GameBoyBankingRoadmap.md`, `NesLargeWorldsCartridgeProfile.md`; completed epic history in `history/LargeWorldsRoadmap.md` |
-| Is the task about NES executable code banking? | `NesCodeBankingV1.md` |
+| Is the task about NES executable code banking or MMC3 PRG board size? | `NesCodeBankingV1.md` |
 | Is the task about issue execution or publication? | `AgentExecution.md` |
 | Reviewing a completed roadmap or closed-issue history? | `history/` (background only, e.g. `history/GeneratedCodePerformanceRoadmap.md`, `history/NesFrameSchedulingRoadmap.md`, `history/LegacyZ80Compiler.md`) |
 
