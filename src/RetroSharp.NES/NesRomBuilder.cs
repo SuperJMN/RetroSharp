@@ -51,7 +51,8 @@ internal static class NesRomBuilder
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe,
         NesProgramLinkMode? forcedProgramLinkMode = null,
-        bool shareRepeatedSdkOperations = true)
+        bool shareRepeatedSdkOperations = true,
+        int mmc3PrgBankCount = NesCartridgeLayout.Mmc3SmallestPrgBankCount)
     {
         var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
         var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
@@ -81,7 +82,8 @@ internal static class NesRomBuilder
                 selectedWorldPack,
                 worldPackProbe,
                 forcedProgramLinkMode ?? NesProgramLinkMode.Fixed,
-                shareRepeatedSdkOperations);
+                shareRepeatedSdkOperations,
+                mmc3PrgBankCount);
         }
 
         var mapper0WorldPack = packedWorldOverride is null && discoveredWorldPack is not null && !requiresPackedCamera
@@ -104,30 +106,67 @@ internal static class NesRomBuilder
         catch (InvalidOperationException exception) when (
             ShouldPromoteMapper0ToMmc3(exception, selectedWorldPack is not null))
         {
+            return BuildForSmallestMmc3Board(
+                program,
+                useFourScreenNametables,
+                selectedWorldPack,
+                worldPackProbe,
+                shareRepeatedSdkOperations);
+        }
+    }
+
+    /// <summary>
+    /// Walks the MMC3 boards from 64 KiB upwards. Each board first retries the fixed-execution
+    /// profile and then code banking, so a larger board is never permission to skip a smaller
+    /// layout that fits. Only an exhausted R6 pool escalates; a fixed-region, pinned-R7, CHR or
+    /// DPCM failure keeps its own diagnostic because more banks cannot resolve it.
+    /// </summary>
+    private static NesRomBuildResult BuildForSmallestMmc3Board(
+        NesVideoProgram program,
+        bool useFourScreenNametables,
+        byte[]? selectedWorldPack,
+        NesWorldPackProbe? worldPackProbe,
+        bool shareRepeatedSdkOperations)
+    {
+        var boards = NesCartridgeLayout.Mmc3PrgBankCounts;
+        for (var index = 0; index < boards.Count; index++)
+        {
+            var isLargestBoard = index == boards.Count - 1;
             try
             {
-                // The second attempt is the byte-identical existing MMC3 data-only path.
-                return BuildForProfile(
-                    program,
-                    useFourScreenNametables,
-                    NesCartridgeProfile.Mmc3Tvrom,
-                    selectedWorldPack,
-                    worldPackProbe,
-                    NesProgramLinkMode.Fixed,
-                    shareRepeatedSdkOperations);
+                try
+                {
+                    // The second attempt is the byte-identical existing MMC3 data-only path.
+                    return BuildForProfile(
+                        program,
+                        useFourScreenNametables,
+                        NesCartridgeProfile.Mmc3Tvrom,
+                        selectedWorldPack,
+                        worldPackProbe,
+                        NesProgramLinkMode.Fixed,
+                        shareRepeatedSdkOperations,
+                        boards[index]);
+                }
+                catch (InvalidOperationException mmc3Exception) when (IsMmc3ProgramCapacityConstraint(mmc3Exception))
+                {
+                    return BuildForProfile(
+                        program,
+                        useFourScreenNametables,
+                        NesCartridgeProfile.Mmc3Tvrom,
+                        selectedWorldPack,
+                        worldPackProbe,
+                        NesProgramLinkMode.BankedR6,
+                        shareRepeatedSdkOperations,
+                        boards[index]);
+                }
             }
-            catch (InvalidOperationException mmc3Exception) when (IsMmc3ProgramCapacityConstraint(mmc3Exception))
+            catch (InvalidOperationException exception) when (
+                !isLargestBoard && RequiresLargerPrgBoard(exception))
             {
-                return BuildForProfile(
-                    program,
-                    useFourScreenNametables,
-                    NesCartridgeProfile.Mmc3Tvrom,
-                    selectedWorldPack,
-                    worldPackProbe,
-                    NesProgramLinkMode.BankedR6,
-                    shareRepeatedSdkOperations);
             }
         }
+
+        throw new InvalidOperationException("NES MMC3/TVROM board selection exhausted every supported PRG size.");
     }
 
     private static bool IsMapper0CapacityConstraint(InvalidOperationException exception) =>
@@ -142,12 +181,12 @@ internal static class NesRomBuilder
     private static bool IsMmc3ProgramCapacityConstraint(InvalidOperationException exception) =>
         exception.Data[nameof(NesLinkConstraint)] is NesLinkConstraint.Mmc3ProgramPrg;
 
-    private static InvalidOperationException LinkConstraint(NesLinkConstraint constraint, string message)
-    {
-        var exception = new InvalidOperationException(message);
-        exception.Data[nameof(NesLinkConstraint)] = constraint;
-        return exception;
-    }
+    internal static bool RequiresLargerPrgBoard(InvalidOperationException exception) =>
+        exception.Data[nameof(NesLinkConstraint)] is
+            NesLinkConstraint.Mmc3R6Capacity or NesLinkConstraint.Mmc3WorldPackCapacity;
+
+    private static InvalidOperationException LinkConstraint(NesLinkConstraint constraint, string message) =>
+        NesLinkConstraints.Failure(constraint, message);
 
     private static NesRomBuildResult BuildForProfile(
         NesVideoProgram program,
@@ -156,9 +195,10 @@ internal static class NesRomBuilder
         byte[]? packedWorldBytes,
         NesWorldPackProbe? worldPackProbe,
         NesProgramLinkMode programLinkMode,
-        bool shareRepeatedSdkOperations)
+        bool shareRepeatedSdkOperations,
+        int mmc3PrgBankCount = NesCartridgeLayout.Mmc3SmallestPrgBankCount)
     {
-        var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
+        var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables, mmc3PrgBankCount);
         if (programLinkMode is NesProgramLinkMode.BankedR6 && !layout.EmitMmc3Foundation)
         {
             throw new InvalidOperationException("NES banked program linking requires the MMC3/TVROM cartridge layout.");
@@ -551,10 +591,10 @@ internal static class NesRomBuilder
             }
             catch (NesProgramBankCapacityException exception)
             {
-                var totalR6Banks = layout.PrgSections.Count(section => section.Kind is NesPrgSectionKind.WorldR6);
+                var r6Banks = layout.R6PoolBanks;
                 throw LinkConstraint(
                     NesLinkConstraint.Mmc3R6Capacity,
-                    $"NES MMC3/TVROM R6 capacity overflow: WorldPack owns {occupiedWorldBankCount} bank(s) ({packedWorldByteCount} bytes) and program requires {exception.RequiredBanks} bank(s) ({exception.ProgramBytes} linked bytes), but R6 banks [0, 3, 4, 5] provide {totalR6Banks} whole banks.");
+                    $"NES MMC3/TVROM R6 capacity overflow: WorldPack owns {occupiedWorldBankCount} bank(s) ({packedWorldByteCount} bytes) and program requires {exception.RequiredBanks} bank(s) ({exception.ProgramBytes} linked bytes), but R6 banks [{string.Join(", ", r6Banks)}] provide {r6Banks.Count} whole banks.");
             }
             catch (NesFixedVeneerCapacityException exception)
             {
