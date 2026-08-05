@@ -23,6 +23,7 @@ internal sealed record NesPrgLinkResult(
     byte[] FixedBytes,
     IReadOnlyList<NesLinkedProgramSegment> ProgramSegments,
     IReadOnlyDictionary<string, NesPrgSymbol> Symbols,
+    IReadOnlyList<NesPrgPlacementUnit> PlacementUnits,
     int FixedVeneerBytes,
     int ProgramBytes,
     int RequiredProgramBanks);
@@ -52,9 +53,32 @@ internal static class NesPrgLinker
     private const int FallthroughJumpSize = 3;
     private const int VeneerSize = 12;
 
+    private sealed record LinkLabelDefinition(
+        NesPrgResidence? Residence,
+        int Offset,
+        ushort? ExternalAddress);
+
+    private sealed record LinkRelocation(
+        NesPrgResidence Residence,
+        int Offset,
+        string Label,
+        int Addend,
+        NesPrgRelocationKind Kind);
+
+    private sealed record LinkEmission(
+        ushort FixedBaseAddress,
+        NesPrgSectionEmission FixedSection,
+        NesPrgSectionEmission ProgramSection,
+        IReadOnlyDictionary<string, LinkLabelDefinition> Labels,
+        IReadOnlyList<LinkRelocation> Relocations);
+
+    private sealed record ResidenceStream(
+        NesPrgSectionEmission Section,
+        IReadOnlyDictionary<string, int> UnitOffsets);
+
     private sealed record MutableAtom(
         NesPrgAtom Source,
-        NesPrgRelocation? BranchRelocation,
+        LinkRelocation? BranchRelocation,
         bool Expanded);
 
     private sealed record PlacedAtom(
@@ -82,9 +106,10 @@ internal static class NesPrgLinker
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(layout);
 
-        var emission = builder.FreezeForLink();
-        var fixedSection = emission.Sections[NesPrgResidence.Fixed];
-        var programSection = emission.Sections[NesPrgResidence.ProgramR6];
+        var sourceEmission = builder.FreezeForLink();
+        var emission = NormalizeEmission(sourceEmission);
+        var fixedSection = emission.FixedSection;
+        var programSection = emission.ProgramSection;
         ValidateProgramAtoms(programSection);
 
         var branchRelocations = emission.Relocations
@@ -239,9 +264,104 @@ internal static class NesPrgLinker
             fixedBytes,
             programSegments,
             publicSymbols,
+            sourceEmission.PlacementUnits
+                .Select(unit => new NesPrgPlacementUnit(unit.Name, unit.Residence, unit.Bytes.Length))
+                .ToArray(),
             requiredVeneerBytes,
             programBuffers.Sum(buffer => buffer.Length),
             placement.RequiredBanks);
+    }
+
+    private static LinkEmission NormalizeEmission(NesPrgEmission emission)
+    {
+        var unitsByName = emission.PlacementUnits.ToDictionary(unit => unit.Name, StringComparer.Ordinal);
+        var fixedStream = BuildResidenceStream(emission, NesPrgResidence.Fixed);
+        var programStream = BuildResidenceStream(emission, NesPrgResidence.ProgramR6);
+        var streams = new Dictionary<NesPrgResidence, ResidenceStream>
+        {
+            [NesPrgResidence.Fixed] = fixedStream,
+            [NesPrgResidence.ProgramR6] = programStream,
+        };
+        var labels = emission.Labels.ToDictionary(
+            pair => pair.Key,
+            pair =>
+            {
+                var definition = pair.Value;
+                if (definition.ExternalAddress is not null)
+                {
+                    return new LinkLabelDefinition(
+                        Residence: null,
+                        Offset: 0,
+                        definition.ExternalAddress);
+                }
+
+                if (definition.PlacementUnitName is null)
+                {
+                    return new LinkLabelDefinition(
+                        NesPrgResidence.Fixed,
+                        definition.Offset,
+                        ExternalAddress: null);
+                }
+
+                var unit = unitsByName[definition.PlacementUnitName];
+                return new LinkLabelDefinition(
+                    unit.Residence,
+                    checked(streams[unit.Residence].UnitOffsets[unit.Name] + definition.Offset),
+                    ExternalAddress: null);
+            },
+            StringComparer.Ordinal);
+        var relocations = emission.Relocations
+            .Select(relocation =>
+            {
+                if (relocation.PlacementUnitName is null)
+                {
+                    return new LinkRelocation(
+                        NesPrgResidence.Fixed,
+                        relocation.Offset,
+                        relocation.Label,
+                        relocation.Addend,
+                        relocation.Kind);
+                }
+
+                var unit = unitsByName[relocation.PlacementUnitName];
+                return new LinkRelocation(
+                    unit.Residence,
+                    checked(streams[unit.Residence].UnitOffsets[unit.Name] + relocation.Offset),
+                    relocation.Label,
+                    relocation.Addend,
+                    relocation.Kind);
+            })
+            .ToArray();
+        return new LinkEmission(
+            emission.FixedBaseAddress,
+            fixedStream.Section,
+            programStream.Section,
+            labels,
+            relocations);
+    }
+
+    private static ResidenceStream BuildResidenceStream(
+        NesPrgEmission emission,
+        NesPrgResidence residence)
+    {
+        var bytes = residence is NesPrgResidence.Fixed
+            ? emission.FixedSection.Bytes.ToList()
+            : [];
+        var atoms = residence is NesPrgResidence.Fixed
+            ? emission.FixedSection.Atoms.ToList()
+            : [];
+        var unitOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var unit in emission.PlacementUnits.Where(unit => unit.Residence == residence))
+        {
+            var unitOffset = bytes.Count;
+            unitOffsets.Add(unit.Name, unitOffset);
+            bytes.AddRange(unit.Bytes);
+            atoms.AddRange(unit.Atoms.Select(atom => atom with { Offset = checked(unitOffset + atom.Offset) }));
+        }
+
+        return new ResidenceStream(
+            new NesPrgSectionEmission(bytes.ToArray(), atoms.ToArray()),
+            unitOffsets);
     }
 
     private static void ValidateProgramAtoms(NesPrgSectionEmission program)
@@ -306,7 +426,7 @@ internal static class NesPrgLinker
     }
 
     private static IReadOnlyDictionary<string, ResolvedSymbol> ResolveSymbols(
-        NesPrgEmission emission,
+        LinkEmission emission,
         ProgramPlacement placement,
         NesPrgLinkLayout layout)
     {
@@ -368,7 +488,7 @@ internal static class NesPrgLinker
     }
 
     private static HashSet<VeneerTarget> CollectVeneerTargets(
-        NesPrgEmission emission,
+        LinkEmission emission,
         ProgramPlacement placement,
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
         NesPrgLinkLayout layout)
@@ -435,7 +555,7 @@ internal static class NesPrgLinker
     }
 
     private static void ApplyRelocations(
-        NesPrgEmission emission,
+        LinkEmission emission,
         ProgramPlacement placement,
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
         IReadOnlyDictionary<VeneerTarget, ushort> veneerAddresses,
@@ -511,7 +631,7 @@ internal static class NesPrgLinker
     }
 
     private static void ApplyFixedRelocation(
-        NesPrgRelocation relocation,
+        LinkRelocation relocation,
         ResolvedSymbol target,
         IReadOnlyDictionary<VeneerTarget, ushort> veneerAddresses,
         byte[] fixedBytes,
@@ -578,7 +698,7 @@ internal static class NesPrgLinker
         return target.CpuAddress;
     }
 
-    private static void RejectProgramAddressTarget(NesPrgRelocation relocation, ResolvedSymbol target)
+    private static void RejectProgramAddressTarget(LinkRelocation relocation, ResolvedSymbol target)
     {
         if (target.Residence is NesPrgResidence.ProgramR6)
         {
@@ -589,7 +709,7 @@ internal static class NesPrgLinker
 
     private static ResolvedSymbol ResolveTarget(
         IReadOnlyDictionary<string, ResolvedSymbol> symbols,
-        NesPrgRelocation relocation)
+        LinkRelocation relocation)
     {
         var target = ResolveNamedSymbol(symbols, relocation.Label);
         if (target.Residence is NesPrgResidence.ProgramR6 && relocation.Addend != 0)
@@ -667,7 +787,7 @@ internal static class NesPrgLinker
         byte[] bytes,
         int offset,
         ushort address,
-        NesPrgRelocation relocation)
+        LinkRelocation relocation)
     {
         var resolved = checked(address + relocation.Addend);
         bytes[offset] = relocation.Kind is NesPrgRelocationKind.HighByte

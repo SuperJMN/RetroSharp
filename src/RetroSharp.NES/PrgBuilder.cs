@@ -19,12 +19,12 @@ internal enum NesPrgRelocationKind
 internal sealed record NesPrgAtom(int Offset, int Length);
 
 internal sealed record NesPrgLabelDefinition(
-    NesPrgResidence? Residence,
+    string? PlacementUnitName,
     int Offset,
     ushort? ExternalAddress);
 
 internal sealed record NesPrgRelocation(
-    NesPrgResidence Residence,
+    string? PlacementUnitName,
     int Offset,
     string Label,
     int Addend,
@@ -34,9 +34,21 @@ internal sealed record NesPrgSectionEmission(
     byte[] Bytes,
     IReadOnlyList<NesPrgAtom> Atoms);
 
+internal sealed record NesPrgPlacementUnitEmission(
+    string Name,
+    NesPrgResidence Residence,
+    byte[] Bytes,
+    IReadOnlyList<NesPrgAtom> Atoms);
+
+internal sealed record NesPrgPlacementUnit(
+    string Name,
+    NesPrgResidence Residence,
+    int Size);
+
 internal sealed record NesPrgEmission(
     ushort FixedBaseAddress,
-    IReadOnlyDictionary<NesPrgResidence, NesPrgSectionEmission> Sections,
+    NesPrgSectionEmission FixedSection,
+    IReadOnlyList<NesPrgPlacementUnitEmission> PlacementUnits,
     IReadOnlyDictionary<string, NesPrgLabelDefinition> Labels,
     IReadOnlyList<NesPrgRelocation> Relocations);
 
@@ -49,7 +61,23 @@ internal sealed class PrgBuilder
         public List<NesPrgAtom> Atoms { get; } = [];
     }
 
-    private sealed class SectionScope(PrgBuilder owner, NesPrgResidence previous) : IDisposable
+    private sealed class RecordedPlacementUnit(
+        string name,
+        NesPrgResidence residence,
+        int flatStartOffset)
+    {
+        public string Name { get; } = name;
+
+        public NesPrgResidence Residence { get; } = residence;
+
+        public int FlatStartOffset { get; } = flatStartOffset;
+
+        public int? FlatSize { get; set; }
+
+        public RecordedSection Section { get; } = new();
+    }
+
+    private sealed class PlacementUnitScope(PrgBuilder owner, RecordedPlacementUnit unit) : IDisposable
     {
         private bool disposed;
 
@@ -60,7 +88,7 @@ internal sealed class PrgBuilder
                 return;
             }
 
-            owner.currentResidence = previous;
+            owner.ExitPlacementUnit(unit);
             disposed = true;
         }
     }
@@ -72,11 +100,13 @@ internal sealed class PrgBuilder
     private readonly List<(int Offset, string Label, int Addend, bool High)> byteFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
     private readonly bool sectioned;
-    private readonly Dictionary<NesPrgResidence, RecordedSection> recordedSections = [];
+    private readonly RecordedSection recordedFixedSection = new();
+    private readonly List<RecordedPlacementUnit> recordedPlacementUnits = [];
+    private readonly Dictionary<string, RecordedPlacementUnit> placementUnitsByName = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NesPrgLabelDefinition> recordedLabels = [];
     private readonly List<NesPrgRelocation> recordedRelocations = [];
     private readonly Dictionary<string, int> subroutineCallSites = new(StringComparer.Ordinal);
-    private NesPrgResidence currentResidence = NesPrgResidence.Fixed;
+    private RecordedPlacementUnit? currentPlacementUnit;
     private int nextLabelId;
 
     public PrgBuilder(ushort baseAddress = 0x8000) : this(baseAddress, sectioned: false)
@@ -87,18 +117,23 @@ internal sealed class PrgBuilder
     {
         this.baseAddress = baseAddress;
         this.sectioned = sectioned;
-        if (sectioned)
-        {
-            recordedSections[NesPrgResidence.Fixed] = new RecordedSection();
-            recordedSections[NesPrgResidence.ProgramR6] = new RecordedSection();
-        }
     }
 
     internal static PrgBuilder CreateSectioned(ushort fixedBaseAddress) =>
         new(fixedBaseAddress, sectioned: true);
 
-    public int CurrentAddress =>
-        (sectioned && currentResidence is NesPrgResidence.ProgramR6 ? 0x8000 : baseAddress) + CurrentBytes.Count;
+    public int CurrentAddress => sectioned
+        ? (CurrentResidence is NesPrgResidence.ProgramR6 ? 0x8000 : baseAddress) + CurrentResidenceOffset
+        : baseAddress + bytes.Count;
+
+    internal IReadOnlyList<NesPrgPlacementUnit> PlacementUnits => recordedPlacementUnits
+        .Select(unit => new NesPrgPlacementUnit(
+            unit.Name,
+            unit.Residence,
+            sectioned
+                ? unit.Section.Bytes.Count
+                : unit.FlatSize ?? bytes.Count - unit.FlatStartOffset))
+        .ToArray();
 
     public void Label(string name)
     {
@@ -109,7 +144,7 @@ internal sealed class PrgBuilder
         }
 
         recordedLabels[name] = new NesPrgLabelDefinition(
-            currentResidence,
+            CurrentPlacementUnitName,
             CurrentBytes.Count,
             ExternalAddress: null);
     }
@@ -123,7 +158,7 @@ internal sealed class PrgBuilder
         }
 
         recordedLabels[name] = new NesPrgLabelDefinition(
-            Residence: null,
+            PlacementUnitName: null,
             Offset: 0,
             ExternalAddress: address);
     }
@@ -141,16 +176,25 @@ internal sealed class PrgBuilder
         EmitRecordedAtom(values);
     }
 
-    internal IDisposable EnterSection(NesPrgResidence residence)
+    internal IDisposable EnterPlacementUnit(string name, NesPrgResidence residence)
     {
-        if (!sectioned)
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (currentPlacementUnit is not null)
         {
-            throw new InvalidOperationException("NES PRG sections require a sectioned builder.");
+            throw new InvalidOperationException(
+                $"NES PRG placement unit '{currentPlacementUnit.Name}' cannot contain another placement unit.");
         }
 
-        var previous = currentResidence;
-        currentResidence = residence;
-        return new SectionScope(this, previous);
+        if (placementUnitsByName.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"NES PRG placement unit '{name}' has already been emitted.");
+        }
+
+        var unit = new RecordedPlacementUnit(name, residence, bytes.Count);
+        recordedPlacementUnits.Add(unit);
+        placementUnitsByName.Add(name, unit);
+        currentPlacementUnit = unit;
+        return new PlacementUnitScope(this, unit);
     }
 
     internal NesPrgEmission FreezeForLink()
@@ -162,9 +206,14 @@ internal sealed class PrgBuilder
 
         return new NesPrgEmission(
             baseAddress,
-            recordedSections.ToDictionary(
-                pair => pair.Key,
-                pair => new NesPrgSectionEmission(pair.Value.Bytes.ToArray(), pair.Value.Atoms.ToArray())),
+            new NesPrgSectionEmission(recordedFixedSection.Bytes.ToArray(), recordedFixedSection.Atoms.ToArray()),
+            recordedPlacementUnits
+                .Select(unit => new NesPrgPlacementUnitEmission(
+                    unit.Name,
+                    unit.Residence,
+                    unit.Section.Bytes.ToArray(),
+                    unit.Section.Atoms.ToArray()))
+                .ToArray(),
             new Dictionary<string, NesPrgLabelDefinition>(recordedLabels, StringComparer.Ordinal),
             recordedRelocations.ToArray());
     }
@@ -176,7 +225,7 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${baseAddress:X4}.");
         }
 
-        if (sectioned && currentResidence is not NesPrgResidence.Fixed)
+        if (sectioned && currentPlacementUnit is not null)
         {
             throw new InvalidOperationException("NES PRG address padding is valid only in the fixed section.");
         }
@@ -224,7 +273,7 @@ internal sealed class PrgBuilder
         {
             var offset = EmitRecordedAtom(0xA9, 0x00);
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 offset + 1,
                 label,
                 addend,
@@ -242,7 +291,7 @@ internal sealed class PrgBuilder
         {
             var offset = EmitRecordedAtom(0xA9, 0x00);
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 offset + 1,
                 label,
                 addend,
@@ -398,7 +447,7 @@ internal sealed class PrgBuilder
         if (sectioned)
         {
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 CurrentBytes.Count - 1,
                 label,
                 Addend: 0,
@@ -424,7 +473,7 @@ internal sealed class PrgBuilder
         {
             var offset = EmitRecordedAtom((byte)inverse, 0x03, 0x4C, 0x00, 0x00);
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 offset + 3,
                 label,
                 Addend: 0,
@@ -489,22 +538,58 @@ internal sealed class PrgBuilder
             return externalAddress;
         }
 
-        if (definition.Residence is not NesPrgResidence.Fixed)
+        if (definition.PlacementUnitName is { } placementUnitName &&
+            placementUnitsByName[placementUnitName].Residence is not NesPrgResidence.Fixed)
         {
             throw new InvalidOperationException(
                 $"NES banked program label '{label}' requires a physical bank as well as a CPU address.");
         }
 
-        return checked((ushort)(baseAddress + definition.Offset));
+        return checked((ushort)(baseAddress + FixedOffsetOf(definition)));
     }
 
     private List<byte> CurrentBytes => sectioned
-        ? recordedSections[currentResidence].Bytes
+        ? CurrentRecordedSection.Bytes
         : bytes;
+
+    private RecordedSection CurrentRecordedSection => currentPlacementUnit?.Section ?? recordedFixedSection;
+
+    private string? CurrentPlacementUnitName => currentPlacementUnit?.Name;
+
+    private NesPrgResidence CurrentResidence => currentPlacementUnit?.Residence ?? NesPrgResidence.Fixed;
+
+    private int CurrentResidenceOffset
+    {
+        get
+        {
+            if (currentPlacementUnit is null)
+            {
+                return recordedFixedSection.Bytes.Count;
+            }
+
+            var offset = currentPlacementUnit.Residence is NesPrgResidence.Fixed
+                ? recordedFixedSection.Bytes.Count
+                : 0;
+            foreach (var unit in recordedPlacementUnits)
+            {
+                if (ReferenceEquals(unit, currentPlacementUnit))
+                {
+                    break;
+                }
+
+                if (unit.Residence == currentPlacementUnit.Residence)
+                {
+                    offset = checked(offset + unit.Section.Bytes.Count);
+                }
+            }
+
+            return checked(offset + currentPlacementUnit.Section.Bytes.Count);
+        }
+    }
 
     private int EmitRecordedAtom(params byte[] values)
     {
-        var section = recordedSections[currentResidence];
+        var section = CurrentRecordedSection;
         var offset = section.Bytes.Count;
         section.Bytes.AddRange(values);
         if (values.Length > 0)
@@ -520,7 +605,7 @@ internal sealed class PrgBuilder
         if (sectioned)
         {
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 CurrentBytes.Count - 2,
                 label,
                 addend,
@@ -537,7 +622,7 @@ internal sealed class PrgBuilder
         if (sectioned)
         {
             recordedRelocations.Add(new NesPrgRelocation(
-                currentResidence,
+                CurrentPlacementUnitName,
                 CurrentBytes.Count - 1,
                 label,
                 addend,
@@ -547,6 +632,46 @@ internal sealed class PrgBuilder
         {
             byteFixups.Add((bytes.Count - 1, label, addend, High: high));
         }
+    }
+
+    private void ExitPlacementUnit(RecordedPlacementUnit unit)
+    {
+        if (!ReferenceEquals(currentPlacementUnit, unit))
+        {
+            throw new InvalidOperationException($"NES PRG placement unit '{unit.Name}' is not active.");
+        }
+
+        if (!sectioned)
+        {
+            unit.FlatSize = checked(bytes.Count - unit.FlatStartOffset);
+        }
+
+        currentPlacementUnit = null;
+    }
+
+    private int FixedOffsetOf(NesPrgLabelDefinition definition)
+    {
+        if (definition.PlacementUnitName is null)
+        {
+            return definition.Offset;
+        }
+
+        var target = placementUnitsByName[definition.PlacementUnitName];
+        var offset = recordedFixedSection.Bytes.Count;
+        foreach (var unit in recordedPlacementUnits)
+        {
+            if (ReferenceEquals(unit, target))
+            {
+                return checked(offset + definition.Offset);
+            }
+
+            if (unit.Residence is NesPrgResidence.Fixed)
+            {
+                offset = checked(offset + unit.Section.Bytes.Count);
+            }
+        }
+
+        throw new InvalidOperationException($"Unknown NES PRG placement unit '{definition.PlacementUnitName}'.");
     }
 
     private static byte CheckedByte(int value)

@@ -236,6 +236,29 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
+    public void Build_report_lists_the_main_placement_unit_in_both_residences()
+    {
+        const string source = """
+                              void Main() {
+                                  u8 value = 1;
+                                  value += 2;
+                              }
+                              """;
+
+        var fixedBuild = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(source);
+        var bankedBuild = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(source);
+        var fixedUnit = Assert.Single(fixedBuild.Report.PlacementUnits);
+        var bankedUnit = Assert.Single(bankedBuild.Report.PlacementUnits);
+
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, fixedUnit.Name);
+        Assert.Equal(NesPrgResidence.Fixed, fixedUnit.Residence);
+        Assert.Equal(NesRomBuilder.MainPlacementUnitName, bankedUnit.Name);
+        Assert.Equal(NesPrgResidence.ProgramR6, bankedUnit.Residence);
+        Assert.Equal(fixedUnit.Size, bankedUnit.Size);
+        Assert.True(fixedUnit.Size > 0);
+    }
+
+    [Fact]
     public void Portable2D_import_does_not_affect_nes_rom_bytes()
     {
         const string implicitSdk = """

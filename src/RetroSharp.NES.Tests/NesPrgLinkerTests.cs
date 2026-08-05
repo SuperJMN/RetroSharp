@@ -8,6 +8,7 @@ public sealed class NesPrgLinkerTests
     private const ushort FixedBaseAddress = 0xC000;
     private const ushort FixedTrailerStartAddress = 0xFF80;
     private const string SelectR6HelperLabel = "mmc3_select_r6";
+    private const string TestProgramUnitName = "program:test";
     private const int ProgramBankSize = 8 * 1_024;
 
     [Fact]
@@ -15,7 +16,7 @@ public sealed class NesPrgLinkerTests
     {
         var builder = CreateBuilder();
         builder.JumpAbsolute("program_entry");
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.Label("program_entry");
             builder.Emit(0xEA);
@@ -42,10 +43,46 @@ public sealed class NesPrgLinkerTests
     }
 
     [Fact]
+    public void Named_placement_units_keep_stream_order_and_report_residence_and_size()
+    {
+        var splitBuilder = CreateBuilder();
+        using (splitBuilder.EnterPlacementUnit("program:entry", NesPrgResidence.ProgramR6))
+        {
+            splitBuilder.JumpAbsolute("program_loop");
+        }
+
+        using (splitBuilder.EnterPlacementUnit("program:loop", NesPrgResidence.ProgramR6))
+        {
+            splitBuilder.Label("program_loop");
+            splitBuilder.Emit(0xEA);
+        }
+
+        var controlBuilder = CreateBuilder();
+        using (controlBuilder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
+        {
+            controlBuilder.JumpAbsolute("program_loop");
+            controlBuilder.Label("program_loop");
+            controlBuilder.Emit(0xEA);
+        }
+
+        var split = Link(splitBuilder, checked((ushort)splitBuilder.CurrentAddress), ProgramBank(0));
+        var control = Link(controlBuilder, checked((ushort)controlBuilder.CurrentAddress), ProgramBank(0));
+
+        Assert.Equal(control.FixedBytes, split.FixedBytes);
+        Assert.Equal(control.ProgramSegments.Single().Bytes, split.ProgramSegments.Single().Bytes);
+        Assert.Equal(
+            [
+                new NesPrgPlacementUnit("program:entry", NesPrgResidence.ProgramR6, 3),
+                new NesPrgPlacementUnit("program:loop", NesPrgResidence.ProgramR6, 1),
+            ],
+            split.PlacementUnits);
+    }
+
+    [Fact]
     public void Cross_bank_branch_and_fallthrough_share_one_veneer_without_splitting_atoms()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.Label("branch");
             builder.BranchRelative(0xD0, "second_bank"); // BNE
@@ -74,7 +111,7 @@ public sealed class NesPrgLinkerTests
     public void Local_short_branch_keeps_the_relative_encoding()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.BranchRelative(0xD0, "target");
             builder.Emit(0xEA);
@@ -92,7 +129,7 @@ public sealed class NesPrgLinkerTests
     public void Long_forward_branch_relaxes_to_inverse_branch_plus_absolute_jump()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.BranchRelative(0xD0, "target");
             builder.Emit(Enumerable.Repeat((byte)0xEA, 130).ToArray());
@@ -112,7 +149,7 @@ public sealed class NesPrgLinkerTests
     public void Long_back_edge_relaxes_to_inverse_branch_plus_absolute_jump()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.Label("loop");
             builder.Emit(Enumerable.Repeat((byte)0xEA, 130).ToArray());
@@ -129,7 +166,7 @@ public sealed class NesPrgLinkerTests
     public void Cross_bank_jsr_is_rejected_in_v1()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.CallSubroutine("callee");
             builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 6).ToArray());
@@ -152,7 +189,7 @@ public sealed class NesPrgLinkerTests
     public void Final_program_bank_can_use_the_complete_8_kib_window()
     {
         var builder = CreateBuilder();
-        using (builder.EnterSection(NesPrgResidence.ProgramR6))
+        using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
         {
             builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize).ToArray());
         }
@@ -173,7 +210,7 @@ public sealed class NesPrgLinkerTests
         static PrgBuilder OversizedProgram()
         {
             var builder = CreateBuilder();
-            using (builder.EnterSection(NesPrgResidence.ProgramR6))
+            using (builder.EnterPlacementUnit(TestProgramUnitName, NesPrgResidence.ProgramR6))
             {
                 builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 3).ToArray());
                 builder.Emit(Enumerable.Repeat((byte)0xEA, ProgramBankSize - 3).ToArray());
