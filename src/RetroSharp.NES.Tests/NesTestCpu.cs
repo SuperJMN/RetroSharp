@@ -29,6 +29,48 @@ internal readonly record struct NesRamByteWrite(ushort Address, byte Value, long
 
 internal readonly record struct NesCpuStep(ushort ProgramCounter, long Cycle, byte StackPointer);
 
+/// <summary>
+/// The MMC3 state an interrupted mainline depends on: the two switchable PRG bank selections and
+/// the write-only bank-select latch. The latch matters on its own because
+/// <c>mmc3_select_r6</c> arms it with <c>STA $8000</c> before completing the switch with
+/// <c>STA $8001</c>, so an interrupt taken between those two stores can corrupt the switch without
+/// ever changing a bank number.
+/// </summary>
+internal readonly record struct NesMapperState(byte R6Bank, byte R7Bank, byte BankLatch)
+{
+    public override string ToString() => $"R6={R6Bank} R7={R7Bank} latch={BankLatch}";
+}
+
+internal readonly record struct NesCpuRegisters(byte A, byte X, byte Y)
+{
+    public override string ToString() => $"A=${A:X2} X=${X:X2} Y=${Y:X2}";
+}
+
+/// <summary>
+/// One taken NMI, recorded so a guard can judge whether the handler was fixed-resident and left
+/// the interrupted mainline undisturbed. <see cref="SwitchableWindowAccesses"/> counts every read
+/// or write the handler made through <c>$8000-$BFFF</c>, which includes its own instruction fetches
+/// when the handler body is not fixed-resident.
+/// </summary>
+internal readonly record struct NesNmiObservation(
+    long Cycle,
+    ushort InterruptedProgramCounter,
+    ushort HandlerEntry,
+    NesMapperState MapperBefore,
+    NesMapperState MapperAfter,
+    NesCpuRegisters RegistersBefore,
+    NesCpuRegisters RegistersAfter,
+    ushort LowestHandlerAddress,
+    ushort HighestHandlerAddress,
+    int SwitchableWindowAccesses)
+{
+    public override string ToString() =>
+        $"cycle={Cycle} interrupted=${InterruptedProgramCounter:X4} entry=${HandlerEntry:X4} " +
+        $"handler=${LowestHandlerAddress:X4}-${HighestHandlerAddress:X4} " +
+        $"mapper[{MapperBefore} -> {MapperAfter}] registers[{RegistersBefore} -> {RegistersAfter}] " +
+        $"switchableAccesses={SwitchableWindowAccesses}";
+}
+
 internal sealed class NesTestCpu
 {
     private const long PpuCyclesPerFrame = 341 * 262;
@@ -73,6 +115,8 @@ internal sealed class NesTestCpu
     private (byte OuterBank, ushort Entry, uint Offset)? nestedReadInjection;
     private byte? nmiInjectionBank;
     private bool injecting;
+    private int nmiDepth;
+    private int switchableWindowAccesses;
 
     public NesTestCpu(byte[] rom)
     {
@@ -114,6 +158,9 @@ internal sealed class NesTestCpu
     public int NmiCount { get; private set; }
 
     public List<long> NmiCompletionCycles { get; } = [];
+
+    /// <summary>Every NMI taken during the run, in order.</summary>
+    public List<NesNmiObservation> NmiObservations { get; } = [];
 
     public int PhysicalFrames { get; private set; }
 
@@ -500,6 +547,7 @@ internal sealed class NesTestCpu
 
     private byte Read(ushort address)
     {
+        CountSwitchableWindowAccess(address);
         if (address < 0x2000)
         {
             return ram[address & 0x07FF];
@@ -580,6 +628,7 @@ internal sealed class NesTestCpu
 
     private void Write(ushort address, byte value, int busCycleOffset)
     {
+        CountSwitchableWindowAccess(address);
         if (address < 0x2000)
         {
             ram[address & 0x07FF] = value;
@@ -760,20 +809,41 @@ internal sealed class NesTestCpu
     private void TriggerNmi()
     {
         var returnPc = pc;
+        var mapperBefore = new NesMapperState(CurrentR6Bank, CurrentR7Bank, selectedRegister);
+        var registersBefore = new NesCpuRegisters(a, x, y);
+        var accessesBefore = switchableWindowAccesses;
         Push((byte)(returnPc >> 8));
         Push((byte)returnPc);
         Push(PackStatus());
         pc = ReadWord(0xFFFA);
+        var entry = pc;
+        var lowest = pc;
+        var highest = pc;
+        nmiDepth++;
         var guard = 32;
         do
         {
+            lowest = Math.Min(lowest, pc);
+            highest = Math.Max(highest, pc);
             Step();
         }
         while (pc != returnPc && --guard > 0);
+        nmiDepth--;
         if (pc != returnPc)
         {
             throw new InvalidOperationException("NES test NMI handler did not return.");
         }
+        NmiObservations.Add(new NesNmiObservation(
+            cycles,
+            returnPc,
+            entry,
+            mapperBefore,
+            new NesMapperState(CurrentR6Bank, CurrentR7Bank, selectedRegister),
+            registersBefore,
+            new NesCpuRegisters(a, x, y),
+            lowest,
+            highest,
+            switchableWindowAccesses - accessesBefore));
         NmiCompletionCycles.Add(cycles);
         NmiCount++;
     }
@@ -834,8 +904,19 @@ internal sealed class NesTestCpu
     private static bool CrossesPage(ushort baseAddress, ushort address) =>
         (baseAddress & 0xFF00) != (address & 0xFF00);
 
-    private void Push(byte value) => ram[NesRuntimeMemoryLayout.Stack.Start | stackPointer--] = value;
+    // $8000-$BFFF is the MMC3 switchable PRG window (R6 then R7). Counting every access an
+    // interrupt handler makes through it is what turns "the handler is bank-neutral" into an
+    // observation instead of an assumption: a non-fixed-resident handler fetches its own
+    // instructions from here. Mapper 0 has no switchable window, so nothing there is counted.
+    private void CountSwitchableWindowAccess(ushort address)
+    {
+        if (nmiDepth > 0 && mapper != 0 && address is >= 0x8000 and < 0xC000)
+        {
+            switchableWindowAccesses++;
+        }
+    }
 
+    private void Push(byte value) => ram[NesRuntimeMemoryLayout.Stack.Start | stackPointer--] = value;
     private byte Pop() => ram[NesRuntimeMemoryLayout.Stack.Start | ++stackPointer];
 
     private void LoadA(byte value)
