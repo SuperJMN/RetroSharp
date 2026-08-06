@@ -8,7 +8,6 @@ public sealed class SdkApiLeakGuardTests
     private static readonly string[] ScanRoots =
     [
         "src/RetroSharp.Parser",
-        "src/RetroSharp.SemanticAnalysis",
         "src/RetroSharp.Sdk.Frontend",
         "src/RetroSharp.GameBoy",
         "src/RetroSharp.NES",

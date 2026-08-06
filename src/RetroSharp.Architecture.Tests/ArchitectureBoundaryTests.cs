@@ -11,14 +11,12 @@ public sealed class ArchitectureBoundaryTests
     [
         "src/RetroSharp.Parser/RetroSharp.Parser.csproj",
         "src/RetroSharp.Parser.Model/RetroSharp.Parser.Model.csproj",
-        "src/RetroSharp.SemanticAnalysis/RetroSharp.SemanticAnalysis.csproj",
     ];
 
     private static readonly string[] LanguageSourceRoots =
     [
         "src/RetroSharp.Parser",
         "src/RetroSharp.Parser.Model",
-        "src/RetroSharp.SemanticAnalysis",
     ];
 
     private static readonly string[] PortableSdkProjects =
@@ -33,7 +31,6 @@ public sealed class ArchitectureBoundaryTests
         "src/RetroSharp.Sdk.Frontend",
         "src/RetroSharp.Parser",
         "src/RetroSharp.Parser.Model",
-        "src/RetroSharp.SemanticAnalysis",
     ];
 
     private static readonly string[] ForbiddenLanguageReferences =

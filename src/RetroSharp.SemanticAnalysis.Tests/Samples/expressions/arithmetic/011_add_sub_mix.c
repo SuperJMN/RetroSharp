@@ -1,1 +1,0 @@
-i16 main(){ i16 a; i16 b; i16 c; a = b - c + b; }

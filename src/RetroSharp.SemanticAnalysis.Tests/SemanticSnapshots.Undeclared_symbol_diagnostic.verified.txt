@@ -1,6 +1,0 @@
-void Main()
-{
-	<Unknown 'a'>=1;
-}
-== Diagnostics ==
-Use of undeclared variable 'a'

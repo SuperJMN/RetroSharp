@@ -468,7 +468,7 @@ descriptors. They do not add runtime SDK operations by themselves.
 
 ## Layer Boundary and Golden Rule
 
-`Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language frontend (`RetroSharp.Parser`, `RetroSharp.Parser.Model`, and `RetroSharp.SemanticAnalysis`) stays framework-neutral: it must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
+`Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language frontend (`RetroSharp.Parser` and `RetroSharp.Parser.Model`) stays framework-neutral: it must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
 
 Golden rule for anyone extending this area:
 

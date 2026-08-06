@@ -1,7 +1,0 @@
-i16 main()
-{
-	<Unknown 'b'>=<Unknown 'a'>;
-}
-== Diagnostics ==
-Use of undeclared variable 'a'
-Use of undeclared variable 'b'

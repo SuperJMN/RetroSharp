@@ -1,7 +1,0 @@
-void Main()
-{
-}
-void other()
-{
-}
-

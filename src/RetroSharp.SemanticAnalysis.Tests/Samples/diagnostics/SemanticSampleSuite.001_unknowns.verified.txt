@@ -1,8 +1,0 @@
-﻿i16 main()
-{
-	i16 c;
-	c=<Unknown 'a'>+<Unknown 'b'>;
-}
-== Diagnostics ==
-Use of undeclared variable 'a'
-Use of undeclared variable 'b'
