@@ -1,6 +1,6 @@
 # RetroSharp Architecture Overview
 
-Status: current active architecture reference. Last updated: 2026-07-26.
+Status: current active architecture reference. Last updated: 2026-08-06.
 
 This is the routed answer to "what layer owns a new concept?". It holds the
 active layer model, capability model, shared SDK operation model, golden rule,
@@ -486,6 +486,35 @@ Where each piece lives:
 - Debugger symbol metadata: `GameBoySymbolFileProjection` / `NesSymbolFileProjection` consume their target-owned runtime-memory layouts and final build reports; the CLI only writes the requested sidecar.
 - Actor Framework lowering: enter through the single `ActorFrameworkLowerer` plan, then follow actor/spawn/projectile/effect domain state and generation symbols; generated program/name facts join through one ordered domain contribution catalog.
 - Ownership validation: `RetroSharp.Architecture.Tests` resolves compiled symbols and IL dependency edges; use exact source paths only for an intentionally physical module contract.
+
+## Where Validation Lives
+
+RetroSharp has no separate semantic-analysis project. `RetroSharp.SemanticAnalysis` was that
+experiment — 2,052 lines that no production build path ever called, only its own tests did, and
+those tests `Skip`ped `return`, `if/else`, and function calls as unsupported. Issue #543 deleted it
+for exactly that reason. **Do not recreate it.** A new semantic check belongs in whichever layer
+below already owns the thing it protects; there is no separate analysis phase to extend.
+
+| Layer | Owner | Rejects | Example diagnostic |
+| --- | --- | --- | --- |
+| Syntax | `RetroSharp.Parser`: `SomeParser.Parse` over the generated `RetroSharp.g4` ANTLR grammar | Malformed syntax; explicitly disallowed managed-object forms | ANTLR `line:col` errors via `ErrorListener<T>` (`SomeParser.Tokenize`/`Parse`); `"virtual dispatch requires a runtime method table"` for `virtual`/`override`/`abstract`/`interface`/`new`/destructors/inheritance/`is` (`SomeParser.RejectUnsupportedManagedObjectForms`) |
+| Local semantics | `RetroSharp.Parser`: `ConstantFolder`, `TypeAliasResolver`, `LetTypeInference`, `FunctionContractValidator`, `SwitchExpressionValidator` | Constant/type-alias redeclaration, division by zero, unknown symbols, ambiguous `let` word types, non-single-return `pure` helpers, malformed switch expressions | `"Constant '{name}' divides by zero."`; `"pure helper '{name}' contains side-effecting statements..."`; `"switch expression requires a default arm"` |
+| Imports | `RetroSharp.Sdk.Frontend.SdkImportResolver.ValidateImports` | Unknown `import` paths | `"Unknown import '{path}'."` |
+| Portable SDK capability | `RetroSharp.Core.Sdk`: `Sdk2DOperationValidator`, `SdkPaletteValidator`, `SdkAudioOperationValidator`, checked against `Target2DCapabilities`/`TargetAudioCapabilities`; `RetroSharp.Sdk.Frontend.ActorFrameworkLowerer.ValidatePoolSpriteBudgets` | Portable calls a target's declared capabilities do not support: sprite size modes, scroll axes, palette slot ranges, BGM/SFX support, per-frame/per-scanline hardware sprite budgets | `"Target '{name}' does not support horizontal fine scrolling."`; `"Target '{name}' supports {n} hardware sprites per scanline, but Actors.Pool for '{pool}' can draw up to {m}..."` |
+| Target lowering | `RetroSharp.GameBoy` / `RetroSharp.NES`: `GameBoyRomCompiler`/`NesRomCompiler` and their runtime compilers | Missing `Main`, unresolved asset references, unsupported local/field types, recursive user functions, and hardware/resource limits (256 VRAM tile indexes, 40-sprite OAM, CHR ROM size, ROM bank count, WorldPack bank offsets) | `"Game Boy target requires a Main function."`; `"Unknown Game Boy sprite asset '{id}'. Declare it with sprite_asset(...)."`; `"Generated Game Boy tiles exceed the 256 tile VRAM index range."` |
+| CLI | `RetroSharp.Cli`: `TargetBuildExecutor`, `ProjectBuildInputResolver`, `ProjectManifestReader` | Bad manifests/paths, and every exception the layers above raise | Caught exceptions print `ex.Message` to stderr and return exit code 1 (`"RetroSharp project '{path}' source '{path}' was not found."`). Malformed `CommandLineParser` options (an unknown flag, a missing value) are not caught the same way: they throw an uncaught `ArgumentException` that crashes the process with a stack trace instead of a clean message — a real gap in that one path, not a documented contract. |
+
+`RetroSharp.Sdk.Frontend.TargetFrontendPreparation.Prepare` is the single shared pipeline stage
+that orders parsing → import validation → Actor Framework analysis → `let` type inference →
+pure-helper contract checks, before each target's own lowering adds its capability and
+hardware-resource checks. Nothing else runs between "the parser accepted the program" and "a
+target lowerer accepted the operations it produced" — least of all a standalone semantic-analysis
+pass.
+
+`RetroSharp.Cli`'s opt-in `--world-budget-report` (`WorldBudgetReportFactory`,
+`WorldBudgetProfileValidator`) is a diagnostic report, not a build gate: it prints ROM/CHR/staging/
+VBlank usage versus per-profile limits as JSON with an `"ok"`/`"overflow"` status per category, and
+never blocks a normal build.
 
 ## Shared World Map Resource
 
