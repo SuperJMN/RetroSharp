@@ -217,6 +217,74 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_capacity_report_rejects_non_nes_targets()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var rom = Path.Combine(workspace.Path, "probe.gb");
+        File.WriteAllText(source, "void Main() { }");
+
+        var result = RunCli("--target", "gb", "--capacity-report", "--out", rom, source);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "--capacity-report is only supported for target nes.",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.False(File.Exists(rom));
+    }
+
+    [Fact]
+    public void Cli_capacity_report_writes_json_to_stdout_without_changing_the_rom()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var quiet = Path.Combine(workspace.Path, "quiet.nes");
+        var reported = Path.Combine(workspace.Path, "reported.nes");
+        File.WriteAllText(source, "void Main() { i16 playerX = 0; u8 tick = 0; tick = tick + 1; }");
+
+        var normal = RunCli("--target", "nes", "--out", quiet, source);
+        var withReport = RunCli("--target", "nes", "--capacity-report", "--out", reported, source);
+
+        Assert.Equal(0, normal.ExitCode);
+        Assert.Equal(string.Empty, normal.StandardOutput);
+        Assert.Equal(0, withReport.ExitCode);
+        Assert.Equal(File.ReadAllBytes(quiet), File.ReadAllBytes(reported));
+        Assert.Contains($"Wrote NES ROM: {reported}", withReport.StandardError, StringComparison.Ordinal);
+
+        using var json = JsonDocument.Parse(withReport.StandardOutput);
+        var root = json.RootElement;
+        Assert.Equal("retrosharp.nes-capacity/v1", root.GetProperty("schema").GetString());
+        Assert.Equal("nes", root.GetProperty("target").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("selectedProfile").GetString()));
+        var fixedRegion = root.GetProperty("fixedRegion");
+        Assert.True(fixedRegion.GetProperty("headroomBytes").GetInt32() > 0);
+        Assert.Equal(
+            fixedRegion.GetProperty("usedBytes").GetInt32() + fixedRegion.GetProperty("headroomBytes").GetInt32(),
+            fixedRegion.GetProperty("capacityBytes").GetInt32());
+
+        // A program this small is nowhere near its region, so the build stays quiet.
+        Assert.Empty(root.GetProperty("warnings").EnumerateArray());
+        Assert.DoesNotContain("warning:", withReport.StandardError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_capacity_report_rejects_world_budget_reports()
+    {
+        var result = RunCli(
+            "--target", "nes",
+            "--world-budget-report",
+            "--capacity-report",
+            RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj"));
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "--world-budget-report inspects a world without building and cannot be combined with --capacity-report.",
+            result.StandardError,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_world_budget_report_is_explicit_deterministic_json_and_default_output_is_byte_compatible()
     {
         using var workspace = TemporaryWorkspace();

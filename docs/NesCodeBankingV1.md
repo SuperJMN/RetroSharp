@@ -192,8 +192,9 @@ branch expansion and any bank-edge fallthrough owned by the unit) together with
 `PrgRomSize`, `ProgramR6Bytes`, `FixedVeneerBytes`, `FixedHeadroomBytes`,
 `program:r6:*` segments, and bank-aware symbols. A banked build also reports
 `BankPlacement`: the physical bank(s) and byte count of every phase, the hot
-phase's name, size and physical bank, remaining R6 headroom, and duplicated
-shared bytes. R6 exhaustion reports the `WorldPack` banks and bytes,
+phase's name, size and physical bank, the linked occupancy of every R6 program
+bank, remaining R6 headroom, and duplicated shared bytes. R6 exhaustion reports
+the `WorldPack` banks and bytes,
 program banks and linked bytes, and the selected board's physical pool — for
 example `[0, 3, 4, 5]` on 64 KiB. A hot phase larger than one 8 KiB bank fails
 as `Mmc3HotPhaseSize` without escalating the board. A `WorldPack` that outgrows
@@ -202,6 +203,22 @@ segments from bits 13-15 of a 16-bit offset, so one physical pack stays within
 eight R6 segments even on a larger board. Fixed veneer exhaustion and
 unsupported relocation shapes fail explicitly. These linker details do not
 change the public `retrosharp.nes.runtime-abi` v1 sidecar or its schema.
+
+`NesCapacityReportProjection` turns a finished build into the author-facing
+`retrosharp.nes-capacity/v1` report, which the CLI writes to stdout for
+`--capacity-report` (see `README.md`). It names the selected profile, PRG/CHR
+size, both headroom figures against the region that owns them, the phase-to-bank
+map with per-bank occupancy, the bytes attributed to fixed veneers, pinned R7,
+boot R7 and resident CHR, the top user-function duplication holders, and
+per-frame CPU work per named window. Shared SDK subroutines and outlined user
+functions are counted with their call sites rather than sized, because no build
+report measures their bytes. Region capacity is reported as used
+plus headroom exactly as the build measured it, never as a re-derived board
+constant. The report is diagnostic: when fixed or R6 headroom falls below five
+per cent of its region it emits a `near-cliff` warning and the build still
+succeeds, because spilling into R6 and escalating the board are the designed
+behaviours. The only build-time failures in this area stay
+`NesProgramBankCapacityException` and `NesFramePlan.RequireVideoSafeBudget`.
 
 ## Stable evidence
 
