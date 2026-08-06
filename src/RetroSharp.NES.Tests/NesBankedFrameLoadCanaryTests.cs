@@ -21,7 +21,7 @@ public sealed class NesBankedFrameLoadCanaryTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
         Assert.Equal("nes-mmc3-tvrom-v1", fixedBuild.Report.SelectedProfile);
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, bankedBuild.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, bankedBuild.Report.SelectedProfile);
         Assert.Single(
             bankedBuild.Report.Segments,
             segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal));

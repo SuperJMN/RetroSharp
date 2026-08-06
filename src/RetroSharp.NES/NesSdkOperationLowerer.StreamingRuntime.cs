@@ -75,7 +75,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.Label(canRequest);
         builder.LoadAImmediate(NesPackedCameraRuntime.Column);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
-        builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
+        builder.CallSubroutine(NesPackedCameraRuntimeEmitter.WorldPackReleaseReversedEdgeLabel);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         if (config.MapWidth > byte.MaxValue)
@@ -115,7 +115,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
         builder.LoadAImmediate(config.ColumnPayloadLength);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-        builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.CallSubroutine(NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);
         builder.JumpIf(0xD0, done);
         EmitStorePackedPendingDescriptor(
@@ -208,7 +208,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.Label(canRequest);
         builder.LoadAImmediate(NesPackedCameraRuntime.Row);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
-        builder.CallSubroutine(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
+        builder.CallSubroutine(NesPackedCameraRuntimeEmitter.WorldPackReleaseReversedEdgeLabel);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.SourceRow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         if (config.MapHeight > byte.MaxValue)
@@ -238,7 +238,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
         builder.LoadAImmediate(32);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
-        builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.CallSubroutine(NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);
         builder.JumpIf(0xD0, done);
         EmitStorePackedPendingDescriptor(
@@ -312,7 +312,7 @@ internal sealed partial class NesSdkOperationLowerer
     {
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.CallSubroutine(NesRomBuilder.WorldPackCommitEdgeLabel);
+        builder.CallSubroutine(NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel);
     }
 
     private void EmitPendingCameraColumn(NesCameraConfig config)

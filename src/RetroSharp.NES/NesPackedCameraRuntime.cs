@@ -89,6 +89,10 @@ internal static class NesPackedCameraRuntime
 
 internal static class NesPackedCameraRuntimeEmitter
 {
+    internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
+    internal const string WorldPackCommitEdgeLabel = "worldpack_commit_edge";
+    internal const string WorldPackReleaseReversedEdgeLabel = "worldpack_release_reversed_edge";
+
     internal static void Emit(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
@@ -184,7 +188,7 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitReleaseReversedEdges(PrgBuilder builder)
     {
-        builder.Label(NesRomBuilder.WorldPackReleaseReversedEdgeLabel);
+        builder.Label(WorldPackReleaseReversedEdgeLabel);
         EmitReleaseReversedSlot(builder, NesRuntimeMemoryLayout.PackedCamera.Slot0, "nes_packed_reverse_slot_0");
         EmitReleaseReversedSlot(builder, NesRuntimeMemoryLayout.PackedCamera.Slot1, "nes_packed_reverse_slot_1");
         builder.LoadAImmediate((byte)NesWorldPackResult.Success);
@@ -531,7 +535,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var rowAttributeLoop = builder.CreateLabel("nes_packed_row_attribute_loop");
         var rowRelease = builder.CreateLabel("nes_packed_row_release");
 
-        builder.Label(NesRomBuilder.WorldPackCommitEdgeLabel);
+        builder.Label(WorldPackCommitEdgeLabel);
         EmitSelectSlotForCommit(builder, invalid);
         EmitLoadPendingExpectedTags(builder);
         EmitValidateSelectedSlot(builder, invalid);
@@ -887,7 +891,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var entryValid = builder.CreateLabel("nes_packed_edge_entry_valid");
         var invalidRequest = builder.CreateLabel("nes_packed_edge_invalid_request");
 
-        builder.Label(NesRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.Label(WorldPackPrepareEdgeLabel);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(NesPackedCameraRuntime.Column);
         builder.JumpIf(0xF0, entryValid);
@@ -985,13 +989,13 @@ internal static class NesPackedCameraRuntimeEmitter
 
         builder.Label(column);
         EmitColumnCoordinate(builder);
-        builder.CallSubroutine(NesRomBuilder.WorldPackVisualLookupLabel);
+        builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel);
         builder.JumpAbsolute(store);
 
         builder.Label(row);
         builder.Label(rowLoop);
         EmitRowCoordinate(builder);
-        builder.CallSubroutine(NesRomBuilder.WorldPackVisualLookupLabel);
+        builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel);
 
         builder.Label(store);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);
@@ -1019,7 +1023,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpIf(0xF0, columnSlicePending);
         EmitAdvancePreparedColumnCoordinate(builder, plan.Pack.Descriptor, plan.UsesFastLookup);
         builder.Label(columnLookup);
-        builder.CallSubroutine(NesRomBuilder.WorldPackVisualLookupPreparedLabel);
+        builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackVisualLookupPreparedLabel);
         builder.JumpAbsolute(store);
 
         builder.Label(attributes);
@@ -1369,11 +1373,11 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
 
         builder.Label(copyLoop);
-        builder.LoadAImmediateLabelLowByte(NesRomBuilder.WorldPackAttributesLabel);
+        builder.LoadAImmediateLabelLowByte(NesWorldPackRuntimeEmitter.WorldPackAttributesLabel);
         builder.ClearCarry();
         builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeIndexLow);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
-        builder.LoadAImmediateLabelHighByte(NesRomBuilder.WorldPackAttributesLabel);
+        builder.LoadAImmediateLabelHighByte(NesWorldPackRuntimeEmitter.WorldPackAttributesLabel);
         builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeIndexHigh);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerHigh);
         builder.LoadYImmediate(0);

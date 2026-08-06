@@ -94,7 +94,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
         int retainedOamBytes)
     {
         var plan = NesFramePlan.Create(
-            NesRomBuilder.CodeBankedProfileName,
+            NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
             retainedOamBytes,
@@ -120,7 +120,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     public void Joint_commit_that_cannot_fit_vblank_is_rejected_with_the_offending_numbers()
     {
         var plan = NesFramePlan.Create(
-            NesRomBuilder.CodeBankedProfileName,
+            NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
             retainedOamByteCount: 152,
@@ -151,7 +151,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     public void Configuring_an_over_budget_band_fails_before_emission()
     {
         var plan = NesFramePlan.Create(
-            NesRomBuilder.CodeBankedProfileName,
+            NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
             retainedOamByteCount: 152,
@@ -177,7 +177,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     public void Shipping_band_and_sprite_shapes_are_accepted()    {
         // The runner: a full 40-row static band together with 23 retained hardware sprites.
         var runner = NesFramePlan.Create(
-            NesRomBuilder.CodeBankedProfileName,
+            NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
             retainedOamByteCount: 92,
@@ -190,7 +190,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
 
         // audio-mixed-load: no background commit, but the largest supported sprite publication.
         var sprites = NesFramePlan.Create(
-            NesRomBuilder.CodeBankedProfileName,
+            NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
             retainedOamByteCount: 152,

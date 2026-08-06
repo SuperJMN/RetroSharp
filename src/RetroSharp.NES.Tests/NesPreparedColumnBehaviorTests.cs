@@ -67,10 +67,10 @@ public sealed class NesPreparedColumnBehaviorTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackInitializeLabel], 5_000_000).A);
 
         cpu.SetRam(NesRuntimeMemoryLayout.PackedCamera.CommitAxis, NesPackedCameraRuntime.Column);
         cpu.SetRam(NesRuntimeMemoryLayout.PackedCamera.CommitDirection, direction);
@@ -85,7 +85,7 @@ public sealed class NesPreparedColumnBehaviorTests
         var prepareCalls = NesPackedCameraRuntime.ColumnPrepareCalls(payloadLength);
         var prepareResults = Enumerable.Range(0, prepareCalls)
             .Select(_ => cpu.RunRoutine(
-                result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+                result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel],
                 maxInstructions: 5_000_000).A)
             .ToArray();
 

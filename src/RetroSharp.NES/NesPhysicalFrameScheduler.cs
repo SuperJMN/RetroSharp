@@ -148,6 +148,7 @@ internal sealed class NesPhysicalFrameScheduler
 {
     private const ushort OamDmaAddress = 0x4014;
     internal const string FrameSignalNmiHandlerLabel = "nes_frame_signal_nmi_handler";
+    internal const string CodeBankedProfileName = "nes-mmc3-tvrom-codebank-v1";
     private readonly PrgBuilder builder;
     private readonly NesFramePlan plan;
     private readonly NesOamPublicationSchedule? oamPublicationSchedule;
@@ -372,7 +373,7 @@ internal sealed class NesPhysicalFrameScheduler
             plan.CameraRowTileWritesPerFrame,
             CameraRowAttributePhase,
             packedColumnCommit ?? new NesPackedColumnCommit(null, NesTarget.Capabilities.ScreenTiles.Height),
-            plan.CartridgeProfile == NesRomBuilder.CodeBankedProfileName
+            plan.CartridgeProfile == CodeBankedProfileName
             && NesWorldPackRuntimeEmitter.SupportsBatchedRawVisualReads(runtimePlan));
     }
 

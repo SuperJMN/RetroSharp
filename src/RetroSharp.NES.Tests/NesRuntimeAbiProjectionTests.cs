@@ -18,7 +18,7 @@ public sealed class NesRuntimeAbiProjectionTests
         using var document = JsonDocument.Parse(SerializeProjection(result));
         var root = document.RootElement;
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, result.Report.SelectedProfile);
         Assert.Equal("retrosharp.nes.runtime-abi", root.GetProperty("contract").GetString());
         Assert.Equal(1, root.GetProperty("version").GetInt32());
         string[] expectedProperties =
