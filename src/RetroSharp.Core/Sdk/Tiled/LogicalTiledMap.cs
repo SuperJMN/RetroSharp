@@ -133,4 +133,19 @@ public sealed class LogicalTiledMapGeometry
     public int BackgroundHeight { get; }
 
     public int BackgroundOffsetY { get; }
+
+    // Resolves the background-layer cell index that a world-slice cell at
+    // expanded position (targetX, targetY) overlays, or -1 when that row falls
+    // outside the background's vertical extent. Both targets compose a single
+    // logical background layer as the visual base, then overlay it with
+    // non-empty world cells while empty world cells keep showing the background
+    // underneath. This is that shared overlay-index lookup; deciding whether a
+    // resolved world cell counts as "empty" stays with each target.
+    public int BackgroundOverlayIndex(int targetX, int targetY)
+    {
+        var backgroundY = checked(ExpandedWorldY + targetY);
+        return backgroundY >= 0 && backgroundY < BackgroundHeight
+            ? checked(backgroundY * BackgroundWidth + targetX)
+            : -1;
+    }
 }

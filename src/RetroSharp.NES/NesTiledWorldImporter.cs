@@ -30,9 +30,13 @@ internal sealed record NesTiledWorldPack(
 // NES lowering of an imported Tiled map. It consumes the target-neutral
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMap (shared with the Game Boy path) and
 // owns the NES specifics: decoding tileset images, generating and deduplicating
-// 2bpp planar CHR tiles, expanding source tiles into 8x8 cells, and composing the
-// background under blank world cells. The current NES runtime streams horizontal
-// worlds through a two-nametable 64-column buffer, and vertical camera programs
+// 2bpp planar CHR tiles, and resolving per-tile NES palette slots. The shared
+// source-to-hardware expansion walk and background-overlay lookup live in
+// RetroSharp.Core.Sdk.Tiled.TiledCellExpansion and
+// LogicalTiledMapGeometry.BackgroundOverlayIndex; this stage supplies the
+// per-cell resolver and writes its own 2-byte (tile, palette) cells. The current
+// NES runtime streams horizontal worlds through a two-nametable 64-column
+// buffer, and vertical camera programs
 // use the shared four-screen background buffer plus row streaming when needed.
 internal static class NesTiledWorldImporter
 {
@@ -53,21 +57,14 @@ internal static class NesTiledWorldImporter
             var sourceIndex = representatives[visualId];
             var sourceX = sourceIndex % plan.SourceWidth;
             var sourceY = sourceIndex / plan.SourceWidth;
-            for (var subcellY = 0; subcellY < plan.MetatileHeight; subcellY++)
+            TiledCellExpansion.ForEachSubcell(sourceX, sourceY, plan.MetatileWidth, plan.MetatileHeight, lowered.Width, (subcellIndex, _, _, targetIndex) =>
             {
-                for (var subcellX = 0; subcellX < plan.MetatileWidth; subcellX++)
-                {
-                    var hardwareX = sourceX * plan.MetatileWidth + subcellX;
-                    var hardwareY = sourceY * plan.MetatileHeight + subcellY;
-                    var loweredIndex = hardwareY * lowered.Width + hardwareX;
-                    var subcellIndex = subcellY * plan.MetatileWidth + subcellX;
-                    var expansionOffset = (visualId * metatileCells + subcellIndex) * targetCellStride;
-                    expansions[expansionOffset] = checked((byte)lowered.WorldTileIds[loweredIndex]);
-                    expansions[expansionOffset + 1] = checked((byte)(
-                        lowered.WorldPaletteSlots[loweredIndex] |
-                        (lowered.WorldSourceTiles[loweredIndex] << 2)));
-                }
-            }
+                var expansionOffset = (visualId * metatileCells + subcellIndex) * targetCellStride;
+                expansions[expansionOffset] = checked((byte)lowered.WorldTileIds[targetIndex]);
+                expansions[expansionOffset + 1] = checked((byte)(
+                    lowered.WorldPaletteSlots[targetIndex] |
+                    (lowered.WorldSourceTiles[targetIndex] << 2)));
+            });
         }
 
         var compiled = plan.Build(expansions, targetCellStride, WorldPackRawPlanes.All);
@@ -110,33 +107,26 @@ internal static class NesTiledWorldImporter
                 var cleanGid = LogicalTiledMapImporter.CleanTiledGid(logical.WorldGids[sourceIndex], context);
                 var sourceTiles = resolver.TilesFromTiledGid(logical.WorldGids[sourceIndex], tileScaleX, tileScaleY, context);
 
-                for (var tileY = 0; tileY < tileScaleY; tileY++)
+                TiledCellExpansion.ForEachSubcell(x, y, tileScaleX, tileScaleY, expandedWidth, (subcellIndex, targetX, targetY, targetIndex) =>
                 {
-                    for (var tileX = 0; tileX < tileScaleX; tileX++)
+                    var tileId = sourceTiles.TileIds[subcellIndex];
+                    var paletteSlot = sourceTiles.PaletteSlots[subcellIndex];
+                    var fromWorldLayer = cleanGid != 0 && tileId != 0;
+                    if (tileId == 0 && backgroundTiles is not null)
                     {
-                        var targetX = x * tileScaleX + tileX;
-                        var targetY = y * tileScaleY + tileY;
-                        var targetIndex = targetY * expandedWidth + targetX;
-                        var tileId = sourceTiles.TileIds[tileY * tileScaleX + tileX];
-                        var paletteSlot = sourceTiles.PaletteSlots[tileY * tileScaleX + tileX];
-                        var fromWorldLayer = cleanGid != 0 && tileId != 0;
-                        if (tileId == 0 && backgroundTiles is not null)
+                        var backgroundIndex = geometry.BackgroundOverlayIndex(targetX, targetY);
+                        if (backgroundIndex >= 0)
                         {
-                            var backgroundY = geometry.ExpandedWorldY + targetY;
-                            if (backgroundY >= 0 && backgroundY < geometry.BackgroundHeight)
-                            {
-                                var backgroundIndex = backgroundY * expandedWidth + targetX;
-                                tileId = backgroundTiles.TileIds[backgroundIndex];
-                                paletteSlot = backgroundTiles.PaletteSlots[backgroundIndex];
-                                fromWorldLayer = false;
-                            }
+                            tileId = backgroundTiles.TileIds[backgroundIndex];
+                            paletteSlot = backgroundTiles.PaletteSlots[backgroundIndex];
+                            fromWorldLayer = false;
                         }
-
-                        worldTileIds[targetIndex] = tileId;
-                        worldPaletteSlots[targetIndex] = paletteSlot;
-                        worldSourceTiles[targetIndex] = fromWorldLayer ? (byte)1 : (byte)0;
                     }
-                }
+
+                    worldTileIds[targetIndex] = tileId;
+                    worldPaletteSlots[targetIndex] = paletteSlot;
+                    worldSourceTiles[targetIndex] = fromWorldLayer ? (byte)1 : (byte)0;
+                });
             }
         }
 
@@ -172,18 +162,11 @@ internal static class NesTiledWorldImporter
             {
                 var sourceIndex = y * width + x;
                 var sourceTiles = resolver.TilesFromTiledGid(backgroundGids[sourceIndex], tileScaleX, tileScaleY, $"{displayName} background layer tile ({x}, {y})");
-                for (var tileY = 0; tileY < tileScaleY; tileY++)
+                TiledCellExpansion.ForEachSubcell(x, y, tileScaleX, tileScaleY, expandedWidth, (subcellIndex, _, _, targetIndex) =>
                 {
-                    for (var tileX = 0; tileX < tileScaleX; tileX++)
-                    {
-                        var targetX = x * tileScaleX + tileX;
-                        var targetY = y * tileScaleY + tileY;
-                        var sourceTileIndex = tileY * tileScaleX + tileX;
-                        var targetIndex = targetY * expandedWidth + targetX;
-                        tiles[targetIndex] = sourceTiles.TileIds[sourceTileIndex];
-                        paletteSlots[targetIndex] = sourceTiles.PaletteSlots[sourceTileIndex];
-                    }
-                }
+                    tiles[targetIndex] = sourceTiles.TileIds[subcellIndex];
+                    paletteSlots[targetIndex] = sourceTiles.PaletteSlots[subcellIndex];
+                });
             }
         }
 
