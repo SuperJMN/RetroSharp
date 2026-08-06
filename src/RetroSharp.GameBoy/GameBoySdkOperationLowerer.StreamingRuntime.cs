@@ -34,7 +34,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             }
         }
 
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackPrepareEdgeLabel);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PreparedSlot);
     }
 
@@ -75,7 +75,7 @@ internal sealed partial class GameBoySdkOperationLowerer
                 GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         }
 
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackPrepareEdgeLabel);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PreparedSlot);
     }
 

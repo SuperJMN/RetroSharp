@@ -10,6 +10,8 @@ namespace RetroSharp.GameBoy;
 
 internal sealed partial class GameBoyRuntimeCompiler
 {
+    internal const string WorldPackWaitAudioTickLabel = "worldpack_wait_audio_tick";
+
     private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
 
     private const byte MusicActiveUgeRows = 1;
@@ -203,7 +205,7 @@ internal sealed partial class GameBoyRuntimeCompiler
             return;
         }
 
-        builder.Label(GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        builder.Label(WorldPackWaitAudioTickLabel);
         if (!program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.UpdateAudio))
         {
             builder.Emit(0xC9); // RET; the wait flag remains disabled.
