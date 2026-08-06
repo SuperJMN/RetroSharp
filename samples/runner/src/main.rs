@@ -34,7 +34,7 @@ void Main()
     SetupAudio();
     LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
-    Actors.Pool(enemies, 1);
+    Actors.Pool(enemies, 2);
     Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, hp: 1, cooldown: 255, hitboxWidth: 16, hitboxHeight: 16, defeatedFrame: 2);
 
     PlayerState player;
@@ -56,40 +56,45 @@ void Main()
         Video.WaitVBlank();
         Camera.Apply();
         PresentFrame(player, playerScreenX, playerScreenY);
-        if (enemies[0].health != 0)
+        for (u8 contactIndex = 0; contactIndex < countof(enemies); contactIndex++)
         {
-            enemies[0].state = 0;
+            if (enemies[contactIndex].active != 0 && enemies[contactIndex].health != 0)
+            {
+                enemies[contactIndex].state = 0;
+            }
         }
         enemies.DrawAndTouchPlayerTop(playerScreenX, playerScreenY, 18, 32, 8);
         Audio.Update();
         Input.Poll();
 
-        if (enemies[0].health != 0 && player.velocityY > 0 && enemies[0].state != 0)
+        bool stompResolved = false;
+        for (u8 stompIndex = 0; stompIndex < countof(enemies); stompIndex++)
         {
-            enemies[0].health = 0;
-            Sfx.Play(squish_sfx);
-            player.BounceAfterStomp(Input.IsDown(Button.A));
+            if (!stompResolved && enemies[stompIndex].active != 0 && enemies[stompIndex].health != 0 && player.velocityY > 0 && enemies[stompIndex].state != 0)
+            {
+                enemies[stompIndex].health = 0;
+                stompResolved = true;
+                Sfx.Play(squish_sfx);
+                player.BounceAfterStomp(Input.IsDown(Button.A));
+            }
         }
         SimulatePlayer(player, view, frame);
         Actors.SpawnWindow(enemies, "assets/maps/stage1.tmx", "actors", 0, 192);
         goombaAdvance = !goombaAdvance;
         if (goombaAdvance)
         {
-            if (enemies[0].health == 0)
+            for (u8 deathIndex = 0; deathIndex < countof(enemies); deathIndex++)
             {
-                if (enemies[0].active != 0)
+                if (enemies[deathIndex].health == 0 && enemies[deathIndex].active != 0)
                 {
-                    enemies[0].state += 1;
-                    if (enemies[0].state == GoombaDeath.SquashedUpdates)
+                    enemies[deathIndex].state += 1;
+                    if (enemies[deathIndex].state == GoombaDeath.SquashedUpdates)
                     {
-                        enemies[0].active = 0;
+                        enemies[deathIndex].active = 0;
                     }
                 }
             }
-            else
-            {
-                enemies.Update();
-            }
+            enemies.Update();
         }
     }
 }

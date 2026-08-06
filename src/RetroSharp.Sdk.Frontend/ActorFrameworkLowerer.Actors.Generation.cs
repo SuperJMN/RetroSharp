@@ -442,6 +442,17 @@ public static partial class ActorFrameworkLowerer
                 ]).ToList();
             }
 
+            if (def.DefeatedFrame.HasValue)
+            {
+                return
+                [
+                    new IfElseSyntax(
+                        new BinaryExpressionSyntax(PoolField(pool.Name, index, "health"), Constant(0), Operator.NotEqual),
+                        new BlockSyntax(statements.ToList()),
+                        Maybe<BlockSyntax>.None),
+                ];
+            }
+
             return statements;
         }
 
@@ -677,6 +688,22 @@ public static partial class ActorFrameworkLowerer
                     .ToList();
             }
 
+            if (pool.Capacity == 2
+                && state.Actors.EnemyDefs is [var twoSlotDef]
+                && twoSlotDef.DefeatedFrame.HasValue)
+            {
+                return TwoSlotDrawAndTouchPlayerTopStatements(
+                    pool,
+                    twoSlotDef,
+                    playerX,
+                    playerY,
+                    playerRight,
+                    playerBottom,
+                    topDepth,
+                    phase,
+                    state);
+            }
+
             var indexName = $"__{pool.Name}_{phase}_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight, margin: 0);
             var branches = state.Actors.EnemyDefs
@@ -697,6 +724,126 @@ public static partial class ActorFrameworkLowerer
                 .Append(PoolLoop(pool, indexName, loopStatements))
                 .ToList();
         }
+
+        private static IReadOnlyList<StatementSyntax> TwoSlotDrawAndTouchPlayerTopStatements(
+            ActorPool pool,
+            EnemyDef def,
+            ExpressionSyntax playerX,
+            ExpressionSyntax playerY,
+            ExpressionSyntax playerRight,
+            ExpressionSyntax playerBottom,
+            int topDepth,
+            string phase,
+            ActorFrameworkState state)
+        {
+            var indexName = $"__{pool.Name}_{phase}_i";
+            var index = new IdentifierSyntax(indexName);
+            var projection = BuildDirectPooledScreenProjection(
+                pool.Name,
+                index,
+                pool.Name,
+                $"{phase}_slot",
+                state.ScreenWidth,
+                state.ScreenHeight,
+                cameraPhase: phase);
+            var frameName = $"__{pool.Name}_{phase}_frame_{def.Name}";
+            ExpressionSyntax initialFrame = def.Animation is null
+                ? Constant(0)
+                : IntrinsicCall(
+                    state,
+                    AnimationFrameIntrinsic,
+                    [new IdentifierSyntax(def.Animation), PoolField(pool.Name, index, "animTick")]);
+
+            var statements = PooledCameraDeclarations(pool.Name, phase, configuresCamera: true).ToList();
+            for (var slot = 0; slot < 2; slot++)
+            {
+                statements.Add(new DeclarationSyntax(
+                    "u8",
+                    TwoSlotDrawVariable(pool.Name, phase, "x", slot),
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(Constant(0))));
+                statements.Add(new DeclarationSyntax(
+                    "u8",
+                    TwoSlotDrawVariable(pool.Name, phase, "y", slot),
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(Constant(state.ScreenHeight))));
+                statements.Add(new DeclarationSyntax(
+                    "u8",
+                    TwoSlotDrawVariable(pool.Name, phase, "frame", slot),
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(Constant(0))));
+            }
+
+            var loopStatements = projection.Declarations.ToList();
+            loopStatements.Add(new DeclarationSyntax(
+                "u8",
+                frameName,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From(initialFrame)));
+            loopStatements.Add(new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "health"), Constant(0), Operator.Equal),
+                new BlockSyntax([
+                    Assign(new IdentifierLValue(frameName), Constant(def.DefeatedFrame!.Value)),
+                ]),
+                Maybe<BlockSyntax>.None));
+
+            var selectDrawSlot = new IfElseSyntax(
+                new BinaryExpressionSyntax(index, Constant(0), Operator.Equal),
+                new BlockSyntax(TwoSlotDrawAssignments(pool.Name, phase, 0, projection, frameName).ToList()),
+                Maybe.From(new BlockSyntax(TwoSlotDrawAssignments(pool.Name, phase, 1, projection, frameName).ToList())));
+            var contact = LiveTouchPlayerContact(
+                pool,
+                index,
+                def,
+                playerX,
+                playerY,
+                playerRight,
+                playerBottom,
+                projection,
+                topDepth);
+            loopStatements.Add(new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, index, "active"), Constant(0), Operator.NotEqual),
+                new BlockSyntax([
+                    new IfElseSyntax(
+                        projection.Visible,
+                        new BlockSyntax([selectDrawSlot, contact]),
+                        Maybe<BlockSyntax>.None),
+                ]),
+                Maybe<BlockSyntax>.None));
+            statements.Add(PoolLoop(pool, indexName, loopStatements));
+
+            for (var slot = 0; slot < 2; slot++)
+            {
+                statements.Add(new ExpressionStatementSyntax(IntrinsicCall(
+                    state,
+                    SpriteDrawIntrinsic,
+                    [
+                        new IdentifierSyntax(def.Sprite!),
+                        new IdentifierSyntax(TwoSlotDrawVariable(pool.Name, phase, "x", slot)),
+                        new IdentifierSyntax(TwoSlotDrawVariable(pool.Name, phase, "y", slot)),
+                        new IdentifierSyntax(TwoSlotDrawVariable(pool.Name, phase, "frame", slot)),
+                        new IdentifierSyntax("false"),
+                        Constant(0),
+                    ])));
+            }
+
+            return statements;
+        }
+
+        private static IReadOnlyList<StatementSyntax> TwoSlotDrawAssignments(
+            string poolName,
+            string phase,
+            int slot,
+            ActorScreenProjection projection,
+            string frameName) =>
+            [
+                Assign(new IdentifierLValue(TwoSlotDrawVariable(poolName, phase, "x", slot)), projection.ScreenX),
+                Assign(new IdentifierLValue(TwoSlotDrawVariable(poolName, phase, "y", slot)), projection.ScreenY),
+                Assign(new IdentifierLValue(TwoSlotDrawVariable(poolName, phase, "frame", slot)), new IdentifierSyntax(frameName)),
+            ];
+
+        private static string TwoSlotDrawVariable(string poolName, string phase, string component, int slot) =>
+            $"__{poolName}_{phase}_{component}_{slot.ToString(CultureInfo.InvariantCulture)}";
 
         private static IReadOnlyList<StatementSyntax> PoolTouchTilesStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
         {
