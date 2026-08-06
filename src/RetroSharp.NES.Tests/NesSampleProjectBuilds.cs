@@ -6,10 +6,21 @@ using RetroSharp.NES;
 using RetroSharp.Sdk;
 
 /// <summary>
+/// A NES-capable repository sample or versioned validation fixture, paired with a stable id so a
+/// survey can label a row without restating the path.
+/// </summary>
+internal sealed record NesSample(string Id, string RelativePath);
+
+/// <summary>
 /// Builds a repository sample or validation fixture for NES the same way the CLI does, but keeps
 /// the <see cref="NesRomBuildResult"/> so a test can inspect the build report. The CLI's own
 /// project resolution is file-scoped, so the small amount of manifest handling a probe needs is
 /// mirrored here rather than widened in production code.
+/// <para>
+/// A sample is either a bare source file or a <c>.retrosharp.json</c> project; callers do not need
+/// to know which, because <see cref="Build"/> and <see cref="Program"/> both accept either and hide
+/// the source composition, library and plugin plumbing behind them.
+/// </para>
 /// </summary>
 internal static class NesSampleProjectBuilds
 {
@@ -20,24 +31,42 @@ internal static class NesSampleProjectBuilds
         AllowTrailingCommas = true,
     };
 
-    /// <summary>Repository-relative paths of every NES sample and versioned validation fixture.</summary>
-    internal static IReadOnlyList<string> NesProjects()
+    /// <summary>Every NES-capable entry of <c>samples/manifest.json</c>, in manifest order.</summary>
+    internal static IReadOnlyList<NesSample> NesSamples()
     {
-        var projects = new List<string>(NesVideoSafeObserver.NesSampleProjects());
-        var fixtures = Directory
+        using var manifest = JsonDocument.Parse(
+            File.ReadAllText(NesVideoSafeObserver.RepositoryFile("samples/manifest.json")));
+        return manifest.RootElement.GetProperty("samples").EnumerateArray()
+            .Where(sample => sample.GetProperty("targets").EnumerateArray()
+                .Any(target => string.Equals(target.GetString(), "nes", StringComparison.Ordinal)))
+            .Select(sample => new NesSample(
+                sample.GetProperty("id").GetString()!,
+                sample.GetProperty("path").GetString()!))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Every NES sample plus every versioned validation fixture that declares the target, which is
+    /// the widest set a whole-repository survey can speak for.
+    /// </summary>
+    internal static IReadOnlyList<NesSample> NesSamplesAndFixtures()
+    {
+        var samples = new List<NesSample>(NesSamples());
+        samples.AddRange(Directory
             .EnumerateDirectories(NesVideoSafeObserver.RepositoryDirectory("validation/fixtures"))
             .SelectMany(directory => Directory.EnumerateFiles(directory, "*.retrosharp.json"))
             .Where(DeclaresNes)
-            .Select(path => "validation/fixtures/" + Path.GetFileName(Path.GetDirectoryName(path)!) + "/" +
-                            Path.GetFileName(path))
-            .OrderBy(path => path, StringComparer.Ordinal);
-        projects.AddRange(fixtures);
-        return projects;
+            .Select(path => new NesSample(
+                "fixture:" + Path.GetFileName(Path.GetDirectoryName(path)!),
+                "validation/fixtures/" + Path.GetFileName(Path.GetDirectoryName(path)!) + "/" +
+                Path.GetFileName(path)))
+            .OrderBy(sample => sample.RelativePath, StringComparer.Ordinal));
+        return samples;
     }
 
-    internal static NesRomBuildResult Build(string projectRelativePath)
+    internal static NesRomBuildResult Build(string relativePath)
     {
-        var (source, baseDirectory, libraryPaths, libraries, plugins) = Compose(projectRelativePath);
+        var (source, baseDirectory, libraryPaths, libraries, plugins) = Compose(relativePath);
         return RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             source,
             baseDirectory,
@@ -50,9 +79,9 @@ internal static class NesSampleProjectBuilds
     /// The prepared program the builder lowers, so a probe can consult a planner such as
     /// <see cref="NesUserFunctionOutliner"/> directly against the same input.
     /// </summary>
-    internal static NesVideoProgram Program(string projectRelativePath)
+    internal static NesVideoProgram Program(string relativePath)
     {
-        var (source, baseDirectory, libraryPaths, libraries, plugins) = Compose(projectRelativePath);
+        var (source, baseDirectory, libraryPaths, libraries, plugins) = Compose(relativePath);
         return RetroSharp.NES.NesRomCompiler.PrepareVideoProgram(
             source,
             baseDirectory,
@@ -63,9 +92,9 @@ internal static class NesSampleProjectBuilds
     }
 
     private static (string Source, string BaseDirectory, IReadOnlyList<string> LibraryPaths,
-        IReadOnlyList<string> Libraries, IReadOnlyList<string> Plugins) Compose(string projectRelativePath)
+        IReadOnlyList<string> Libraries, IReadOnlyList<string> Plugins) Compose(string relativePath)
     {
-        var fullPath = NesVideoSafeObserver.RepositoryFile(projectRelativePath);
+        var fullPath = NesVideoSafeObserver.RepositoryFile(relativePath);
         var directory = Path.GetDirectoryName(fullPath)!;
         if (!fullPath.EndsWith(".retrosharp.json", StringComparison.OrdinalIgnoreCase))
         {

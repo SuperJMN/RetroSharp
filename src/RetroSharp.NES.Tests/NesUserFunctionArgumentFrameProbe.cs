@@ -38,18 +38,18 @@ public sealed class NesUserFunctionArgumentFrameProbe(ITestOutputHelper output)
         var couldServe = 0;
         var totalDuplication = 0;
 
-        foreach (var project in NesSampleProjectBuilds.NesProjects())
+        foreach (var sample in NesSampleProjectBuilds.NesSamplesAndFixtures())
         {
             NesRomBuildResult build;
             NesUserFunctionOutliner plan;
             try
             {
-                build = NesSampleProjectBuilds.Build(project);
-                plan = NesUserFunctionOutliner.Plan(NesSampleProjectBuilds.Program(project));
+                build = NesSampleProjectBuilds.Build(sample.RelativePath);
+                plan = NesUserFunctionOutliner.Plan(NesSampleProjectBuilds.Program(sample.RelativePath));
             }
             catch (Exception ex)
             {
-                output.WriteLine($"{Short(project)}: SKIPPED, {ex.Message}");
+                output.WriteLine($"{sample.Id}: SKIPPED, {ex.Message}");
                 continue;
             }
 
@@ -61,7 +61,7 @@ public sealed class NesUserFunctionArgumentFrameProbe(ITestOutputHelper output)
             var accounted = plan.Candidates.Count(candidate => duplication.ContainsKey(candidate.Function));
 
             output.WriteLine(
-                $"{Short(project)}  profile={build.Report.SelectedProfile}  " +
+                $"{sample.Id}  profile={build.Report.SelectedProfile}  " +
                 $"functions={report.Functions.Count} candidates={plan.Candidates.Count} " +
                 $"accounted={accounted} outlinedBodies={build.Report.OutlinedUserFunctions.Count} " +
                 $"duplication={report.DuplicatedBytes}B");
@@ -181,8 +181,4 @@ public sealed class NesUserFunctionArgumentFrameProbe(ITestOutputHelper output)
             $"duplication={add?.TotalSelfBytes - add?.EmittedBodySelfBytes}B " +
             $"fixedPrg={build.Report.FixedPayloadBytes}B");
     }
-
-    private static string Short(string project) => project
-        .Replace("samples/", string.Empty, StringComparison.Ordinal)
-        .Replace("validation/fixtures/", "fixture:", StringComparison.Ordinal);
 }
