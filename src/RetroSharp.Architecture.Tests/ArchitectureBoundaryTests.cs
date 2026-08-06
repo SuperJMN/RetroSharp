@@ -328,16 +328,7 @@ public sealed class ArchitectureBoundaryTests
             : markdown[start..next];
     }
 
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
-    }
+    private static string RepositoryRoot() => ArchitecturePhysicalAssertions.RepositoryRoot();
 
     private sealed record SourceMatch(string RelativePath, int LineNumber, string Term)
     {
