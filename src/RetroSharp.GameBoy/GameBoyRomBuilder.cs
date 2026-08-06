@@ -618,7 +618,7 @@ internal static class GameBoyRomBuilder
             var invalid = builder.CreateLabel("worldpack_startup_invalid");
             builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackValidateLabel);
             builder.LoadAFromB();
-            builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             builder.JumpAbsolute(0xCA, validated);
             builder.Label(invalid);
             builder.JumpRelative(0x18, invalid);

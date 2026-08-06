@@ -1,6 +1,7 @@
 namespace RetroSharp.GameBoy.Tests;
 
 using System.Collections.Generic;
+using RetroSharp.Core.Sdk;
 
 internal readonly record struct GameBoyOamDmaTransfer(
     byte SourcePage,
@@ -369,10 +370,10 @@ internal sealed class GameBoyTestCpu
         PushWord(returnAddress);
         pc = entry;
         RunUntilSubroutineReturn(entry, returnAddress, initialSp, maxInstructions);
-        return new WorldPackLookupResult(a, (GameBoyWorldPackResult)b);
+        return new WorldPackLookupResult(a, (WorldPackRuntimeResult)b);
     }
 
-    public GameBoyWorldPackResult RunWorldPackDecode(
+    public WorldPackRuntimeResult RunWorldPackDecode(
         ushort entry,
         ushort chunkIndex,
         byte slot,
@@ -385,7 +386,7 @@ internal sealed class GameBoyTestCpu
         PushWord(returnAddress);
         pc = entry;
         RunUntilSubroutineReturn(entry, returnAddress, initialSp, maxInstructions);
-        return (GameBoyWorldPackResult)b;
+        return (WorldPackRuntimeResult)b;
     }
 
     private void RunUntilSubroutineReturn(ushort entry, ushort returnAddress, ushort initialSp, long maxInstructions)
@@ -974,7 +975,7 @@ internal readonly record struct RomBankWrite(
 
 internal readonly record struct FarReadResult(byte Data, byte Status, bool Zero, bool Carry);
 
-internal readonly record struct WorldPackLookupResult(byte Value, GameBoyWorldPackResult Status);
+internal readonly record struct WorldPackLookupResult(byte Value, WorldPackRuntimeResult Status);
 
 internal readonly record struct FarReadInjection(byte SelectedBank, ushort Entry, byte Bank, ushort Address);
 

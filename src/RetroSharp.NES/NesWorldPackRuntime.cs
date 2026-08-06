@@ -4,14 +4,6 @@ using RetroSharp.Core.Sdk;
 
 internal sealed record NesWorldPackProbe(ushort HardwareX, ushort HardwareY);
 
-internal enum NesWorldPackResult : byte
-{
-    Success = 0,
-    Miss = 1,
-    BoundsError = 2,
-    Malformed = 3,
-}
-
 internal sealed record NesWorldPackPlaneRuntimeDescriptor(
     uint Offset,
     ushort StoredBytes,
@@ -298,17 +290,27 @@ internal sealed record NesWorldPackRuntimeLayout(
         int collisionIdBytes,
         int visualSlotCount = 2)
     {
-        ValidateIdBytes(visualIdBytes, nameof(visualIdBytes));
-        ValidateIdBytes(collisionIdBytes, nameof(collisionIdBytes));
+        WorldPackStagingLayoutAllocator.ValidateIdBytes(visualIdBytes, nameof(visualIdBytes));
+        WorldPackStagingLayoutAllocator.ValidateIdBytes(collisionIdBytes, nameof(collisionIdBytes));
         if (visualSlotCount is < 2 or > 6)
         {
             throw new ArgumentOutOfRangeException(nameof(visualSlotCount));
         }
 
         var cursor = (int)NesRuntimeMemoryLayout.WorldPack.StagingStart;
-        var visualSlots = CreateSlots(visualIdBytes * ChunkCells, visualSlotCount, ref cursor);
-        var collisionSlots = CreatePair(collisionIdBytes * ChunkCells, ref cursor);
-        var edgeSlots = CreatePair(EdgeBytes, ref cursor);
+        var visualSlots = WorldPackStagingLayoutAllocator.CreateSlots(
+            (_, start, length) => new NesRamRange(start, length),
+            visualIdBytes * ChunkCells,
+            visualSlotCount,
+            ref cursor);
+        var collisionSlots = WorldPackStagingLayoutAllocator.CreatePair(
+            (_, start, length) => new NesRamRange(start, length),
+            collisionIdBytes * ChunkCells,
+            ref cursor);
+        var edgeSlots = WorldPackStagingLayoutAllocator.CreatePair(
+            (_, start, length) => new NesRamRange(start, length),
+            EdgeBytes,
+            ref cursor);
         var totalBytes = cursor - NesRuntimeMemoryLayout.WorldPack.StagingStart;
         NesRuntimeMemoryLayout.ValidateWorldPackStagingBytes(totalBytes);
 
@@ -317,32 +319,6 @@ internal sealed record NesWorldPackRuntimeLayout(
             collisionSlots,
             edgeSlots,
             totalBytes);
-    }
-
-    private static IReadOnlyList<NesRamRange> CreatePair(int length, ref int cursor)
-        => CreateSlots(length, 2, ref cursor);
-
-    private static IReadOnlyList<NesRamRange> CreateSlots(int length, int count, ref int cursor)
-    {
-        var slots = new NesRamRange[count];
-        for (var index = 0; index < count; index++)
-        {
-            slots[index] = new NesRamRange(checked((ushort)cursor), length);
-            cursor = checked(cursor + length);
-        }
-
-        return slots;
-    }
-
-    private static void ValidateIdBytes(int value, string parameterName)
-    {
-        if (value is not (1 or 2))
-        {
-            throw new ArgumentOutOfRangeException(
-                parameterName,
-                value,
-                "WorldPack v1 ID width must be one or two bytes.");
-        }
     }
 }
 
@@ -552,7 +528,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYHigh);
         if (!plan.UsesFastLookup)
         {
-            builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+            builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
             builder.Return();
             return;
         }
@@ -568,7 +544,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.HardwareYLow);
         builder.Label(loop);
         builder.CallSubroutine(WorldPackVisualLookupLabel);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         builder.BranchRelative(0xF0, next);
         builder.Return();
         builder.Label(next);
@@ -588,7 +564,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.BranchRelative(0xD0, loop);
         builder.Label(complete);
 
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
     }
 
@@ -879,13 +855,13 @@ internal static class NesWorldPackRuntimeEmitter
         builder.Label(success);
         builder.LoadAImmediate(1);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ValidationState);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(malformed);
         builder.LoadAImmediate(2);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ValidationState);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Malformed);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Malformed);
         builder.Return();
     }
 
@@ -964,7 +940,7 @@ internal static class NesWorldPackRuntimeEmitter
 
         builder.Label(common);
         builder.CallSubroutine(WorldPackValidateLabel);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         var validated = builder.CreateLabel("worldpack_decode_validated");
         builder.BranchRelative(0xF0, validated);
         builder.Return();
@@ -1177,20 +1153,20 @@ internal static class NesWorldPackRuntimeEmitter
 
         builder.Label(bounds);
         EmitEndBulkRead(builder, placement);
-        builder.LoadAImmediate((byte)NesWorldPackResult.BoundsError);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.BoundsError);
         builder.Return();
         builder.Label(miss);
         EmitEndBulkRead(builder, placement);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Miss);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Miss);
         builder.Return();
         builder.Label(malformed);
         EmitEndBulkRead(builder, placement);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Malformed);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Malformed);
         builder.Return();
         builder.Label(success);
         StoreSelectedState(builder, 1);
         EmitEndBulkRead(builder, placement);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
     }
 
@@ -1221,7 +1197,7 @@ internal static class NesWorldPackRuntimeEmitter
 
         builder.Label(WorldPackVisualLookupLabel);
         builder.CallSubroutine(useFastCoordinates ? fastCoordinates : coordinates);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         builder.BranchRelative(0xF0, visualContinue);
         builder.Return();
         builder.Label(visualContinue);
@@ -1232,7 +1208,7 @@ internal static class NesWorldPackRuntimeEmitter
         {
             builder.Label(visualRawFastDirect);
             builder.CallSubroutine(WorldPackValidateLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             var visualRawOnlyValidated = builder.CreateLabel("worldpack_visual_raw_only_validated");
             builder.JumpIf(0xF0, visualRawOnlyValidated);
             builder.Return();
@@ -1344,7 +1320,7 @@ internal static class NesWorldPackRuntimeEmitter
 
             builder.Label(visualDecode);
             builder.CallSubroutine(WorldPackVisualDecodeLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             var visualDecoded = builder.CreateLabel("worldpack_visual_lookup_decoded");
             builder.BranchRelative(0xF0, visualDecoded);
             builder.Return();
@@ -1398,7 +1374,7 @@ internal static class NesWorldPackRuntimeEmitter
             {
                 builder.Label(visualRawFastDirect);
                 builder.CallSubroutine(WorldPackValidateLabel);
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, visualRawValidated);
                 builder.Return();
                 builder.Label(visualRawValidated);
@@ -1409,7 +1385,7 @@ internal static class NesWorldPackRuntimeEmitter
             {
                 builder.Label(visualRawDirect);
                 builder.CallSubroutine(WorldPackValidateLabel);
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 var visualRawGenericValidated = builder.CreateLabel("worldpack_visual_raw_generic_validated");
                 builder.JumpIf(0xF0, visualRawGenericValidated);
                 builder.Return();
@@ -1510,7 +1486,7 @@ internal static class NesWorldPackRuntimeEmitter
                 builder,
                 descriptor.MetatileWidth * descriptor.MetatileHeight);
         }
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(WorldPackCollisionLookupLabel);
@@ -1526,7 +1502,7 @@ internal static class NesWorldPackRuntimeEmitter
         else
         {
             builder.CallSubroutine(coordinates);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             builder.BranchRelative(0xF0, collisionContinue);
             builder.Return();
             builder.Label(collisionContinue);
@@ -1591,7 +1567,7 @@ internal static class NesWorldPackRuntimeEmitter
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
                 builder.Label(collisionDecode);
                 builder.CallSubroutine(WorldPackCollisionDecodeLabel);
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 var collisionDecoded = builder.CreateLabel("worldpack_collision_lookup_decoded");
                 builder.BranchRelative(0xF0, collisionDecoded);
                 builder.Return();
@@ -1617,7 +1593,7 @@ internal static class NesWorldPackRuntimeEmitter
             {
                 builder.Label(collisionRawDirect);
                 builder.CallSubroutine(WorldPackValidateLabel);
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, collisionRawValidated);
                 builder.Return();
                 builder.Label(collisionRawValidated);
@@ -1692,12 +1668,12 @@ internal static class NesWorldPackRuntimeEmitter
             builder.CallSubroutine(ReadAdvanceLabel);
             builder.JumpIf(0xB0, malformed);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
-            builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+            builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
             builder.Return();
         }
 
         builder.Label(malformed);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Malformed);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Malformed);
         builder.Return();
 
         if (useFastCoordinates)
@@ -1781,10 +1757,10 @@ internal static class NesWorldPackRuntimeEmitter
             CopyAbsolute(builder, NesRuntimeMemoryLayout.WorldPack.MathResultLow, NesRuntimeMemoryLayout.WorldPack.SubcellIndexLow, count: 2);
 
             builder.Label(coordinateSuccess);
-            builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+            builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
             builder.Return();
             builder.Label(coordinateBounds);
-            builder.LoadAImmediate((byte)NesWorldPackResult.BoundsError);
+            builder.LoadAImmediate((byte)WorldPackRuntimeResult.BoundsError);
             builder.Return();
         }
     }
@@ -1897,10 +1873,10 @@ internal static class NesWorldPackRuntimeEmitter
         builder.AddAbsolute(NesRuntimeMemoryLayout.WorldPack.LocalX);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CellIndex);
 
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
         builder.Label(bounds);
-        builder.LoadAImmediate((byte)NesWorldPackResult.BoundsError);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.BoundsError);
         builder.Return();
     }
 
@@ -1959,12 +1935,12 @@ internal static class NesWorldPackRuntimeEmitter
         builder.BranchRelative(0xD0, cellMiss);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCellResult);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(cellMiss);
         builder.CallSubroutine(coordinates);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         builder.JumpIf(0xF0, coordinateReady);
         builder.Return();
         builder.Label(coordinateReady);
@@ -1985,7 +1961,7 @@ internal static class NesWorldPackRuntimeEmitter
 
             builder.Label(rawDirect);
             builder.CallSubroutine(WorldPackValidateLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             builder.JumpIf(0xF0, rawValidated);
             builder.Return();
             builder.Label(rawValidated);
@@ -2069,7 +2045,7 @@ internal static class NesWorldPackRuntimeEmitter
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.SlotIndex);
             builder.Label(decode);
             builder.CallSubroutine(WorldPackCollisionDecodeLabel);
-            builder.CompareImmediate((byte)NesWorldPackResult.Success);
+            builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
             builder.JumpIf(0xF0, decoded);
             builder.Return();
             builder.Label(decoded);
@@ -2126,11 +2102,11 @@ internal static class NesWorldPackRuntimeEmitter
         builder.ClearCarry();
         builder.AddImmediate(1);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.CollisionCellYTag);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(malformed);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Malformed);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Malformed);
         builder.Return();
     }
 
@@ -2331,7 +2307,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.JumpIf(0xD0, miss);
         builder.LoadAAbsoluteX(cache.Result);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
     }
 

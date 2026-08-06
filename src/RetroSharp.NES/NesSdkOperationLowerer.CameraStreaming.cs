@@ -225,7 +225,7 @@ internal sealed partial class NesSdkOperationLowerer
             if (usePackedCamera)
             {
                 var queued = builder.CreateLabel("nes_packed_camera_right_queued");
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, queued);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
@@ -284,7 +284,7 @@ internal sealed partial class NesSdkOperationLowerer
             if (usePackedCamera)
             {
                 var queued = builder.CreateLabel("nes_packed_camera_left_queued");
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, queued);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
@@ -448,7 +448,7 @@ internal sealed partial class NesSdkOperationLowerer
             if (usePackedCamera)
             {
                 var queued = builder.CreateLabel("nes_packed_camera_down_queued");
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, queued);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
@@ -466,7 +466,7 @@ internal sealed partial class NesSdkOperationLowerer
             if (usePackedCamera)
             {
                 var queued = builder.CreateLabel("nes_packed_camera_up_queued");
-                builder.CompareImmediate((byte)NesWorldPackResult.Success);
+                builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
                 builder.JumpIf(0xF0, queued);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
@@ -834,7 +834,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.Label(budgetReady);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
         EmitCallPackedColumnRequest(config);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         builder.BranchRelative(0xF0, done);
         builder.CompareImmediate(NesPackedCameraRuntime.PreparePending);
         builder.BranchRelative(0xF0, done);
