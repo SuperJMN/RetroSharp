@@ -1,5 +1,7 @@
 namespace RetroSharp.GameBoy;
 
+using RetroSharp.Core.Sdk;
+
 internal static class GameBoyPackedCameraRuntime
 {
     internal const int SlotMetadataBytes = 10;
@@ -21,18 +23,21 @@ internal static class GameBoyPackedCameraRuntime
     internal const int OrthogonalHighOffset = 8;
     internal const int PayloadLengthOffset = 9;
 
-    internal const byte Empty = 0;
-    internal const byte Requested = 1;
-    internal const byte Preparing = 2;
-    internal const byte Resident = 3;
-    internal const byte Committing = 4;
-    internal const byte Released = 5;
+    // State/axis/direction/sentinel values are the shared packed-camera protocol
+    // vocabulary in RetroSharp.Core.Sdk.PackedCameraStateProtocol; only the offsets and
+    // slot size above are Game Boy specific.
+    internal const byte Empty = PackedCameraStateProtocol.Empty;
+    internal const byte Requested = PackedCameraStateProtocol.Requested;
+    internal const byte Preparing = PackedCameraStateProtocol.Preparing;
+    internal const byte Resident = PackedCameraStateProtocol.Resident;
+    internal const byte Committing = PackedCameraStateProtocol.Committing;
+    internal const byte Released = PackedCameraStateProtocol.Released;
 
-    internal const byte Column = 1;
-    internal const byte Row = 2;
-    internal const byte Negative = 1;
-    internal const byte Positive = 2;
-    internal const byte NoSlot = 0xFF;
+    internal const byte Column = PackedCameraStateProtocol.Column;
+    internal const byte Row = PackedCameraStateProtocol.Row;
+    internal const byte Negative = PackedCameraStateProtocol.Negative;
+    internal const byte Positive = PackedCameraStateProtocol.Positive;
+    internal const byte NoSlot = PackedCameraStateProtocol.NoSlot;
 
     internal static ushort SlotMetadata(int slot)
     {

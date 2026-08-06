@@ -1,5 +1,7 @@
 namespace RetroSharp.NES;
 
+using RetroSharp.Core.Sdk;
+
 internal static class NesPackedCameraRuntime
 {
     internal const int SlotMetadataBytes = 16;
@@ -44,19 +46,26 @@ internal static class NesPackedCameraRuntime
     internal const int TargetStartOffset = 14;
     internal const int PayloadCursorOffset = 15;
 
-    internal const byte Empty = 0;
-    internal const byte Requested = 1;
-    internal const byte Preparing = 2;
-    internal const byte Resident = 3;
-    internal const byte Committing = 4;
-    internal const byte Released = 5;
+    // State/axis/direction/sentinel values are the shared packed-camera protocol
+    // vocabulary in RetroSharp.Core.Sdk.PackedCameraStateProtocol; only the offsets and
+    // slot size above are NES specific. PreparePending, RetryAfterApply, and
+    // PrefetchSlot1 are NES-only extensions of that vocabulary (a multi-call
+    // column-prepare retry sentinel, and two flag bits composed onto a direction byte);
+    // Game Boy's slot layout has no equivalent multi-call staging, so they stay declared
+    // here instead of widening the shared protocol.
+    internal const byte Empty = PackedCameraStateProtocol.Empty;
+    internal const byte Requested = PackedCameraStateProtocol.Requested;
+    internal const byte Preparing = PackedCameraStateProtocol.Preparing;
+    internal const byte Resident = PackedCameraStateProtocol.Resident;
+    internal const byte Committing = PackedCameraStateProtocol.Committing;
+    internal const byte Released = PackedCameraStateProtocol.Released;
 
-    internal const byte Column = 1;
-    internal const byte Row = 2;
-    internal const byte Negative = 1;
-    internal const byte Positive = 2;
+    internal const byte Column = PackedCameraStateProtocol.Column;
+    internal const byte Row = PackedCameraStateProtocol.Row;
+    internal const byte Negative = PackedCameraStateProtocol.Negative;
+    internal const byte Positive = PackedCameraStateProtocol.Positive;
     internal static readonly byte PreparePending = 0xFE;
-    internal const byte NoSlot = 0xFF;
+    internal const byte NoSlot = PackedCameraStateProtocol.NoSlot;
     internal const byte RetryAfterApply = 0x40;
     internal static readonly byte PrefetchSlot1 = 0x80;
 
@@ -200,7 +209,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(WorldPackReleaseReversedEdgeLabel);
         EmitReleaseReversedSlot(builder, NesRuntimeMemoryLayout.PackedCamera.Slot0, "nes_packed_reverse_slot_0");
         EmitReleaseReversedSlot(builder, NesRuntimeMemoryLayout.PackedCamera.Slot1, "nes_packed_reverse_slot_1");
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
     }
 
@@ -339,7 +348,7 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitClearPendingAxis(builder, NesPackedCameraRuntime.Column);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
     }
 
@@ -519,7 +528,7 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitClearPendingAxis(builder, NesPackedCameraRuntime.Column);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
     }
@@ -630,7 +639,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.NextAxis);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(rowAttributes);
@@ -674,11 +683,11 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitClearPendingAxis(builder, NesPackedCameraRuntime.Row);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(invalid);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Miss);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Miss);
         builder.Return();
     }
 
@@ -1007,7 +1016,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel);
 
         builder.Label(store);
-        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.CompareImmediate((byte)WorldPackRuntimeResult.Success);
         builder.JumpIf(0xD0, failed);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.DestinationLow);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
@@ -1065,7 +1074,7 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitCopyFrameToSelectedMetadata(builder, resident: true);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Resident);
         EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.ResidentCount);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Success);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Success);
         builder.Return();
 
         builder.Label(noSlot);
@@ -1073,7 +1082,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Return();
 
         builder.Label(invalidRequest);
-        builder.LoadAImmediate((byte)NesWorldPackResult.Miss);
+        builder.LoadAImmediate((byte)WorldPackRuntimeResult.Miss);
         builder.Return();
     }
 

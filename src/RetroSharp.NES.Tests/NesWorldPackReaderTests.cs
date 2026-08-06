@@ -181,7 +181,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         var valid = validCpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, valid.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, valid.A);
         Assert.Equal(1, validCpu.Ram(NesRuntimeMemoryLayout.WorldPack.ValidationState));
         AssertSlots(validCpu, layout, 0xA5);
 
@@ -193,7 +193,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         var malformed = malformedCpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Malformed, malformed.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Malformed, malformed.A);
         Assert.Equal(2, malformedCpu.Ram(NesRuntimeMemoryLayout.WorldPack.ValidationState));
         AssertSlots(malformedCpu, layout, 0xA5);
     }
@@ -229,8 +229,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         cpu.SetChunkAndSlot(chunkIndex: 0, slot: 1);
         var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, visual.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, collision.A);
         var expected = repeated
             ? Enumerable.Repeat((byte)1, 64)
             : Enumerable.Range(0, 64).Select(index => (byte)(index & 1));
@@ -271,15 +271,15 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         cpu.SetWorldPackCoordinates(3, 4);
         var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, visual.A);
         Assert.Equal(20, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
         Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
-        Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, collision.A);
         Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
 
         cpu.SetWorldPackCoordinates(8, 0);
         var bounds = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
-        Assert.Equal((byte)NesWorldPackResult.BoundsError, bounds.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.BoundsError, bounds.A);
         if (far)
         {
             Assert.Equal(5, cpu.CurrentR6Bank);
@@ -312,7 +312,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var lookup = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
         output.WriteLine($"raw collision lookup far={far}: {lookup.Cycles} cycles");
 
-        Assert.Equal((byte)NesWorldPackResult.Success, lookup.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, lookup.A);
         Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot0State));
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot1State));
@@ -351,8 +351,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var repeated = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
         output.WriteLine($"RLE collision lookup far={far}: first={first.Cycles}, cached={repeated.Cycles} cycles");
 
-        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, repeated.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, first.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, repeated.A);
         Assert.True(
             repeated.Cycles * 4 < first.Cycles,
             $"A resident RLE collision lookup must avoid another plane decode; first={first.Cycles}, repeated={repeated.Cycles} cycles.");
@@ -380,9 +380,9 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         output.WriteLine(
             $"RLE boundary lookup: first={firstChunk.Cycles}, crossing={secondChunk.Cycles}, cached-return={backToFirst.Cycles} cycles");
 
-        Assert.Equal((byte)NesWorldPackResult.Success, firstChunk.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, secondChunk.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, backToFirst.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, firstChunk.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, secondChunk.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, backToFirst.A);
         Assert.True(
             backToFirst.Cycles * 4 < secondChunk.Cycles,
             $"Returning across a chunk boundary must reuse the peer slot; second={secondChunk.Cycles}, return={backToFirst.Cycles} cycles.");
@@ -412,8 +412,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var repeatedCell = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
 
         output.WriteLine($"complete stage1 raw collision lookup: first={first.Cycles}, adjacent={cached.Cycles} cycles");
-        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, first.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, cached.A);
         Assert.True(
             first.Cycles <= 1_200,
             $"A complete-stage raw collision lookup must remain direct and bounded, measured {first.Cycles} cycles.");
@@ -459,9 +459,9 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             $"banked raw collision cache: first={first.Cycles}/{writesAfterFirst} writes, "
             + $"second={second.Cycles}/{writesAfterSecond - writesAfterFirst} writes, "
             + $"reused={reused.Cycles}/{cpu.R6BankWrites.Count - writesAfterSecond} writes");
-        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, second.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, reused.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, first.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, second.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, reused.A);
         Assert.Equal(2, writesAfterFirst);
         Assert.Equal(4, writesAfterSecond);
         Assert.Equal(writesAfterSecond, cpu.R6BankWrites.Count);
@@ -499,8 +499,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         output.WriteLine(
             $"banked raw visual cell: first={first.Cycles}/{writesAfterFirst} writes, "
             + $"second={second.Cycles}/{cpu.R6BankWrites.Count - writesAfterFirst} writes");
-        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, second.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, first.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, second.A);
         Assert.Equal(2, writesAfterFirst);
         Assert.Equal(writesAfterFirst, cpu.R6BankWrites.Count);
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
@@ -531,8 +531,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var cached = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel]);
 
         output.WriteLine($"complete stage1 raw visual lookup: first={first.Cycles}, adjacent={cached.Cycles} cycles");
-        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, first.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, cached.A);
         Assert.True(
             first.Cycles <= 1_200,
             $"A complete-stage raw visual lookup must remain direct and bounded, measured {first.Cycles} cycles.");
@@ -570,13 +570,13 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
             cpu.SetWorldPackCoordinates(x, y);
             var visual = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel]);
-            Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
+            Assert.Equal((byte)WorldPackRuntimeResult.Success, visual.A);
             Assert.Equal(fixture.Pack.TargetExpansions.Span[expansionOffset], cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
             Assert.Equal(fixture.Pack.TargetExpansions.Span[expansionOffset + 1], cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
 
             cpu.SetWorldPackCoordinates(x, y);
             var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
-            Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
+            Assert.Equal((byte)WorldPackRuntimeResult.Success, collision.A);
             Assert.Equal((byte)fixture.Pack.CollisionAt(x, y), cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
         }
 
@@ -611,14 +611,14 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             {
                 cpu.SetWorldPackCoordinates(x, y);
                 var lookup = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel]);
-                Assert.Equal((byte)NesWorldPackResult.Success, lookup.A);
+                Assert.Equal((byte)WorldPackRuntimeResult.Success, lookup.A);
             }
         }
 
         Assert.Equal(6, plan.Layout.VisualSlots.Count);
         Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, plan.Layout.TotalBytes);
         Assert.True(plan.Layout.TotalBytes <= NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
-        Assert.Equal((byte)NesWorldPackResult.Success, prewarm.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, prewarm.A);
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
@@ -645,7 +645,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         var initialized = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackInitializeLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, initialized.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, initialized.A);
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid));
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid));
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid));
@@ -692,8 +692,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         Assert.True(fixture.SerializedBytes.Length > 8 * 1_024);
         Assert.Equal(expectedCodec, fixture.Pack.Chunks[chunkIndex].Directory.VisualCodec);
-        Assert.Equal((byte)NesWorldPackResult.Success, validation.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, decode.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, validation.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, decode.A);
         Assert.Equal(
             fixture.Pack.Chunks[chunkIndex].VisualIds.Select(id => (byte)id),
             ReadSlot(cpu, NesWorldPackRuntimeLayout.Create(1, 1).VisualSlots[0]));
@@ -720,7 +720,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 
         var status = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel]);
 
-        Assert.Equal((byte)NesWorldPackResult.Malformed, status.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Malformed, status.A);
         Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot1State));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
@@ -756,14 +756,14 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel]);
 
         Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, layout.TotalBytes);
-        Assert.Equal((byte)NesWorldPackResult.Success, visualDecode.A);
-        Assert.Equal((byte)NesWorldPackResult.Success, collisionDecode.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, visualDecode.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, collisionDecode.A);
         Assert.Equal(Enumerable.Repeat(new byte[] { 0x00, 0x01 }, 64).SelectMany(value => value), ReadSlot(cpu, layout.VisualSlots[0]));
         Assert.Equal(Enumerable.Repeat(new byte[] { 0x00, 0x01 }, 64).SelectMany(value => value), ReadSlot(cpu, layout.CollisionSlots[1]));
-        Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, visual.A);
         Assert.Equal(77, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
         Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
-        Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, collision.A);
         Assert.Equal((byte)WorldTileFlags.Platform, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
     }
 
@@ -894,9 +894,9 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var aboveFlags = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
 
         Assert.Equal(304, 38 * 8);
-        Assert.Equal((byte)NesWorldPackResult.Success, floor.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, floor.A);
         Assert.Equal((byte)WorldTileFlags.Solid, floorFlags);
-        Assert.Equal((byte)NesWorldPackResult.Success, above.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, above.A);
         Assert.Equal((byte)WorldTileFlags.Empty, aboveFlags);
 
         const string hitTopSource = """
@@ -953,10 +953,10 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackProbeLabel],
             maxInstructions: 5_000_000);
 
-        Assert.Equal((byte)NesWorldPackResult.Success, probe.A);
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, probe.A);
         Assert.Equal(1, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeCompleted));
-        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeVisualStatus));
-        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeCollisionStatus));
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeVisualStatus));
+        Assert.Equal((byte)WorldPackRuntimeResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeCollisionStatus));
         Assert.Equal(20, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
         Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
         Assert.Equal((byte)WorldTileFlags.Empty, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));

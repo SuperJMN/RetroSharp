@@ -145,7 +145,7 @@ public sealed class GameBoyWorldPackReaderTests
             checked((ushort)hardwareY));
         var cachedLookupBankWrites = cpu.RomBankWrites.Count - firstLookupBankWrites;
 
-        Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, lookup.Status);
         Assert.Equal((byte)canonical.Pack.CollisionAt(hardwareX, hardwareY), lookup.Value);
         Assert.Equal(lookup, cachedLookup);
         Assert.True(cachedLookupBankWrites < firstLookupBankWrites);
@@ -183,7 +183,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareY: 4);
 
         Assert.True(
-            lookup.Status == GameBoyWorldPackResult.Success,
+            lookup.Status == WorldPackRuntimeResult.Success,
             $"Collision lookup failed with {lookup.Status}; cell={cpu.Wram(0xC1F5)}, id={cpu.Wram(0xC1F2):X2}{cpu.Wram(0xC1F1):X2}, stored={cpu.Wram(0xC1F6)}, codec={cpu.Wram(0xC1F0)}.");
         Assert.Equal((byte)fixture.Pack.CollisionAt(3, 4), lookup.Value);
         if (expectedCodec == WorldPackCodec.Raw)
@@ -227,7 +227,7 @@ public sealed class GameBoyWorldPackReaderTests
             result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 0);
-        Assert.Equal(GameBoyWorldPackResult.Success, validationStatus);
+        Assert.Equal(WorldPackRuntimeResult.Success, validationStatus);
         var bankWritesBeforeLookup = cpu.RomBankWrites.Count;
         var hardwareX = repeated ? (ushort)6 : (ushort)3;
         var hardwareY = repeated ? (ushort)0 : (ushort)6;
@@ -237,7 +237,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX,
             hardwareY);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, lookup.Status);
         Assert.Equal((byte)fixture.Pack.CollisionAt(hardwareX, hardwareY), lookup.Value);
         Assert.Equal(
             expectedCodec == WorldPackCodec.ElementRle ? 1 : 0,
@@ -262,8 +262,8 @@ public sealed class GameBoyWorldPackReaderTests
         var first = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 0, hardwareY: 0);
         var second = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 7, hardwareY: 7);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, first.Status);
-        Assert.Equal(GameBoyWorldPackResult.Success, second.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, first.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, second.Status);
         Assert.Equal(1, cpu.Wram(collisionDecodeCountLow) | cpu.Wram(collisionDecodeCountLow + 1) << 8);
     }
 
@@ -288,7 +288,7 @@ public sealed class GameBoyWorldPackReaderTests
         void AssertLookup(ushort x, ushort y, WorldTileFlags expected, int expectedDecodes)
         {
             var lookup = cpu.RunWorldPackCollisionLookup(entry, x, y);
-            Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+            Assert.Equal(WorldPackRuntimeResult.Success, lookup.Status);
             Assert.Equal((byte)expected, lookup.Value);
             Assert.Equal(
                 expectedDecodes,
@@ -310,15 +310,15 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(rom);
         var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
 
-        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 0, 0).Status);
-        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 8, 0).Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, cpu.RunWorldPackCollisionLookup(entry, 0, 0).Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, cpu.RunWorldPackCollisionLookup(entry, 8, 0).Status);
         rom[packSegment.PhysicalStart + checked((int)fixture.Pack.Chunks[2].Directory.CollisionOffset)] = 0xFF;
-        Assert.Equal(GameBoyWorldPackResult.Malformed, cpu.RunWorldPackCollisionLookup(entry, 16, 0).Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, cpu.RunWorldPackCollisionLookup(entry, 16, 0).Status);
 
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
         Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         var replacedChunk = cpu.RunWorldPackCollisionLookup(entry, 0, 0);
-        Assert.Equal(GameBoyWorldPackResult.Success, replacedChunk.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, replacedChunk.Status);
         Assert.Equal((byte)WorldTileFlags.Solid, replacedChunk.Value);
         Assert.Equal(4, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
     }
@@ -335,14 +335,14 @@ public sealed class GameBoyWorldPackReaderTests
         var lookupEntry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
         var decodeEntry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel];
 
-        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 0, 0).Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 0, 0).Status);
         Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
 
-        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackDecode(decodeEntry, chunkIndex: 2, slot: 0));
+        Assert.Equal(WorldPackRuntimeResult.Success, cpu.RunWorldPackDecode(decodeEntry, chunkIndex: 2, slot: 0));
 
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
-        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 1, 0).Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 1, 0).Status);
         Assert.Equal(2, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
     }
 
@@ -372,9 +372,9 @@ public sealed class GameBoyWorldPackReaderTests
         var memoTableHit = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 9, hardwareY: 38);
         var memoTableHitCycles = cpu.Cycles - start;
 
-        Assert.Equal(GameBoyWorldPackResult.Success, first.Status);
-        Assert.Equal(GameBoyWorldPackResult.Success, cached.Status);
-        Assert.Equal(GameBoyWorldPackResult.Success, memoTableHit.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, first.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, cached.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, memoTableHit.Status);
         Assert.Equal((byte)canonical.Pack.CollisionAt(9, 38), first.Value);
         Assert.Equal((byte)canonical.Pack.CollisionAt(10, 38), cached.Value);
         for (var hardwareY = 35; hardwareY < 40; hardwareY++)
@@ -386,7 +386,7 @@ public sealed class GameBoyWorldPackReaderTests
                     checked((ushort)hardwareX),
                     checked((ushort)hardwareY));
                 Assert.True(
-                    lookup.Status == GameBoyWorldPackResult.Success
+                    lookup.Status == WorldPackRuntimeResult.Success
                     && lookup.Value == (byte)canonical.Pack.CollisionAt(hardwareX, hardwareY),
                     $"Packed collision mismatch at ({hardwareX},{hardwareY}): status={lookup.Status}, actual={lookup.Value}, expected={(byte)canonical.Pack.CollisionAt(hardwareX, hardwareY)}.");
             }
@@ -431,7 +431,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 0,
             hardwareY: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, lookup.Status);
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
@@ -469,7 +469,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 0,
             hardwareY: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, lookup.Status);
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
@@ -501,7 +501,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 0,
             hardwareY: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, lookup.Status);
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
@@ -627,7 +627,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareY);
 
         Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState));
-        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, lookup.Status);
         Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheValid));
 
         static byte[] Fingerprint(ReadOnlySpan<byte> bytes)
@@ -672,7 +672,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 0,
             hardwareY: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Malformed, lookup.Status);
         Assert.All(
             layout.VisualSlots.Concat(layout.CollisionSlots),
             slot => Assert.All(
@@ -691,18 +691,18 @@ public sealed class GameBoyWorldPackReaderTests
             packedWorldOverride: fixture.SerializedBytes);
         var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel];
 
-        RunAndAssertRestored(result.Rom, 0, 0, GameBoyWorldPackResult.Success);
-        RunAndAssertRestored(result.Rom, 1, 0, GameBoyWorldPackResult.Miss);
-        RunAndAssertRestored(result.Rom, 0, 2, GameBoyWorldPackResult.BoundsError);
+        RunAndAssertRestored(result.Rom, 0, 0, WorldPackRuntimeResult.Success);
+        RunAndAssertRestored(result.Rom, 1, 0, WorldPackRuntimeResult.Miss);
+        RunAndAssertRestored(result.Rom, 0, 2, WorldPackRuntimeResult.BoundsError);
 
         var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
         var malformedRom = result.Rom.ToArray();
         malformedRom[
             packSegment.PhysicalStart
             + checked((int)fixture.Pack.Chunks[0].Directory.CollisionOffset)] = 2;
-        RunAndAssertRestored(malformedRom, 0, 0, GameBoyWorldPackResult.Malformed);
+        RunAndAssertRestored(malformedRom, 0, 0, WorldPackRuntimeResult.Malformed);
 
-        void RunAndAssertRestored(byte[] rom, ushort chunkIndex, byte slot, GameBoyWorldPackResult expected)
+        void RunAndAssertRestored(byte[] rom, ushort chunkIndex, byte slot, WorldPackRuntimeResult expected)
         {
             var cpu = new GameBoyTestCpu(rom);
             cpu.SetCurrentRomBank(3);
@@ -742,7 +742,7 @@ public sealed class GameBoyWorldPackReaderTests
             chunkIndex: 0,
             slot: 1);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, status);
+        Assert.Equal(WorldPackRuntimeResult.Success, status);
         Assert.Equal(
             fixture.Pack.Chunks[0].VisualIds.Select(id => (byte)id),
             Enumerable.Range(layout.VisualSlots[1].Start, layout.VisualSlots[1].Length)
@@ -781,7 +781,7 @@ public sealed class GameBoyWorldPackReaderTests
             chunkIndex: 0,
             slot: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, status);
+        Assert.Equal(WorldPackRuntimeResult.Success, status);
         Assert.Equal(3, cpu.CurrentRomBank);
         Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
         Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
@@ -827,7 +827,7 @@ public sealed class GameBoyWorldPackReaderTests
             chunkIndex: 0,
             slot: 0);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, status);
+        Assert.Equal(WorldPackRuntimeResult.Success, status);
         Assert.Equal(result.Rom[nestedBank * 0x4000], Assert.Single(cpu.InjectedFarReadResults).Data);
         Assert.Equal(3, cpu.CurrentRomBank);
         Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
@@ -859,8 +859,8 @@ public sealed class GameBoyWorldPackReaderTests
             slot: 1);
 
         Assert.Equal(558, layout.TotalBytes);
-        Assert.Equal(GameBoyWorldPackResult.Success, visualStatus);
-        Assert.Equal(GameBoyWorldPackResult.Success, collisionStatus);
+        Assert.Equal(WorldPackRuntimeResult.Success, visualStatus);
+        Assert.Equal(WorldPackRuntimeResult.Success, collisionStatus);
         Assert.Equal(
             fixture.Pack.Chunks[0].VisualIds.SelectMany(id => new[] { (byte)id, (byte)(id >> 8) }),
             Enumerable.Range(layout.VisualSlots[0].Start, layout.VisualSlots[0].Length)
@@ -894,7 +894,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 3,
             hardwareY: 4);
 
-        Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, lookup.Status);
         Assert.Equal(20, lookup.Value);
         Assert.All(
             layout.CollisionSlots,
@@ -928,8 +928,8 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX,
             hardwareY);
 
-        Assert.Equal(new WorldPackLookupResult(77, GameBoyWorldPackResult.Success), visual);
-        Assert.Equal(new WorldPackLookupResult((byte)WorldTileFlags.Hazard, GameBoyWorldPackResult.Success), collision);
+        Assert.Equal(new WorldPackLookupResult(77, WorldPackRuntimeResult.Success), visual);
+        Assert.Equal(new WorldPackLookupResult((byte)WorldTileFlags.Hazard, WorldPackRuntimeResult.Success), collision);
     }
 
     [Fact]
@@ -947,7 +947,7 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX: 1,
             hardwareY: 0);
 
-        Assert.Equal(new WorldPackLookupResult(77, GameBoyWorldPackResult.Success), visual);
+        Assert.Equal(new WorldPackLookupResult(77, WorldPackRuntimeResult.Success), visual);
         Assert.True(result.Report.Segments.Count(segment => segment.Owner == "worldpack:default") >= 4);
     }
 
@@ -980,7 +980,7 @@ public sealed class GameBoyWorldPackReaderTests
             result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             0,
             38);
-        Assert.Equal(GameBoyWorldPackResult.Success, packedLookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, packedLookup.Status);
         Assert.Equal((byte)WorldTileFlags.Solid, packedLookup.Value);
         cpu.RunFrames(20);
 
@@ -1043,7 +1043,7 @@ public sealed class GameBoyWorldPackReaderTests
             checked((ushort)(collisionCell % canonical.Pack.Descriptor.HardwareWidth)),
             checked((ushort)(collisionCell / canonical.Pack.Descriptor.HardwareWidth)));
 
-        Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+        Assert.Equal(WorldPackRuntimeResult.Success, lookup.Status);
         Assert.Equal(entryBank, cpu.CurrentRomBank);
         Assert.Equal(entryShadow, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
         Assert.Equal(programShadow, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
