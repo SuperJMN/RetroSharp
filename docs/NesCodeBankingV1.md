@@ -97,6 +97,35 @@ This is target-owned SDK lowering, not a user-function ABI. Startup, runtime
 initialization, target subroutines, `WorldPack` and MMC3 helpers, generated ROM
 tables, DPCM, NMI/IRQ/reset code, and vectors remain fixed.
 
+### Interrupt residence and bank neutrality
+
+An NMI can arrive at any instruction boundary, including inside
+`mmc3_select_r6` between its `STA $8000` latch write and its `STA $8001` bank
+write. Two properties keep that harmless, and both are load-bearing:
+
+- **Fixed-resident.** The vector slots at `$FFFA-$FFFF` sit in the last bank,
+  which PRG mode 0 always maps. Their targets resolve through the fixed
+  `PrgBuilder`, whose base is `FixedRuntimeCpuBaseAddress` (`$C000`) and whose
+  payload is capped below the trailer, so a handler address in the switchable
+  window is unrepresentable. Emitting a handler inside a placement unit is a
+  hard link error, not a silent relocation.
+- **Bank-neutral.** The handler must leave R6, R7, the bank-select latch and
+  the CPU registers exactly as it found them, and must not execute from or
+  touch `$8000-$BFFF`. MMC3 bank registers are write-only, so a handler that
+  switches banks cannot restore what it displaced; only the RAM shadows record
+  the intended selection. The emitted NMI handler therefore does frame-counter
+  and frame-flag RAM work only and makes no call at all.
+
+The IRQ handler is currently unreachable: reset raises `I`, disables mapper
+IRQs through `$E000`, and the emitters never emit `CLI` or write `$E001`. It
+stays a fixed-resident `RTI` so the vector is never dangling.
+
+Adding work to the NMI - a music tick, a streaming commit, an OAM DMA - is the
+realistic way to break this, because the code such work would reach already
+calls `mmc3_select_r6`. `NesInterruptBankNeutralityTests` measures both
+properties from linked ROMs under held input and carries its own negative
+control.
+
 ## Phase placement policy
 
 `NesProgramBankPlanner.Plan(...)` is the deep module that turns the analyzer's
@@ -289,6 +318,12 @@ Focused evidence is split by owner:
   interruption, audio/R7 coexistence, mapper-shadow restoration, determinism,
   and safe observed PPU/OAM writes.
 - `NesRuntimeAbiProjectionTests` owns the unchanged public ABI v1 projection.
+- `NesInterruptBankNeutralityTests` owns interrupt residence and bank
+  neutrality: every linked ROM with a switchable PRG window is observed under
+  held input, every NMI it takes must stay inside `$C000-$FFFF` and leave R6,
+  R7, the bank-select latch and A/X/Y unchanged, the banked canary must
+  actually be interrupted while running from a switched bank, and a patched
+  bank-hostile handler must be reported.
 - `NesMmc3PrgBoardTests` owns board generation, bank roles at every size, the
   6-bit bank-number ceiling, iNES header agreement, board escalation, and the
   escalation canary's boot, tick keep-up, and write safety.
