@@ -284,6 +284,48 @@ building once a program exists whose cold path actually needs it; on today's
 programs it would add a reserved-region frame allocator, acyclicity validation,
 and a size-eligibility model in exchange for no recovered bytes.
 
+### Measured cost of outlining hot functions
+
+`FrameReachable` is the gate holding all the duplication, so the other half of
+#514 — whether a `Hot` function may be outlined at all — was measured the same
+way, by compiling every NES sample twice, once with the hot gate removed, and
+running both ROMs under held input.
+
+Outlining every eligible hot function recovers **1,291 B across all 23 samples**
+for **at most 60 cycles per frame**, against the 29,780-cycle NTSC frame:
+`falling-blocks` −834 B (peak active tick 4,465 → 4,533, five body entries per
+frame), `tiled-stage1-diagonal-speed-sweep` −401 B, `samples/runner` −56 B. The
+other twenty samples recover nothing.
+
+**Frame time is not the binding constraint.** The sample that recovers most idles
+about 25,300 cycles per frame, and the tightest sample, `samples/runner`, peaks
+near 90% of a frame yet pays zero because both its eligible bodies sit on cold
+branches. **Monomorphisation is the constraint**: the convention above merges only
+call sites whose compile-time operands coincide, so a second call site with a
+different argument emits a second body and saves nothing. Hot outlining is
+therefore worth landing only once computed arguments have a frame, and gated on
+net bytes rather than on a frame budget.
+
+Hot outlining spends frame time, not the video-safe window. The packed frame
+boundary is one straight-line block with no user hook, and flipping hot outlining
+left one contiguous PPU/OAM burst per frame, the same longest burst, and zero
+unsafe PPU/OAM writes. The exception is `EmitVideoSafeTransfer`, which opens its
+own boundary; the `StreamBearing` gate already excludes those bodies, and
+`NesFramePlan.RequireVideoSafeBudget` models no user code, so relaxing that gate
+would have to extend the budget with it.
+
+`samples/runner` had 20 B of fixed-PRG headroom when this was measured. That is
+not a cliff: adding ~18 KB of cold logic to a scratch copy escalated the
+cartridge from 81,936 B to 147,472 B and the ROM still booted with no resets and
+no unsafe writes, so cold growth spills into banked PRG as intended.
+
+`NesActiveTickObserver` measures peak and idle cycles per frame and is validated
+against the published `falling-blocks`, `platformer-landing` and `samples/runner`
+anchors; `NesHotOutliningCostProbe` prints the per-function cost model. Both are
+diagnostic. Treat `CallsPerFrame` as a bound rather than a count when reading
+them: it is not path-sensitive and does not multiply loop iterations, so
+`falling-blocks Locate` reports ten static calls per frame and was entered twice.
+
 Outlined bodies are emitted outside every placement unit, so they stay
 fixed-resident and every banked caller reaches them with a same-bank `JSR`.
 `NesRomBuildReport.OutlinedUserFunctions` names each emitted body, its label,

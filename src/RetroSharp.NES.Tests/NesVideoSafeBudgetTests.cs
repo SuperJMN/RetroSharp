@@ -21,9 +21,9 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     public static TheoryData<string> NesSamples()
     {
         var data = new TheoryData<string>();
-        foreach (var project in NesVideoSafeObserver.NesSampleProjects())
+        foreach (var sample in NesSampleProjectBuilds.NesSamples())
         {
-            data.Add(project);
+            data.Add(sample.RelativePath);
         }
 
         return data;

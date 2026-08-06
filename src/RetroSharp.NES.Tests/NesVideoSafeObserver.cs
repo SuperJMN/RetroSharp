@@ -1,7 +1,5 @@
 namespace RetroSharp.NES.Tests;
 
-using System.Text.Json;
-
 /// <summary>
 /// Shared measurement of what a NES ROM does inside the hardware VBlank window.
 /// <para>
@@ -87,20 +85,6 @@ internal static class NesVideoSafeObserver
         finally
         {
             File.Delete(romPath);
-        }
-    }
-
-    /// <summary>Every sample in <c>samples/manifest.json</c> that declares the NES target.</summary>
-    internal static IEnumerable<string> NesSampleProjects()
-    {
-        using var manifest = JsonDocument.Parse(File.ReadAllText(RepositoryFile("samples/manifest.json")));
-        foreach (var sample in manifest.RootElement.GetProperty("samples").EnumerateArray())
-        {
-            var targets = sample.GetProperty("targets").EnumerateArray().Select(target => target.GetString());
-            if (targets.Contains("nes", StringComparer.Ordinal))
-            {
-                yield return sample.GetProperty("path").GetString()!;
-            }
         }
     }
 
