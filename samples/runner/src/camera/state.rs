@@ -18,6 +18,14 @@ class CameraState
         movementRemainder = 0;
     }
 
+    // A blocked pixel step only cancels the sub-pixel budget the tick had left. Wiping the
+    // speed meter and the intended direction here is what made a jump that clears an
+    // obstacle crawl forward at a fraction of a pixel per tick.
+    inline void BlockMotionStep()
+    {
+        movementRemainder = 0;
+    }
+
     inline pure Pixel ScreenX(PlayerState player) => player.x - x;
     inline pure Pixel ScreenY(PlayerState player) => player.y - y;
 
@@ -47,25 +55,27 @@ class CameraState
         }
     }
 
+    // Airborne motion accelerates too. Freezing the speed meter at take-off leaves a jump
+    // stuck on whatever fraction of a pixel per tick survived the previous ground contact,
+    // which reads as a stepped, abrupt horizontal scroll while the camera also moves
+    // vertically. Only the run-to-walk decay stays grounded, so releasing the run button in
+    // mid-air still keeps the momentum the player already earned.
     inline void Accelerate(bool grounded)
     {
-        if (grounded)
+        if (Input.IsDown(Button.B))
         {
-            if (Input.IsDown(Button.B))
-            {
-                if (speed < MotionSpeed.RunMax)
-                {
-                    speed += MotionSpeed.Acceleration;
-                }
-            }
-            else if (speed < MotionSpeed.Walk)
+            if (speed < MotionSpeed.RunMax)
             {
                 speed += MotionSpeed.Acceleration;
             }
-            else if (speed > MotionSpeed.Walk)
-            {
-                speed -= MotionSpeed.Friction;
-            }
+        }
+        else if (speed < MotionSpeed.Walk)
+        {
+            speed += MotionSpeed.Acceleration;
+        }
+        else if (grounded && speed > MotionSpeed.Walk)
+        {
+            speed -= MotionSpeed.Friction;
         }
     }
 
@@ -163,7 +173,7 @@ class CameraState
         }
         else
         {
-            ResetMotion();
+            BlockMotionStep();
         }
     }
 
@@ -185,7 +195,7 @@ class CameraState
         }
         else
         {
-            ResetMotion();
+            BlockMotionStep();
         }
     }
 
