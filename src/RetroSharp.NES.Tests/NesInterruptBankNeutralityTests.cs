@@ -2,6 +2,7 @@ namespace RetroSharp.NES.Tests;
 
 using RetroSharp.NES;
 using Xunit;
+using Xunit.Abstractions;
 
 /// <summary>
 /// Guards the banking safety invariant that an interrupt handler must stay fixed-resident and
@@ -25,7 +26,7 @@ using Xunit;
 /// this suite from being a test that cannot fail.
 /// </para>
 /// </summary>
-public sealed class NesInterruptBankNeutralityTests
+public sealed class NesInterruptBankNeutralityTests(ITestOutputHelper output)
 {
     private const int ObservedFrames = 60;
 
@@ -37,6 +38,12 @@ public sealed class NesInterruptBankNeutralityTests
     /// <c>NesCartridgeLayout.FixedRuntimeCpuBaseAddress</c> pins for every board size.
     /// </summary>
     private const ushort FixedWindowStart = 0xC000;
+
+    /// <summary>
+    /// In MMC3 PRG mode 1, only <c>$E000-$FFFF</c> remains fixed because R6 moves to
+    /// <c>$C000-$DFFF</c>.
+    /// </summary>
+    private const ushort PrgMode1FixedWindowStart = 0xE000;
 
     /// <summary>
     /// Every NES-capable sample and versioned fixture. Each one is linked once and then observed
@@ -70,16 +77,41 @@ public sealed class NesInterruptBankNeutralityTests
             cpu.Held.UnionWith(held);
             cpu.RunFrames(ObservedFrames);
 
-            var hostile = cpu.NmiObservations.Where(IsBankHostile).ToArray();
-            Assert.True(
-                hostile.Length == 0,
-                $"{id} [{string.Join(' ', held)}] took {cpu.NmiObservations.Count} NMI(s); " +
-                $"{hostile.Length} were not fixed-resident and bank-neutral:" +
-                Environment.NewLine +
-                string.Join(
-                    Environment.NewLine,
-                    hostile.Take(4).Select(observation => "  " + observation)));
+            AssertNmiObservationsBankNeutral(id, held, cpu.NmiObservations);
         }
+    }
+
+    [Fact]
+    public void Current_emitted_mmc3_samples_never_select_prg_mode_one()
+    {
+        var runs = 0;
+        var bankSelectWrites = 0;
+        var prgMode1Writes = new List<string>();
+        foreach (var sample in NesSampleProjectBuilds.NesSamplesAndFixtures())
+        {
+            var rom = NesSampleProjectBuilds.Build(sample.RelativePath).Rom;
+            if (!UsesSwitchablePrg(rom))
+            {
+                continue;
+            }
+
+            foreach (var held in NesVideoSafeObserver.HeldInputs)
+            {
+                var cpu = new NesTestCpu(rom);
+                cpu.Held.UnionWith(held);
+                cpu.RunFrames(ObservedFrames);
+                runs++;
+                bankSelectWrites += cpu.BankSelectWrites.Count;
+                prgMode1Writes.AddRange(cpu.BankSelectWrites
+                    .Where(write => (write & 0x40) != 0)
+                    .Select(write => $"{sample.Id} [{string.Join(' ', held)}] wrote ${write:X2}"));
+            }
+        }
+
+        output.WriteLine(
+            $"observed {bankSelectWrites} MMC3 bank-select write(s) across {runs} sample/input run(s); " +
+            "PRG mode 1 writes=0.");
+        Assert.Empty(prgMode1Writes);
     }
 
     /// <summary>
@@ -179,11 +211,101 @@ public sealed class NesInterruptBankNeutralityTests
             observation => observation.RegistersBefore != observation.RegistersAfter);
     }
 
+    [Fact]
+    public void Prg_mode_one_nmi_handler_below_e000_is_reported_as_bank_hostile()
+    {
+        var rom = CreatePrgModeOneNmiBelowE000Rom();
+        var cpu = new NesTestCpu(rom);
+
+        cpu.RunFrames(1);
+
+        Assert.NotEmpty(cpu.NmiObservations);
+        var exception = Record.Exception(() => AssertNmiObservationsBankNeutral(
+            "mmc3-prg-mode1-control",
+            ["none"],
+            cpu.NmiObservations));
+
+        Assert.NotNull(exception);
+        output.WriteLine("captured guard failure:");
+        output.WriteLine(exception.Message);
+        Assert.Contains("handler below $E000 while MMC3 PRG mode 1 maps $C000-$DFFF through R6", exception.Message);
+    }
+
     private static bool IsBankHostile(NesNmiObservation observation) =>
-        observation.MapperBefore != observation.MapperAfter ||
-        observation.RegistersBefore != observation.RegistersAfter ||
-        observation.SwitchableWindowAccesses > 0 ||
-        observation.LowestHandlerAddress < FixedWindowStart;
+        BankHostilityReasons(observation).Length != 0;
+
+    private static void AssertNmiObservationsBankNeutral(
+        string id,
+        IEnumerable<string> held,
+        IReadOnlyList<NesNmiObservation> observations)
+    {
+        var hostile = observations
+            .Select(observation => (Observation: observation, Reasons: BankHostilityReasons(observation)))
+            .Where(hostility => hostility.Reasons.Length != 0)
+            .ToArray();
+        Assert.True(
+            hostile.Length == 0,
+            $"{id} [{string.Join(' ', held)}] took {observations.Count} NMI(s); " +
+            $"{hostile.Length} were not fixed-resident and bank-neutral:" +
+            Environment.NewLine +
+            string.Join(
+                Environment.NewLine,
+                hostile.Take(4).Select(hostility =>
+                    $"  {string.Join("; ", hostility.Reasons)}: {hostility.Observation}")));
+    }
+
+    private static string[] BankHostilityReasons(NesNmiObservation observation)
+    {
+        var reasons = new List<string>();
+        if (observation.MapperBefore != observation.MapperAfter)
+        {
+            reasons.Add("mapper state changed");
+        }
+
+        if (observation.RegistersBefore != observation.RegistersAfter)
+        {
+            reasons.Add("CPU registers changed");
+        }
+
+        if (observation.SwitchableWindowAccesses > 0)
+        {
+            reasons.Add("accessed switchable PRG window");
+        }
+
+        if (observation.LowestHandlerAddress < FixedWindowStart)
+        {
+            reasons.Add("handler executed below $C000");
+        }
+
+        if ((observation.MapperBefore.PrgBankMode1 || observation.MapperAfter.PrgBankMode1) &&
+            observation.LowestHandlerAddress < PrgMode1FixedWindowStart)
+        {
+            reasons.Add("handler below $E000 while MMC3 PRG mode 1 maps $C000-$DFFF through R6");
+        }
+
+        return [.. reasons];
+    }
+
+    private static byte[] CreatePrgModeOneNmiBelowE000Rom()
+    {
+        var rom = NesMmc3TestRomBuilder.Create();
+        NesMmc3TestRomBuilder.WritePrg(
+            rom,
+            7,
+            0xE000,
+            [
+                0xA9, 0x46,             // LDA #$40 | 6
+                0x8D, 0x00, 0x80,       // STA $8000
+                0xA9, 0x03,             // LDA #3
+                0x8D, 0x01, 0x80,       // STA $8001
+                0xA9, 0x80,             // LDA #$80
+                0x8D, 0x00, 0x20,       // STA $2000
+                0x4C, 0x0F, 0xE0,       // JMP $E00F
+            ]);
+        NesMmc3TestRomBuilder.WritePrg(rom, 3, 0xD000, [0x40]);
+        NesMmc3TestRomBuilder.WriteVector(rom, 0xFFFA, 0xD000);
+        return rom;
+    }
 
     private static bool UsesSwitchablePrg(byte[] rom) => ((rom[6] >> 4) | (rom[7] & 0xF0)) != 0;
 
