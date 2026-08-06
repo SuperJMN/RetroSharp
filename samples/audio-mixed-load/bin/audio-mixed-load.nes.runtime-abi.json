@@ -3,7 +3,7 @@
   "version": 1,
   "target": "nes",
   "abiFingerprint": "bce37d48d0e4dd9b7069600ebc6f54cf815575d2046ff600ed50ec028288cd54",
-  "romSha256": "e33f3cb4841da16221bf770d9d38ce11c5df22ea35d13cc0f5de5d464ea65b2c",
+  "romSha256": "56e9f341230a9be18672797116789c665f6f08f1f4343c8006eeb2551e7cec6d",
   "ranges": [
     {
       "id": "UserLocals",

@@ -6,8 +6,10 @@ internal static class NesPackedCameraRuntime
 
     // A streamed column restores every world row the camera can reveal, because a
     // world band that fits the four-screen height keeps a static row-to-nametable
-    // mapping and therefore never streams rows. Forty rows is the tallest band a
-    // single VBlank can publish alongside OAM DMA.
+    // mapping and therefore never streams rows. Forty rows is the tallest band the
+    // staging layout carries; whether a given band still fits VBlank once the
+    // retained-OAM publication is added is a per-program question, answered by
+    // NesFramePlan.RequireVideoSafeBudget rather than by this cap.
     internal const int MaximumColumnPayloadLength = 40;
     internal const int RowPayloadLength = 32;
 
@@ -223,7 +225,6 @@ internal static class NesPackedCameraRuntimeEmitter
     private static void EmitCommitStaticColumnBand(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
-        int bandStart,
         NesPackedColumnCommit columnCommit)
     {
         var slot1 = builder.CreateLabel("nes_packed_band_slot_1");
@@ -248,24 +249,30 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAImmediate(0x84);  // NMI enabled, PPUDATA increments vertically by 32.
         builder.StoreAAbsolute(0x2000);
 
-        var staged = 0;
-        var cursor = bandStart;
-        while (staged < columnCommit.Length)
+        // Every destination address in this commit is a compile-time constant combined with two
+        // run-time fields of the commit target: the horizontal nametable select (bit 5) and the
+        // tile/attribute column. Both are the same for every write in the commit, so they are
+        // decoded once here instead of once per row, and each address byte then costs one
+        // immediate load plus one ORA of a disjoint bit field.
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.AndImmediate(0x20);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
+        builder.AndImmediate(0x1F);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.LoadXZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
+
+        foreach (var run in columnCommit.TileRuns)
         {
-            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
-            var segment = Math.Min(
-                columnCommit.Length - staged,
-                nameTableTop + NesPackedCameraRuntime.NameTableRows - cursor);
-            EmitSetPpuTileAddressForRow(builder, cursor, $"nes_packed_band_tiles_{cursor}");
-            builder.LoadXZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
-            for (var offset = 0; offset < segment; offset++)
+            EmitSetPpuTileAddressForRow(builder, run.Row);
+            for (var offset = 0; offset < run.Rows; offset++)
             {
-                builder.LoadAAbsoluteX(checked((ushort)(slot0Start + staged + offset)));
+                builder.LoadAAbsoluteX(checked((ushort)(slot0Start + run.PayloadIndex + offset)));
                 builder.StoreAAbsolute(0x2007);
             }
-
-            staged += segment;
-            cursor = (cursor + segment) % NesPackedCameraRuntime.FourScreenRows;
         }
 
         EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
@@ -278,41 +285,33 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
         builder.ShiftRightA();
         builder.ShiftRightA();
-        builder.AndImmediate(0x0F);
-        builder.PushA();
         builder.AndImmediate(0x07);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
-        builder.PullA();
-        builder.AndImmediate(0x08);
-        builder.ShiftRightA();
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
 
         var attributeIndex = 0;
-        var covered = 0;
-        cursor = bandStart;
-        while (covered < columnCommit.Length)
+        var attributeHighByte = -1;
+        foreach (var group in columnCommit.AttributeGroups)
         {
-            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
-            var groupEnd = Math.Min(
-                nameTableTop + NesPackedCameraRuntime.NameTableRows,
-                nameTableTop + (cursor - nameTableTop) / 4 * 4 + 4);
-            builder.LoadXImmediate(checked((byte)cursor));
-            builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressHighLabel);
-            builder.ClearCarry();
-            builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-            builder.StoreAAbsolute(0x2006);
-            builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressLowLabel);
-            builder.ClearCarry();
-            builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
-            builder.StoreAAbsolute(0x2006);
-            builder.LoadXZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
-            builder.LoadAAbsoluteX(
-                checked((ushort)(slot0Start + NesPackedCameraRuntime.AttributeStagingOffset + attributeIndex)));
-            builder.StoreAAbsolute(0x2007);
+            var address = AttributeAddress(group.Row);
+            var high = address >> 8;
+            if (high != attributeHighByte)
+            {
+                // All attribute rows of one nametable share a high address byte, so it is
+                // parked in Y and restored only when the band crosses into the next nametable.
+                builder.LoadAImmediate(checked((byte)high));
+                builder.OrAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+                builder.TransferAToY();
+                attributeHighByte = high;
+            }
 
+            builder.StoreYAbsolute(0x2006);
+            builder.LoadAImmediate(checked((byte)(address & 0xFF)));
+            builder.OrAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+            builder.StoreAAbsolute(0x2006);
+            builder.LoadAAbsoluteX(
+                checked((ushort)(slot0Start + NesPackedCameraRuntime.AttributeStagingOffset + group.PayloadIndex)));
+            builder.StoreAAbsolute(0x2007);
             attributeIndex++;
-            covered += groupEnd - cursor;
-            cursor = groupEnd % NesPackedCameraRuntime.FourScreenRows;
         }
 
         builder.LoadAImmediate(checked((byte)attributeIndex));
@@ -331,34 +330,34 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Return();
     }
 
-    // Same PPUADDR pair as the camera-relative path, but the nametable row is a constant.
-    private static void EmitSetPpuTileAddressForRow(PrgBuilder builder, int row, string labelPrefix)
+    // Same PPUADDR pair as the camera-relative path, but the nametable row is a constant, so
+    // both address bytes fold to an immediate whose free bits are supplied by the already
+    // decoded nametable select and tile column.
+    private static void EmitSetPpuTileAddressForRow(PrgBuilder builder, int row)
     {
-        var leftNameTable = builder.CreateLabel($"{labelPrefix}_left_nt");
-        var highReady = builder.CreateLabel($"{labelPrefix}_high_ready");
-        builder.LoadXImmediate(checked((byte)row));
-        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressHighLabel);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
-        builder.CompareImmediate(32);
-        builder.JumpIf(0x90, leftNameTable);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-        builder.ClearCarry();
-        builder.AddImmediate(4);
-        builder.JumpAbsolute(highReady);
-        builder.Label(leftNameTable);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-        builder.Label(highReady);
+        var address = TileRowAddress(row);
+        builder.LoadAImmediate(checked((byte)(address >> 8)));
+        builder.OrAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
         builder.StoreAAbsolute(0x2006);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTarget);
-        builder.AndImmediate(0x1F);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
-        builder.LoadXImmediate(checked((byte)row));
-        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressLowLabel);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.LoadAImmediate(checked((byte)(address & 0xFF)));
+        builder.OrAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
         builder.StoreAAbsolute(0x2006);
     }
+
+    // Nametable address of the first tile of a four-screen row. The low five bits are always
+    // clear, so a tile column can be merged in with ORA; bit 2 of the high byte is always clear,
+    // so the horizontal nametable select can be merged in the same way.
+    private static int TileRowAddress(int row) =>
+        0x2000
+        + row / NesPackedCameraRuntime.NameTableRows * 0x800
+        + row % NesPackedCameraRuntime.NameTableRows * 32;
+
+    // Attribute address of the four-row group a nametable row belongs to. The low three bits are
+    // always clear, so an attribute column can be merged in with ORA.
+    private static int AttributeAddress(int row) =>
+        0x23C0
+        + row / NesPackedCameraRuntime.NameTableRows * 0x800
+        + row % NesPackedCameraRuntime.NameTableRows / 4 * 8;
 
     private static void EmitCommitCameraRelativeColumn(
         PrgBuilder builder,
@@ -545,9 +544,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(invalid);
 
         builder.Label(column);
-        if (columnCommit.FixedStart is { } bandStart)
+        if (columnCommit.FixedStart is not null)
         {
-            EmitCommitStaticColumnBand(builder, plan, bandStart, columnCommit);
+            EmitCommitStaticColumnBand(builder, plan, columnCommit);
         }
         else
         {

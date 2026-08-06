@@ -438,6 +438,8 @@ internal sealed class PrgBuilder
 
     public void TransferAToX() => Emit(0xAA);
 
+    public void TransferAToY() => Emit(0xA8);
+
     public void TransferYToA() => Emit(0x98);
 
     public void CompareXImmediate(int value) => Emit(0xE0, CheckedByte(value));

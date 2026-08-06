@@ -46,27 +46,68 @@ internal readonly record struct NesPackedColumnCommit(int? FixedStart, int Lengt
         ? PhysicalAttributeRows(start, Length)
         : (3 + Length + 3) / 4;
 
+    /// <summary>
+    /// Contiguous nametable runs of the tile payload. One run is one PPUADDR pair followed by
+    /// its unrolled <c>$2007</c> stores, so both the emitter and the video-safe budget walk this
+    /// same shape and cannot disagree about how much work the commit performs.
+    /// </summary>
+    internal IEnumerable<NesPackedColumnRun> TileRuns
+    {
+        get
+        {
+            var start = FixedStart
+                ?? throw new InvalidOperationException("Only a static column band has an emit-time tile run shape.");
+            var staged = 0;
+            var cursor = start;
+            while (staged < Length)
+            {
+                var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
+                var segment = Math.Min(
+                    Length - staged,
+                    nameTableTop + NesPackedCameraRuntime.NameTableRows - cursor);
+                yield return new NesPackedColumnRun(cursor, staged, segment);
+                staged += segment;
+                cursor = (cursor + segment) % NesPackedCameraRuntime.FourScreenRows;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attribute groups the tile payload touches, in emission order. One group is one attribute
+    /// byte.
+    /// </summary>
+    internal IEnumerable<NesPackedColumnRun> AttributeGroups
+    {
+        get
+        {
+            var start = FixedStart
+                ?? throw new InvalidOperationException("Only a static column band has an emit-time attribute shape.");
+            var index = 0;
+            var covered = 0;
+            var cursor = start;
+            while (covered < Length)
+            {
+                var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
+                var groupEnd = Math.Min(
+                    nameTableTop + NesPackedCameraRuntime.NameTableRows,
+                    nameTableTop + (cursor - nameTableTop) / 4 * 4 + 4);
+                yield return new NesPackedColumnRun(cursor, index, groupEnd - cursor);
+                index++;
+                covered += groupEnd - cursor;
+                cursor = groupEnd % NesPackedCameraRuntime.FourScreenRows;
+            }
+        }
+    }
+
     // NES nametables restart their attribute grouping every 30 tile rows, so a band that
     // crosses that boundary needs one extra partial group instead of a global row/4 split.
-    internal static int PhysicalAttributeRows(int start, int length)
-    {
-        var rows = 0;
-        var cursor = start;
-        var remaining = length;
-        while (remaining > 0)
-        {
-            var nameTableTop = cursor < NesPackedCameraRuntime.NameTableRows ? 0 : NesPackedCameraRuntime.NameTableRows;
-            var groupEnd = Math.Min(
-                nameTableTop + NesPackedCameraRuntime.NameTableRows,
-                nameTableTop + (cursor - nameTableTop) / 4 * 4 + 4);
-            rows++;
-            remaining -= groupEnd - cursor;
-            cursor = groupEnd % NesPackedCameraRuntime.FourScreenRows;
-        }
-
-        return rows;
-    }
+    internal static int PhysicalAttributeRows(int start, int length) =>
+        new NesPackedColumnCommit(start, length).AttributeGroups.Count();
 }
+
+// One emitted run of a static column band: the nametable row it targets, the payload index it
+// starts at, and how many rows it covers.
+internal readonly record struct NesPackedColumnRun(int Row, int PayloadIndex, int Rows);
 
 internal enum NesPendingCameraStream : byte
 {
@@ -316,6 +357,9 @@ internal sealed class NesPhysicalFrameScheduler
 
     internal void ConfigurePackedColumnBand(NesCameraConfig config)
     {
+        plan.RequireVideoSafeBudget(
+            config.ColumnCommit,
+            $"NES camera streamed band height {config.StreamHeight}");
         packedColumnCommit = config.ColumnCommit;
     }
 

@@ -74,15 +74,16 @@ public sealed class NesPhysicalFrameSchedulerTests
 
         scheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay);
 
-        Assert.True(IndexOfSequence(
-            builder.Build(),
-            [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA2, 0x68, 0xBD, 0x98, 0x01, 0x8D, 0x04, 0x20, 0xE8, 0xD0, 0xF7]) >= 0);
+        // Shape, not bytes: the publication resets $2003 once and then stores every retained byte
+        // to $2004 straight-line, so its reported cost is the cost of what was emitted.
+        var bytes = builder.Build();
+        var reset = IndexOfSequence(bytes, [0xA9, 0x00, 0x8D, 0x03, 0x20]);
+        Assert.True(reset >= 0, "Sequential publication must reset $2003 before streaming bytes.");
+        Assert.Equal(152, CountSequence(bytes.AsSpan(reset).ToArray(), [0x8D, 0x04, 0x20]));
+
         var report = scheduler.CreateCpuWorkReport([]);
         var publication = Assert.Single(report.Contributors);
         Assert.Equal(SdkCpuWorkContributorIds.SpritePublish, publication.Id);
-        Assert.True(
-            publication.TotalUpper <= 2_135L,
-            $"OAM publication upper cost {publication.TotalUpper} exceeded the 2,135-cycle budget.");
         Assert.True(publication.TotalLower > 0, "OAM publication should report a positive lower cost.");
         Assert.DoesNotContain(report.Contributors, contributor =>
             contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
@@ -90,8 +91,26 @@ public sealed class NesPhysicalFrameSchedulerTests
             unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
         var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
         Assert.True(
-            videoSafe.KnownUpper <= 2_135L,
-            $"Video-safe known upper cost {videoSafe.KnownUpper} exceeded the 2,135-cycle budget.");
+            videoSafe.KnownUpper <= plan.VideoSafeCycleLimit,
+            $"Video-safe known upper cost {videoSafe.KnownUpper} exceeded the " +
+            $"{plan.VideoSafeCycleLimit}-cycle window.");
+        Assert.True(
+            publication.TotalUpper <= videoSafe.KnownUpper,
+            "The publication cannot cost more than the whole video-safe window it is projected into.");
+    }
+
+    private static int CountSequence(byte[] haystack, byte[] needle)
+    {
+        var count = 0;
+        for (var index = 0; index + needle.Length <= haystack.Length; index++)
+        {
+            if (haystack.AsSpan(index, needle.Length).SequenceEqual(needle))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     [Fact]

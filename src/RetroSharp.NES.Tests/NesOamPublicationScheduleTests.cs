@@ -4,9 +4,11 @@ using Xunit;
 
 public sealed class NesOamPublicationScheduleTests
 {
+    // Upper bounds, not equalities: the publication shares one VBlank with the packed background
+    // commit, so what matters is that it stays under the share of the window left for it.
     [Theory]
-    [InlineData(76, 1_071)]
-    [InlineData(152, 2_135)]
+    [InlineData(76, 640)]
+    [InlineData(152, 1_240)]
     public void Schedule_publishes_oam_within_its_cpu_budget(
         int retainedByteCount,
         long cycleBudget)
@@ -24,6 +26,7 @@ public sealed class NesOamPublicationScheduleTests
         Assert.True(
             WritesOamData(builder.Build()),
             "schedule should write the OAM shadow into OAMDATA ($2004).");
+        Assert.Equal(schedule.CpuCycles, NesOamPublicationSchedule.CpuCyclesFor(retainedByteCount));
     }
 
     private static bool WritesOamData(byte[] bytes)

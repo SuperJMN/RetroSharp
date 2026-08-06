@@ -1,20 +1,43 @@
 namespace RetroSharp.NES;
 
+/// <summary>
+/// Sequential retained-OAM publication through <c>$2004</c>, used by profiles that do not
+/// publish page <c>$02</c> through <c>$4014</c>.
+/// </summary>
+/// <remarks>
+/// The publication shares one hardware VBlank with the packed background commit, so its cost is
+/// on the critical path of every frame. A counted loop pays five extra cycles per byte for
+/// <c>INX</c>/<c>BNE</c> plus an indexed page-crossing penalty; the straight-line form pays only
+/// the two stores. That is the difference between fitting inside VBlank and spilling the tail of
+/// the publication onto rendered scanlines for a program that also commits a full-height
+/// background column, so this path is unrolled and its cost is reported from the same shape that
+/// is emitted.
+/// </remarks>
 internal sealed class NesOamPublicationSchedule
 {
     private const ushort OamAddress = 0x2003;
     private const ushort OamData = 0x2004;
-    private readonly int startIndex;
-    private readonly ushort biasedShadowAddress;
 
-    private NesOamPublicationSchedule(int startIndex, ushort biasedShadowAddress, long cpuCycles)
+    // LDA #0 (2) + STA $2003 (4).
+    private const long ResetCpuCycles = 6;
+
+    // LDA absolute (4) + STA $2004 (4).
+    internal const long CpuCyclesPerByte = 8;
+
+    private readonly ushort shadowAddress;
+    private readonly int retainedByteCount;
+
+    private NesOamPublicationSchedule(ushort shadowAddress, int retainedByteCount, long cpuCycles)
     {
-        this.startIndex = startIndex;
-        this.biasedShadowAddress = biasedShadowAddress;
+        this.shadowAddress = shadowAddress;
+        this.retainedByteCount = retainedByteCount;
         CpuCycles = cpuCycles;
     }
 
     internal long CpuCycles { get; }
+
+    internal static long CpuCyclesFor(int retainedByteCount) =>
+        checked(retainedByteCount * CpuCyclesPerByte + ResetCpuCycles);
 
     internal static NesOamPublicationSchedule Create(ushort shadowAddress, int retainedByteCount)
     {
@@ -26,33 +49,22 @@ internal sealed class NesOamPublicationSchedule
                 "Sequential retained OAM publication requires between 1 and 256 bytes.");
         }
 
-        var startIndex = 256 - retainedByteCount;
-        var biasedShadowAddress = checked((ushort)(shadowAddress - startIndex));
-        var pageCrossingLoads = 0;
-        for (var index = startIndex; index < 256; index++)
-        {
-            var effectiveAddress = checked((ushort)(biasedShadowAddress + index));
-            if ((biasedShadowAddress & 0xFF00) != (effectiveAddress & 0xFF00))
-            {
-                pageCrossingLoads++;
-            }
-        }
-
-        var cpuCycles = checked(retainedByteCount * 13L + 7 + pageCrossingLoads);
-        return new NesOamPublicationSchedule(startIndex, biasedShadowAddress, cpuCycles);
+        _ = checked((ushort)(shadowAddress + retainedByteCount - 1));
+        return new NesOamPublicationSchedule(
+            shadowAddress,
+            retainedByteCount,
+            CpuCyclesFor(retainedByteCount));
     }
 
     internal void Emit(PrgBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        var publish = builder.CreateLabel("oam_shadow_publish");
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(OamAddress);
-        builder.LoadXImmediate(startIndex);
-        builder.Label(publish);
-        builder.LoadAAbsoluteX(biasedShadowAddress);
-        builder.StoreAAbsolute(OamData);
-        builder.IncrementX();
-        builder.BranchRelative(0xD0, publish);
+        for (var index = 0; index < retainedByteCount; index++)
+        {
+            builder.LoadAAbsolute(checked((ushort)(shadowAddress + index)));
+            builder.StoreAAbsolute(OamData);
+        }
     }
 }

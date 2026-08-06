@@ -413,6 +413,7 @@ internal sealed class NesTestCpu
             case 0xA4: LoadY(Read(Read(pc++))); cycles += 3; break;
             case 0xA5: LoadA(Read(Read(pc++))); cycles += 3; break;
             case 0xA6: LoadX(Read(Read(pc++))); cycles += 3; break;
+            case 0xA8: LoadY(a); cycles += 2; break;
             case 0xA9: LoadA(Read(pc++)); cycles += 2; break;
             case 0xAA: LoadX(a); cycles += 2; break;
             case 0xAC: LoadY(Read(ReadWordAndAdvance())); cycles += 4; break;
