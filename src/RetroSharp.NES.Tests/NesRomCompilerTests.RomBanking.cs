@@ -118,10 +118,15 @@ public partial class NesRomCompilerTests
             result.Report.UserVariables,
             variable => variable.Name == "counter.value").Address;
         var cpu = new NesTestCpu(result.Rom);
+
+        // Record the mapped R6 bank unfiltered, the way the sibling observers in
+        // NesMmc3PrgBoardTests and Cross_bank_loop_break_continue_and_nmi_preserve_gameplay_state
+        // do. Skipping non-program banks here would have made the comparison below unable to
+        // observe banked execution running with a world data bank mapped, which is exactly the
+        // reachability failure a missing R6 restore produces.
         cpu.OnStep = step =>
         {
-            if (step.ProgramCounter is >= 0x8000 and <= 0x9FFF &&
-                program.Any(segment => segment.PhysicalBank == cpu.CurrentR6Bank))
+            if (step.ProgramCounter is >= 0x8000 and <= 0x9FFF)
             {
                 visitedProgramBanks.Add(cpu.CurrentR6Bank);
             }
