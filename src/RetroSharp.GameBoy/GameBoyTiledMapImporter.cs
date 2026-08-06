@@ -26,8 +26,11 @@ internal sealed record GameBoyTiledWorldPack(
 // (parsing, tilesets, geometry, world slice, and collision flags) is produced by
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter. This stage owns only the
 // Game Boy specifics: decoding tileset images, generating and deduplicating 2bpp
-// tile patterns, expanding source tiles into 8x8 cells, and composing the
-// background under blank world cells.
+// tile patterns, and resolving each source tile to a single visual tile id. The
+// shared source-to-hardware expansion walk and background-overlay lookup live in
+// RetroSharp.Core.Sdk.Tiled.TiledCellExpansion and
+// LogicalTiledMapGeometry.BackgroundOverlayIndex; this stage supplies the
+// per-cell resolver and writes its own single-byte cells.
 internal static class GameBoyTiledMapImporter
 {
     public static GameBoyTiledWorldPack CompileWorldPack(string path, int firstGeneratedTileId = 6)
@@ -41,22 +44,17 @@ internal static class GameBoyTiledMapImporter
         var lowered = Load(path, firstGeneratedTileId);
         var metatileCells = checked(plan.MetatileWidth * plan.MetatileHeight);
         var expansions = new byte[checked(plan.VisualMetatiles.Count * metatileCells)];
-        var representatives = FindVisualRepresentatives(plan);
+        var representatives = plan.FindVisualRepresentatives();
         for (var visualId = 0; visualId < representatives.Length; visualId++)
         {
             var sourceIndex = representatives[visualId];
             var sourceX = sourceIndex % plan.SourceWidth;
             var sourceY = sourceIndex / plan.SourceWidth;
-            for (var subcellY = 0; subcellY < plan.MetatileHeight; subcellY++)
+            TiledCellExpansion.ForEachSubcell(sourceX, sourceY, plan.MetatileWidth, plan.MetatileHeight, lowered.Width, (subcellIndex, _, _, targetIndex) =>
             {
-                for (var subcellX = 0; subcellX < plan.MetatileWidth; subcellX++)
-                {
-                    var hardwareX = sourceX * plan.MetatileWidth + subcellX;
-                    var hardwareY = sourceY * plan.MetatileHeight + subcellY;
-                    var tileId = lowered.WorldTileIds[hardwareY * lowered.Width + hardwareX];
-                    expansions[visualId * metatileCells + subcellY * plan.MetatileWidth + subcellX] = checked((byte)tileId);
-                }
-            }
+                var tileId = lowered.WorldTileIds[targetIndex];
+                expansions[visualId * metatileCells + subcellIndex] = checked((byte)tileId);
+            });
         }
 
         var compiled = plan.Build(
@@ -98,26 +96,20 @@ internal static class GameBoyTiledMapImporter
                 var context = $"{displayName} world layer tile ({x}, {sourceY})";
                 var tileIds = resolver.TileIdsFromTiledGid(logical.WorldGids[sourceIndex], tileScaleX, tileScaleY, context);
 
-                for (var tileY = 0; tileY < tileScaleY; tileY++)
+                TiledCellExpansion.ForEachSubcell(x, y, tileScaleX, tileScaleY, expandedWidth, (subcellIndex, targetX, targetY, targetIndex) =>
                 {
-                    for (var tileX = 0; tileX < tileScaleX; tileX++)
+                    var tileId = tileIds[subcellIndex];
+                    if (tileId == 0 && backgroundTiles is not null)
                     {
-                        var targetX = x * tileScaleX + tileX;
-                        var targetY = y * tileScaleY + tileY;
-                        var targetIndex = targetY * expandedWidth + targetX;
-                        var tileId = tileIds[tileY * tileScaleX + tileX];
-                        if (tileId == 0 && backgroundTiles is not null)
+                        var backgroundIndex = geometry.BackgroundOverlayIndex(targetX, targetY);
+                        if (backgroundIndex >= 0)
                         {
-                            var backgroundY = geometry.ExpandedWorldY + targetY;
-                            if (backgroundY >= 0 && backgroundY < geometry.BackgroundHeight)
-                            {
-                                tileId = backgroundTiles[backgroundY * expandedWidth + targetX];
-                            }
+                            tileId = backgroundTiles[backgroundIndex];
                         }
-
-                        worldTileIds[targetIndex] = tileId;
                     }
-                }
+
+                    worldTileIds[targetIndex] = tileId;
+                });
             }
         }
 
@@ -134,26 +126,6 @@ internal static class GameBoyTiledMapImporter
             resolver.GeneratedTileData);
     }
 
-    private static int[] FindVisualRepresentatives(TiledWorldPackPlan plan)
-    {
-        var representatives = Enumerable.Repeat(-1, plan.VisualMetatiles.Count).ToArray();
-        for (var sourceIndex = 0; sourceIndex < plan.VisualIds.Count; sourceIndex++)
-        {
-            var visualId = plan.VisualIds[sourceIndex];
-            if (representatives[visualId] < 0)
-            {
-                representatives[visualId] = sourceIndex;
-            }
-        }
-
-        if (representatives.Any(index => index < 0))
-        {
-            throw new InvalidOperationException("Tiled WorldPack visual identity has no source-cell representative.");
-        }
-
-        return representatives;
-    }
-
     private static byte[] GenerateBackgroundTiles(uint[] backgroundGids, LogicalTiledMapGeometry geometry, string displayName, GameBoyTileResolver resolver)
     {
         var width = geometry.SourceWidth;
@@ -168,15 +140,10 @@ internal static class GameBoyTiledMapImporter
             {
                 var sourceIndex = y * width + x;
                 var tileIds = resolver.TileIdsFromTiledGid(backgroundGids[sourceIndex], tileScaleX, tileScaleY, $"{displayName} background layer tile ({x}, {y})");
-                for (var tileY = 0; tileY < tileScaleY; tileY++)
+                TiledCellExpansion.ForEachSubcell(x, y, tileScaleX, tileScaleY, expandedWidth, (subcellIndex, _, _, targetIndex) =>
                 {
-                    for (var tileX = 0; tileX < tileScaleX; tileX++)
-                    {
-                        var targetX = x * tileScaleX + tileX;
-                        var targetY = y * tileScaleY + tileY;
-                        tiles[targetY * expandedWidth + targetX] = (byte)tileIds[tileY * tileScaleX + tileX];
-                    }
-                }
+                    tiles[targetIndex] = (byte)tileIds[subcellIndex];
+                });
             }
         }
 

@@ -159,6 +159,29 @@ public sealed class TiledWorldPackPlan
         WorldPackRawPlanes rawPlanes) =>
         WorldPackSerializer.Build(this, targetExpansions, targetCellStride, rawPlanes);
 
+    // For each visual metatile, finds one source cell that carries that visual
+    // identity. Targets expand a visual metatile's hardware tiles from that single
+    // representative source cell rather than re-deriving them for every occurrence.
+    public int[] FindVisualRepresentatives()
+    {
+        var representatives = Enumerable.Repeat(-1, visualMetatiles.Length).ToArray();
+        for (var sourceIndex = 0; sourceIndex < visualIds.Length; sourceIndex++)
+        {
+            var visualId = visualIds[sourceIndex];
+            if (representatives[visualId] < 0)
+            {
+                representatives[visualId] = sourceIndex;
+            }
+        }
+
+        if (representatives.Any(index => index < 0))
+        {
+            throw new InvalidOperationException("Tiled WorldPack visual identity has no source-cell representative.");
+        }
+
+        return representatives;
+    }
+
     private static TiledVisualTileReference ResolveReference(LogicalTiledMap logical, uint gid, string context)
     {
         var cleanGid = LogicalTiledMapImporter.CleanTiledGid(gid, context);
