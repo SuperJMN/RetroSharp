@@ -41,7 +41,7 @@ internal static class GameBoyTiledMapImporter
         var lowered = Load(path, firstGeneratedTileId);
         var metatileCells = checked(plan.MetatileWidth * plan.MetatileHeight);
         var expansions = new byte[checked(plan.VisualMetatiles.Count * metatileCells)];
-        var representatives = FindVisualRepresentatives(plan);
+        var representatives = plan.FindVisualRepresentatives();
         for (var visualId = 0; visualId < representatives.Length; visualId++)
         {
             var sourceIndex = representatives[visualId];
@@ -132,26 +132,6 @@ internal static class GameBoyTiledMapImporter
             worldTileIds,
             logical.WorldFlags,
             resolver.GeneratedTileData);
-    }
-
-    private static int[] FindVisualRepresentatives(TiledWorldPackPlan plan)
-    {
-        var representatives = Enumerable.Repeat(-1, plan.VisualMetatiles.Count).ToArray();
-        for (var sourceIndex = 0; sourceIndex < plan.VisualIds.Count; sourceIndex++)
-        {
-            var visualId = plan.VisualIds[sourceIndex];
-            if (representatives[visualId] < 0)
-            {
-                representatives[visualId] = sourceIndex;
-            }
-        }
-
-        if (representatives.Any(index => index < 0))
-        {
-            throw new InvalidOperationException("Tiled WorldPack visual identity has no source-cell representative.");
-        }
-
-        return representatives;
     }
 
     private static byte[] GenerateBackgroundTiles(uint[] backgroundGids, LogicalTiledMapGeometry geometry, string displayName, GameBoyTileResolver resolver)
