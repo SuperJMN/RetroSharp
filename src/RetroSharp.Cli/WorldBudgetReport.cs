@@ -214,7 +214,7 @@ public static class WorldBudgetReportFactory
         };
     }
 
-    private static WorldBudgetReport FromGameBoy(RetroSharp.GameBoy.GameBoyWorldPackInspection inspection)
+    private static WorldBudgetReport FromGameBoy(WorldPackInspection inspection)
     {
         const int stagingLimit = 554;
         const int physicalRamCapacity = 8 * 1024;
@@ -253,7 +253,7 @@ public static class WorldBudgetReportFactory
             ["gb-rom-only-current", "gb-simple-mbc1-current"]);
     }
 
-    private static WorldBudgetReport FromNes(RetroSharp.NES.NesWorldPackInspection inspection)
+    private static WorldBudgetReport FromNes(WorldPackInspection inspection)
     {
         var stagingLimit = RetroSharp.NES.NesPackedCameraBudget.MaximumStagingBytes;
         const int physicalRamCapacity = 2 * 1024;
