@@ -48,7 +48,7 @@ internal sealed record GameBoyWorldPackRuntimePlan(
         }
 
         var visualSlotCount = descriptor.VisualIdBytes == 1
-            ? enableDiagonalVisualCache ? 6 : enablePackedCameraCache ? 3 : 2
+            ? enableDiagonalVisualCache ? GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheSlotCount : enablePackedCameraCache ? 3 : 2
             : 2;
         var supportsCollisionMemoTable = SupportsCollisionMemoTable(descriptor);
         var layout = GameBoyWorldPackRuntimeLayout.Create(
@@ -1786,7 +1786,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(ready);
     }
 
-    private static ushort VisualCacheValidAddress(int slot) => slot switch
+    // VisualCacheValid/ChunkLow/ChunkHigh cannot adopt the Start + slot pattern: their per-slot
+    // addresses are not contiguous in GameBoyRuntimeMemoryLayout.PackedCamera. Slot 0 and slot 1
+    // are separated by unrelated per-tick state (PendingVisualChunkLow/High, VisualSelectedSlot),
+    // and slot 1 is separated from slots 2-5 by ~29 bytes of unrelated audio/LY/edge/diagonal
+    // scheduling state (VisualReplacementNext .. DiagonalRowPrefetchLatch). Only slots 2-5 among
+    // themselves are contiguous. Making these three tables Start + slot would require relocating
+    // that unrelated state within a byte-exact, fully packed WRAM region, which is a much larger
+    // and riskier change than this issue's scope; they are intentionally left as explicit tables.
+    internal static ushort VisualCacheValidAddress(int slot) => slot switch
     {
         0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheValid,
         1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1Valid,
@@ -1797,7 +1805,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
-    private static ushort VisualCacheChunkLowAddress(int slot) => slot switch
+    internal static ushort VisualCacheChunkLowAddress(int slot) => slot switch
     {
         0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheChunkLow,
         1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1ChunkLow,
@@ -1808,7 +1816,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
-    private static ushort VisualCacheChunkHighAddress(int slot) => slot switch
+    internal static ushort VisualCacheChunkHighAddress(int slot) => slot switch
     {
         0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheChunkHigh,
         1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1ChunkHigh,
@@ -1819,16 +1827,19 @@ internal static class GameBoyWorldPackRuntimeEmitter
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
-    private static ushort VisualCacheAgeAddress(int slot) => slot switch
+    // Unlike the three tables above, VisualCache0Age..VisualCache5Age are laid out contiguously
+    // (0xC1BF..0xC1C4), so this table follows the Start + slot pattern already used below for the
+    // row/column groups. VisualCacheSlotCount is the single, queryable slot-count constant; an
+    // out-of-range slot still throws instead of silently computing a stray address.
+    internal static ushort VisualCacheAgeAddress(int slot)
     {
-        0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache0Age,
-        1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1Age,
-        2 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache2Age,
-        3 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache3Age,
-        4 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache4Age,
-        5 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache5Age,
-        _ => throw new ArgumentOutOfRangeException(nameof(slot)),
-    };
+        if (slot < 0 || slot >= GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheSlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        return checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache0Age + slot));
+    }
 
     private static ushort VisualCacheRowGroupLowAddress(int slot) =>
         checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheRowGroupLowStart + slot));
@@ -3983,7 +3994,7 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
     {
         ValidateIdBytes(visualIdBytes, nameof(visualIdBytes));
         ValidateIdBytes(collisionIdBytes, nameof(collisionIdBytes));
-        if (visualSlotCount is < 2 or > 6)
+        if (visualSlotCount < 2 || visualSlotCount > GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheSlotCount)
         {
             throw new ArgumentOutOfRangeException(nameof(visualSlotCount));
         }

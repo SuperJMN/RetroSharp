@@ -2,7 +2,7 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "5783b326dce45aead1c45acca607d4aed741efe7fd7ded6c1ca205d60d803861",
+  "abiFingerprint": "581b5b17bc08f59dcbb7d93522ab69d5734d766c84791ea82bb54f90f911ba2f",
   "romSha256": "fc580b56a9059988560f33f77f42e6294778e990400ba8247b66829163e4e74a",
   "ranges": [
     {
@@ -1771,6 +1771,10 @@
     {
       "name": "packed camera.RowPayloadLength",
       "value": 32
+    },
+    {
+      "name": "packed camera.SlotCount",
+      "value": 2
     },
     {
       "name": "packed camera.SlotMetadataBytes",

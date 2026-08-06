@@ -4,6 +4,12 @@ internal static class NesPackedCameraRuntime
 {
     internal const int SlotMetadataBytes = 16;
 
+    // The number of packed-camera prepare/commit slots. Slot0 and Slot1 in
+    // NesRuntimeMemoryLayout.PackedCamera are laid out contiguously with a SlotMetadataBytes
+    // stride (Slot1 == Slot0 + SlotMetadataBytes), so SlotMetadata below follows the Start + slot
+    // pattern. This is the single, queryable slot-count constant.
+    internal const int SlotCount = 2;
+
     // A streamed column restores every world row the camera can reveal, because a
     // world band that fits the four-screen height keeps a static row-to-nametable
     // mapping and therefore never streams rows. Forty rows is the tallest band the
@@ -79,12 +85,15 @@ internal static class NesPackedCameraRuntime
         return (payloadLength + slice - 1) / slice;
     }
 
-    internal static ushort SlotMetadata(int slot) => slot switch
+    internal static ushort SlotMetadata(int slot)
     {
-        0 => NesRuntimeMemoryLayout.PackedCamera.Slot0,
-        1 => NesRuntimeMemoryLayout.PackedCamera.Slot1,
-        _ => throw new ArgumentOutOfRangeException(nameof(slot)),
-    };
+        if (slot < 0 || slot >= SlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        return checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + (slot * SlotMetadataBytes)));
+    }
 }
 
 internal static class NesPackedCameraRuntimeEmitter

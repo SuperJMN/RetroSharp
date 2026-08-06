@@ -4,6 +4,12 @@ internal static class GameBoyPackedCameraRuntime
 {
     internal const int SlotMetadataBytes = 10;
 
+    // The number of packed-camera prepare/commit slots. Slot0 and Slot1 in
+    // GameBoyRuntimeMemoryLayout.PackedCamera are laid out contiguously with a SlotMetadataBytes
+    // stride (Slot1 == Slot0 + SlotMetadataBytes), so SlotMetadata below follows the Start + slot
+    // pattern. This is the single, queryable slot-count constant.
+    internal const int SlotCount = 2;
+
     internal const int StateOffset = 0;
     internal const int AxisOffset = 1;
     internal const int DirectionOffset = 2;
@@ -28,12 +34,15 @@ internal static class GameBoyPackedCameraRuntime
     internal const byte Positive = 2;
     internal const byte NoSlot = 0xFF;
 
-    internal static ushort SlotMetadata(int slot) => slot switch
+    internal static ushort SlotMetadata(int slot)
     {
-        0 => GameBoyRuntimeMemoryLayout.PackedCamera.Slot0,
-        1 => GameBoyRuntimeMemoryLayout.PackedCamera.Slot1,
-        _ => throw new ArgumentOutOfRangeException(nameof(slot)),
-    };
+        if (slot < 0 || slot >= SlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        return checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.Slot0 + (slot * SlotMetadataBytes)));
+    }
 }
 
 internal static class GameBoyPackedCameraRuntimeEmitter

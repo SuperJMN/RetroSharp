@@ -257,6 +257,12 @@ internal static class GameBoyRuntimeMemoryLayout
         internal const ushort LastCommittedAxis = 0xC18A;
         internal const ushort LastCommittedDirection = 0xC18B;
         internal const ushort CommitSucceeded = 0xC18C;
+        // The maximum number of packed-camera visual cache slots. Slot 0 and slot 1 sit next to
+        // unrelated per-tick state (VisualSelectedSlot, audio/LY bookkeeping), and slots 2-5 sit
+        // after the diagonal scheduling block; only VisualCache0Age..VisualCache5Age below are
+        // laid out contiguously. This is the single place the slot count is defined; do not repeat
+        // the literal 6 elsewhere.
+        internal const int VisualCacheSlotCount = 6;
         internal const ushort VisualCacheValid = 0xC18D;
         internal const ushort VisualCacheChunkLow = 0xC18E;
         internal const ushort VisualCacheChunkHigh = 0xC18F;
