@@ -15,7 +15,7 @@
 - [README.md](README.md): project overview and examples.
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/Glossary.md](docs/Glossary.md): domain glossary of execution and frame-planning terms (certification gate, implementation slice, physical frame plan/scheduler, functional observation engine).
-- [docs/ArchitectureOverview.md](docs/ArchitectureOverview.md): active layer model, capability model, SDK operation model, golden rule, and agent task contract.
+- [docs/ArchitectureOverview.md](docs/ArchitectureOverview.md): active layer model, capability model, SDK operation model, golden rule, where language validation lives, and agent task contract.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): roadmap iterations and the AR-x.y implementation backlog consumed by the issue-seeding script.
 - [docs/history/LargeWorldsRoadmap.md](docs/history/LargeWorldsRoadmap.md): completed execution history for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
 - [docs/history/GeneratedCodePerformanceRoadmap.md](docs/history/GeneratedCodePerformanceRoadmap.md): completed execution history for Actor Framework code-generation cliffs, target CPU-work reporting, and joint GB/NES cadence.
@@ -67,6 +67,7 @@ PYTHONPATH=/tmp/retrosharp-pyboy-site python3 tools/gameboy/runner_diagnostics.p
 ## Key Concepts
 - Keep language, portable 2D SDK, and target intrinsics separate.
 - Portable SDK calls must be checked against target capabilities before lowering.
+- There is no separate semantic-analysis project. `RetroSharp.SemanticAnalysis` was dead code removed in #543; real validation lives across the parser (syntax and local semantics), portable SDK capability checks, and target lowering — see `docs/ArchitectureOverview.md` ("Where Validation Lives").
 - The actor framework is source-to-source sugar over fixed `Actor` arrays, generated tables/helpers, direct branches, and existing SDK calls; it does not add actor-specific `Sdk2DOperation` cases.
 - Game Boy runner behavior is important acceptance evidence, but target-acceptance samples are not automatically portable SDK evidence.
 - High-level syntax must remain zero-cost: no heap, GC, RTTI, boxing, closures, delegates, or virtual dispatch.

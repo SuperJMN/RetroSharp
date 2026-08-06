@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: current navigation and execution context.
-Last updated: 2026-08-03.
+Last updated: 2026-08-06.
 
 Read this after `AGENTS.md`. It is deliberately short and current. Historical
 issue closeouts, commit hashes, ROM hashes, and one-off acceptance measurements
@@ -65,6 +65,7 @@ instead of keeping a second copy. Load only the one route that owns the task.
 | Question | Open next |
 | --- | --- |
 | What layer owns a new concept? | `ArchitectureOverview.md` |
+| Where does program validation (syntax, SDK capability, target/CLI errors) live, and why is there no semantic-analysis project? | `ArchitectureOverview.md` ("Where Validation Lives") |
 | Where are roadmap iterations and the AR-x.y backlog? | `ArchitectureRoadmap.md` |
 | What is the current language syntax subset? | `RetroSharp.Language.md` |
 | What does portable 2D expose? | `Portable2DSdkV1.md` |
@@ -192,6 +193,7 @@ Classify a regression by its primary observable:
 
 | Trap | Correct action |
 | --- | --- |
+| Assuming a missing semantic-analysis project is a gap to fill | It was removed as dead code in #543; real validation lives across the parser, portable SDK, and target lowering — see `ArchitectureOverview.md` ("Where Validation Lives") before adding a check or a new analysis project |
 | Asking CodeGraph to interpret prose | Query a concrete symbol, file path, or short literal; verify candidates in source and tests |
 | Assuming `RetroSharp.Cli --help` exists | Read `src/RetroSharp.Cli/Program.cs` or `README.md`; unknown options fail |
 | Running several `dotnet` builds/tests in one checkout | Serialize them and use `-m:1`; shared build outputs can race |
