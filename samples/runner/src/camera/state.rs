@@ -6,6 +6,7 @@ class CameraState
     Pixel x;
     Pixel y;
     bool moving;
+    bool blocked;
     u8 speed;
     u8 direction;
     u8 movementRemainder;
@@ -13,6 +14,7 @@ class CameraState
     inline void ResetMotion()
     {
         moving = false;
+        blocked = false;
         speed = 0;
         direction = Direction.None;
         movementRemainder = 0;
@@ -20,9 +22,12 @@ class CameraState
 
     // A blocked pixel step only cancels the sub-pixel budget the tick had left. Wiping the
     // speed meter and the intended direction here is what made a jump that clears an
-    // obstacle crawl forward at a fraction of a pixel per tick.
+    // obstacle crawl forward at a fraction of a pixel per tick. The block is recorded
+    // instead, and it stays recorded until a pixel actually moves or the player asks for a
+    // different direction, so holding into a wall can never feed the speed meter.
     inline void BlockMotionStep()
     {
+        blocked = true;
         movementRemainder = 0;
     }
 
@@ -60,9 +65,28 @@ class CameraState
     // which reads as a stepped, abrupt horizontal scroll while the camera also moves
     // vertically. Only the run-to-walk decay stays grounded, so releasing the run button in
     // mid-air still keeps the momentum the player already earned.
+    // Pressing into a wall covers no ground, so it must not feed the speed meter at all:
+    // otherwise the meter charges to RunMax against the obstacle and launches the player the
+    // moment it ends. On the ground the wall bleeds the meter down to a standstill; in the
+    // air it is only held, so a jump whose probe scrapes an obstacle on the way up still
+    // clears it carrying the momentum it arrived with.
     inline void Accelerate(bool grounded)
     {
-        if (Input.IsDown(Button.B))
+        if (blocked)
+        {
+            if (grounded)
+            {
+                if (speed <= MotionSpeed.Friction)
+                {
+                    speed = 0;
+                }
+                else
+                {
+                    speed -= MotionSpeed.Friction;
+                }
+            }
+        }
+        else if (Input.IsDown(Button.B))
         {
             if (speed < MotionSpeed.RunMax)
             {
@@ -114,6 +138,14 @@ class CameraState
 
     inline void UpdateIntent(u8 desiredDirection, bool grounded)
     {
+        // The block only describes the direction that hit the wall. Releasing or turning
+        // away drops it immediately, so a player pinned at a standstill can always walk
+        // back out instead of being held by a stale flag.
+        if (desiredDirection != direction)
+        {
+            blocked = false;
+        }
+
         if (desiredDirection == Direction.None)
         {
             if (grounded)
@@ -165,6 +197,7 @@ class CameraState
         if (Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0)
         {
             moving = true;
+            blocked = false;
             player.x += 1;
             if (screenX >= DeadZone.Right)
             {
@@ -184,6 +217,7 @@ class CameraState
         if (Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0)
         {
             moving = true;
+            blocked = false;
             player.x -= 1;
             if (screenX <= DeadZone.Left)
             {

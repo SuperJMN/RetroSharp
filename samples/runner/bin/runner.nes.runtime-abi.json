@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "980b813d8b85cf1012d033ae980cce494a53b70116b54ddbff1c62d0fac94aa3",
-  "romSha256": "08b6dca667ab37c00b56049c65aadabd94e9ea9e376f14803d0db7d0aa2e001e",
+  "abiFingerprint": "5783b326dce45aead1c45acca607d4aed741efe7fd7ded6c1ca205d60d803861",
+  "romSha256": "fc580b56a9059988560f33f77f42e6294778e990400ba8247b66829163e4e74a",
   "ranges": [
     {
       "id": "UserLocals",
@@ -2023,231 +2023,237 @@
       "size": 1
     },
     {
-      "name": "view.speed",
-      "type": "u8",
+      "name": "view.blocked",
+      "type": "bool",
       "address": 34,
       "size": 1
     },
     {
-      "name": "view.direction",
+      "name": "view.speed",
       "type": "u8",
       "address": 35,
       "size": 1
     },
     {
-      "name": "view.movementRemainder",
+      "name": "view.direction",
       "type": "u8",
       "address": 36,
       "size": 1
     },
     {
-      "name": "frame.respawnPhase",
+      "name": "view.movementRemainder",
       "type": "u8",
       "address": 37,
       "size": 1
     },
     {
+      "name": "frame.respawnPhase",
+      "type": "u8",
+      "address": 38,
+      "size": 1
+    },
+    {
       "name": "goombaAdvance",
       "type": "bool",
-      "address": 38,
+      "address": 39,
       "size": 1
     },
     {
       "name": "playerScreenX",
       "type": "u8",
-      "address": 39,
+      "address": 40,
       "size": 1
     },
     {
       "name": "playerScreenY",
       "type": "u8",
-      "address": 40,
+      "address": 41,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_camera_x_lo",
       "type": "u8",
-      "address": 41,
+      "address": 42,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_camera_x_hi",
       "type": "u8",
-      "address": 42,
+      "address": 43,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_camera_y_lo",
       "type": "u8",
-      "address": 43,
+      "address": 44,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_camera_y_hi",
       "type": "u8",
-      "address": 44,
+      "address": 45,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_screen_x",
       "type": "u8",
-      "address": 45,
+      "address": 46,
       "size": 1
     },
     {
       "name": "__enemies_draw_player_screen_y",
       "type": "u8",
-      "address": 46,
+      "address": 47,
       "size": 1
     },
     {
       "name": "__enemies_draw_frame_Goomba",
       "type": "u8",
-      "address": 47,
+      "address": 48,
       "size": 1
     },
     {
       "name": "__enemies_draw_x_Goomba",
       "type": "u8",
-      "address": 48,
+      "address": 49,
       "size": 1
     },
     {
       "name": "__enemies_draw_y_Goomba",
       "type": "u8",
-      "address": 49,
+      "address": 50,
       "size": 1
     },
     {
       "name": "__retrosharp_inline_19_spawnY",
       "type": "i16",
-      "address": 50,
+      "address": 51,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_18_previousFootWorldY",
       "type": "i16",
-      "address": 52,
+      "address": 53,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_21_verticalMotion",
       "type": "i16",
-      "address": 54,
+      "address": 55,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_18_footWorldY",
       "type": "i16",
-      "address": 56,
+      "address": 57,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_18_screenX",
       "type": "i16",
-      "address": 58,
+      "address": 59,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_22_footTile",
       "type": "i16",
-      "address": 60,
+      "address": 61,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_24_headProbeY",
       "type": "i16",
-      "address": 62,
+      "address": 63,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_26_screenY",
       "type": "i16",
-      "address": 64,
+      "address": 65,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_26_maxScrollY",
       "type": "i16",
-      "address": 66,
+      "address": 67,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_18_movementFootWorldY",
       "type": "i16",
-      "address": 68,
+      "address": 69,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_30_wallProbeY",
       "type": "i16",
-      "address": 70,
+      "address": 71,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_30_desiredDirection",
       "type": "u8",
-      "address": 72,
+      "address": 73,
       "size": 1
     },
     {
       "name": "__retrosharp_inline_36_collisionCameraX",
       "type": "i16",
-      "address": 73,
+      "address": 74,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_36_steps",
       "type": "u8",
-      "address": 75,
+      "address": 76,
       "size": 1
     },
     {
       "name": "__retrosharp_inline_38_screenX",
       "type": "i16",
-      "address": 76,
+      "address": 77,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_38_rightProbeX",
       "type": "i16",
-      "address": 78,
+      "address": 79,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_40_screenX",
       "type": "i16",
-      "address": 80,
+      "address": 81,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_40_leftProbeX",
       "type": "i16",
-      "address": 82,
+      "address": 83,
       "size": 2
     },
     {
       "name": "__enemies_spawn_0_call0_camera_x_lo",
       "type": "u8",
-      "address": 84,
+      "address": 85,
       "size": 1
     },
     {
       "name": "__enemies_spawn_0_call0_camera_x_hi",
       "type": "u8",
-      "address": 85,
+      "address": 86,
       "size": 1
     },
     {
       "name": "__enemies_spawn_0_call0_recycle_screen_x",
       "type": "u8",
-      "address": 86,
+      "address": 87,
       "size": 1
     },
     {
       "name": "__enemies_spawn_0_call0_spawn_screen_x",
       "type": "u8",
-      "address": 87,
+      "address": 88,
       "size": 1
     }
   ]
