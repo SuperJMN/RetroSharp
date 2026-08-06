@@ -46,7 +46,7 @@ internal static class ArchitecturePhysicalAssertions
         $@"\b(?:class|record(?:\s+class|\s+struct)?|struct|interface|enum)\s+{Regex.Escape(owner.Name)}\b",
         RegexOptions.CultureInvariant);
 
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
