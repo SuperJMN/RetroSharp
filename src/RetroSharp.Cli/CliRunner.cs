@@ -15,7 +15,7 @@ public static class CliRunner
 
         void PrintError(string s) => stderr.WriteLine(s);
 
-        static (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) ParseCommandLine(string[] args)
+        static (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport, bool CapacityReport) ParseCommandLine(string[] args)
         {
             string? inputPath = null;
             string? outputPath = null;
@@ -25,6 +25,7 @@ public static class CliRunner
             var libraryPaths = new List<string>();
             var plugins = new List<string>();
             var worldBudgetReport = false;
+            var capacityReport = false;
 
             for (var i = 0; i < args.Length; i++)
             {
@@ -58,6 +59,9 @@ public static class CliRunner
                     case "--world-budget-report":
                         worldBudgetReport = true;
                         break;
+                    case "--capacity-report":
+                        capacityReport = true;
+                        break;
                     default:
                         if (args[i].StartsWith("-", StringComparison.Ordinal))
                         {
@@ -69,7 +73,7 @@ public static class CliRunner
                 }
             }
 
-            return (inputPath, outputPath, runtimeAbiOutputPath, symbolsOutputPath, target, libraryPaths, plugins, worldBudgetReport);
+            return (inputPath, outputPath, runtimeAbiOutputPath, symbolsOutputPath, target, libraryPaths, plugins, worldBudgetReport, capacityReport);
         }
 
         static RetroSharp.Core.Sdk.SdkPluginRegistry ResolveSdkPluginRegistry(IReadOnlyList<string> pluginIds)
@@ -101,7 +105,7 @@ public static class CliRunner
                 : RetroSharp.Sdk.SdkLibraryRegistry.FromDirectories(libraryPaths);
         }
 
-        static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport, bool CapacityReport) options)
         {
             if (options.InputPath is null)
             {
@@ -113,7 +117,7 @@ public static class CliRunner
                 : [ResolveSourceBuildInput(options)];
         }
 
-        static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport, bool CapacityReport) options)
         {
             var inputPath = options.InputPath ?? throw new ArgumentException("No source file has been specified");
             var fullPath = Path.GetFullPath(inputPath);
@@ -129,10 +133,11 @@ public static class CliRunner
                 options.LibraryPaths,
                 [],
                 inputPath,
-                options.Plugins);
+                options.Plugins,
+                options.CapacityReport);
         }
 
-        static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
+        static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport, bool CapacityReport) options)
         {
             var projectPath = Path.GetFullPath(options.InputPath ?? throw new ArgumentException("No project file has been specified"));
             var projectDirectory = Path.GetDirectoryName(projectPath)
@@ -172,6 +177,10 @@ public static class CliRunner
             {
                 throw new InvalidOperationException("--symbols-out can only be used with a single target.");
             }
+            if (options.CapacityReport && targets.Length > 1)
+            {
+                throw new InvalidOperationException("--capacity-report can only be used with a single target.");
+            }
 
             return targets
                 .Select(target => new RetroSharpBuildInput(
@@ -184,7 +193,8 @@ public static class CliRunner
                     libraryPaths,
                     libraries,
                     projectPath,
-                    plugins))
+                    plugins,
+                    options.CapacityReport))
                 .ToArray();
         }
 
@@ -204,7 +214,7 @@ public static class CliRunner
         }
 
         static string[] ResolveProjectTargets(
-            (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options,
+            (string? InputPath, string? OutputPath, string? RuntimeAbiOutputPath, string? SymbolsOutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport, bool CapacityReport) options,
             RetroSharpProjectManifest manifest)
         {
             if (!string.IsNullOrWhiteSpace(options.Target))
@@ -567,6 +577,12 @@ public static class CliRunner
                 return 1;
             }
 
+            if (buildInput.CapacityReport && buildInput.Target != "nes")
+            {
+                PrintError("--capacity-report is only supported for target nes.");
+                return 1;
+            }
+
             if (buildInput.Target == "nes")
             {
                 try
@@ -594,6 +610,15 @@ public static class CliRunner
                             buildInput.SymbolsOutputPath,
                             RetroSharp.NES.NesSymbolFileProjection.Serialize(result));
                         stderr.WriteLine($"Wrote NES symbols: {buildInput.SymbolsOutputPath}");
+                    }
+                    if (buildInput.CapacityReport)
+                    {
+                        var capacity = RetroSharp.NES.NesCapacityReportProjection.Create(result);
+                        stdout.WriteLine(RetroSharp.NES.NesCapacityReportProjection.Serialize(capacity));
+                        foreach (var warning in capacity.Warnings)
+                        {
+                            stderr.WriteLine($"warning: {warning.Message}");
+                        }
                     }
                     return 0;
                 }
@@ -657,6 +682,10 @@ public static class CliRunner
                 {
                     throw new ArgumentException("--world-budget-report writes JSON to stdout and cannot be combined with --out.");
                 }
+                if (options.CapacityReport)
+                {
+                    throw new ArgumentException("--world-budget-report inspects a world without building and cannot be combined with --capacity-report.");
+                }
 
                 var target = options.Target?.ToLowerInvariant()
                     ?? throw new ArgumentException("--world-budget-report requires --target gb or --target nes.");
@@ -708,7 +737,8 @@ file sealed record RetroSharpBuildInput(
     IReadOnlyList<string> LibraryPaths,
     IReadOnlyList<string> LibraryImports,
     string PrimaryPath,
-    IReadOnlyList<string> Plugins);
+    IReadOnlyList<string> Plugins,
+    bool CapacityReport);
 
 file sealed record RetroSharpProjectManifest
 {

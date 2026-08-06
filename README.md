@@ -297,6 +297,50 @@ NES keeps `nes-mapper-0-current` separate from the accepted but unimplemented
 `cartridge.romPrgBytesUsed` is measured content; `allocatedRomBytes` stays
 `null`, so a padded output ROM length is never misreported as bytes used.
 
+See how full an NES cartridge already is, and where the next change will land,
+by adding `--capacity-report` to a normal NES build:
+
+```bash
+dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target nes \
+  --capacity-report \
+  --out samples/runner/bin/runner.nes \
+  samples/runner/runner.retrosharp.json
+```
+
+The option requires `--target nes`, a single target, and cannot be combined with
+`--world-budget-report`, which inspects a world without building. It writes one
+`retrosharp.nes-capacity/v1` JSON object to stdout and does not change a single
+emitted byte: the ROM is identical with and without it.
+
+The report names the selected profile and PRG/CHR size; the fixed PRG region's
+used bytes, remaining headroom and capacity; the banked program's phase-to-bank
+map with per-bank occupancy and remaining R6 headroom; the bytes attributed to
+fixed veneers, pinned R7, boot R7 and resident CHR; the top user-function
+duplication holders; and per-frame CPU work for each named window.
+`fixedRegion.headroomBytes` and `bankedProgram.region.headroomBytes` are the two
+headline numbers: how much room is left, and where. Region capacity is used plus
+headroom as the build measured it, not a re-derived board constant, and
+`bankedProgram` is `null` for a program that is entirely fixed-resident. Shared
+SDK subroutines and outlined user functions are counted with their call sites
+rather than sized, because the build measures no byte total for either.
+
+Two figures are deliberately labelled rather than trusted. `duplication` is a
+lower bound: pure functions the compiler answered from a generated ROM table
+never reach the user-function path, so it is not total recoverable headroom.
+`callsPerFrame` is static: it is not path sensitive and does not multiply loop
+iterations, so it is a lower bound where `repeatsPerFrame` is set and an upper
+bound over mutually exclusive branches otherwise. `cpuWork` is an observation
+per named window — `frame` is the whole NTSC frame, `video-safe` is the VBlank
+window — and its known cycles cover only calibrated contributors, so an
+`incomplete` status means the real cost is higher than the figure shown and is
+not the video-safe cost the frame plan enforces at build time.
+
+When fixed or R6 headroom falls below five per cent of its region, the report
+adds a `near-cliff` warning and the CLI repeats it on stderr. That is a warning,
+never a gate: spilling into R6 and escalating the board are designed behaviours,
+so the build still succeeds and nothing here can fail it.
+
 Project paths are resolved relative to the JSON file. `--target`, `--out`, and
 additional `--lib-path` options still work as command-line overrides. Use
 project `sources` for code that belongs to the game itself; use

@@ -37,8 +37,16 @@ internal sealed record NesProgramPhaseBankPlacement(
     int Bytes);
 
 /// <summary>
+/// One R6 program bank and the bytes the link placed in it. <see cref="UsedBytes"/> is the size the
+/// linker gave that bank's emitted buffer, so it includes the bank-edge fallthrough jump on every
+/// bank but the program's last one.
+/// </summary>
+internal sealed record NesProgramBankOccupancy(int PhysicalBank, int UsedBytes, int CapacityBytes);
+
+/// <summary>
 /// Phase-to-bank assignment evidence for a banked link: where every phase landed, which physical
-/// bank owns the hot frame phase, how much R6 remains, and how many bytes placement duplicated.
+/// bank owns the hot frame phase, how full each R6 program bank is, how much R6 remains, and how
+/// many bytes placement duplicated.
 /// </summary>
 internal sealed record NesProgramBankPlacementReport(
     IReadOnlyList<NesProgramPhaseBankPlacement> Phases,
@@ -46,7 +54,8 @@ internal sealed record NesProgramBankPlacementReport(
     string? HotPhaseUnitName,
     int HotPhaseBytes,
     int ProgramR6HeadroomBytes,
-    int DuplicatedSharedBytes);
+    int DuplicatedSharedBytes,
+    IReadOnlyList<NesProgramBankOccupancy> Banks);
 
 internal sealed class NesProgramBankCapacityException(
     int programBytes,
@@ -321,7 +330,13 @@ internal static class NesPrgLinker
             plan.HotUnitName,
             plan.HotUnitBytes,
             checked((layout.ProgramBanks.Count * ProgramBankSize) - linkedProgramBytes),
-            plan.DuplicatedSharedBytes);
+            plan.DuplicatedSharedBytes,
+            layout.ProgramBanks
+                .Select((bank, index) => new NesProgramBankOccupancy(
+                    bank.PhysicalBank,
+                    index < plan.UsedBytesByBank.Count ? plan.UsedBytesByBank[index] : 0,
+                    ProgramBankSize))
+                .ToArray());
 
     private static void ValidateProgramAtoms(NesPrgPlacementUnitEmission unit)
     {
