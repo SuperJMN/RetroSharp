@@ -31,14 +31,20 @@ internal readonly record struct NesCpuStep(ushort ProgramCounter, long Cycle, by
 
 /// <summary>
 /// The MMC3 state an interrupted mainline depends on: the two switchable PRG bank selections and
-/// the write-only bank-select latch. The latch matters on its own because
+/// the write-only bank-select value. The selected register matters on its own because
 /// <c>mmc3_select_r6</c> arms it with <c>STA $8000</c> before completing the switch with
 /// <c>STA $8001</c>, so an interrupt taken between those two stores can corrupt the switch without
-/// ever changing a bank number.
+/// ever changing a bank number. The PRG mode bit matters because it decides whether R6 is mapped at
+/// <c>$8000-$9FFF</c> or <c>$C000-$DFFF</c>.
 /// </summary>
-internal readonly record struct NesMapperState(byte R6Bank, byte R7Bank, byte BankLatch)
+internal readonly record struct NesMapperState(byte R6Bank, byte R7Bank, byte BankSelect)
 {
-    public override string ToString() => $"R6={R6Bank} R7={R7Bank} latch={BankLatch}";
+    public byte BankLatch => (byte)(BankSelect & 0x07);
+
+    public bool PrgBankMode1 => (BankSelect & 0x40) != 0;
+
+    public override string ToString() =>
+        $"R6={R6Bank} R7={R7Bank} select=${BankSelect:X2} latch={BankLatch} prgMode={(PrgBankMode1 ? 1 : 0)}";
 }
 
 internal readonly record struct NesCpuRegisters(byte A, byte X, byte Y)
@@ -49,8 +55,8 @@ internal readonly record struct NesCpuRegisters(byte A, byte X, byte Y)
 /// <summary>
 /// One taken NMI, recorded so a guard can judge whether the handler was fixed-resident and left
 /// the interrupted mainline undisturbed. <see cref="SwitchableWindowAccesses"/> counts every read
-/// or write the handler made through <c>$8000-$BFFF</c>, which includes its own instruction fetches
-/// when the handler body is not fixed-resident.
+/// or write the handler made through the active MMC3 switchable PRG windows, which includes its own
+/// instruction fetches when the handler body is not fixed-resident.
 /// </summary>
 internal readonly record struct NesNmiObservation(
     long Cycle,
@@ -143,6 +149,8 @@ internal sealed class NesTestCpu
 
     public List<int> R7BankWrites { get; } = [];
 
+    public List<int> BankSelectWrites { get; } = [];
+
     public List<NesRoutineResult> NestedReadResults { get; } = [];
 
     public List<NesPpuWrite> PpuWrites { get; } = [];
@@ -181,6 +189,8 @@ internal sealed class NesTestCpu
     public byte ScrollY => scrollY;
 
     public bool RenderingEnabled => (ppuMask & 0x18) != 0;
+
+    public bool Mmc3PrgBankMode1 => PrgBankMode1;
 
     public void SetR6Bank(byte bank) => CurrentR6Bank = bank;
 
@@ -606,13 +616,14 @@ internal sealed class NesTestCpu
             return prg[(address - 0x8000) % prg.Length];
         }
 
-        // MMC3 PRG mode 0 fixes $C000-$DFFF to the second-to-last physical bank and $E000-$FFFF to
-        // the last one, so both follow the board size instead of a 64 KiB assumption.
+        // MMC3 PRG mode 0 maps R6 at $8000-$9FFF and fixes $C000-$DFFF to the
+        // second-to-last physical bank. Mode 1 swaps those two windows.
+        var prgMode1 = PrgBankMode1;
         var bank = address switch
         {
-            < 0xA000 => CurrentR6Bank,
+            < 0xA000 => prgMode1 ? (byte)(prgBankCount - 2) : CurrentR6Bank,
             < 0xC000 => CurrentR7Bank,
-            < 0xE000 => (byte)(prgBankCount - 2),
+            < 0xE000 => prgMode1 ? CurrentR6Bank : (byte)(prgBankCount - 2),
             _ => (byte)(prgBankCount - 1),
         };
         if (bank >= prgBankCount)
@@ -683,7 +694,8 @@ internal sealed class NesTestCpu
 
         if (address == 0x8000)
         {
-            selectedRegister = (byte)(value & 0x07);
+            selectedRegister = value;
+            BankSelectWrites.Add(value);
             return;
         }
 
@@ -692,13 +704,14 @@ internal sealed class NesTestCpu
             return;
         }
 
-        if (selectedRegister == 6)
+        var selectedBankRegister = SelectedBankRegister;
+        if (selectedBankRegister == 6)
         {
             CurrentR6Bank = value;
             R6BankWrites.Add(value);
             HandleR6Injection(value);
         }
-        else if (selectedRegister == 7)
+        else if (selectedBankRegister == 7)
         {
             CurrentR7Bank = value;
             R7BankWrites.Add(value);
@@ -904,17 +917,30 @@ internal sealed class NesTestCpu
     private static bool CrossesPage(ushort baseAddress, ushort address) =>
         (baseAddress & 0xFF00) != (address & 0xFF00);
 
-    // $8000-$BFFF is the MMC3 switchable PRG window (R6 then R7). Counting every access an
-    // interrupt handler makes through it is what turns "the handler is bank-neutral" into an
-    // observation instead of an assumption: a non-fixed-resident handler fetches its own
-    // instructions from here. Mapper 0 has no switchable window, so nothing there is counted.
+    private byte SelectedBankRegister => (byte)(selectedRegister & 0x07);
+
+    private bool PrgBankMode1 => (selectedRegister & 0x40) != 0;
+
+    // Counting every access an interrupt handler makes through the active MMC3 switchable PRG
+    // windows is what turns "the handler is bank-neutral" into an observation instead of an
+    // assumption: a non-fixed-resident handler fetches its own instructions from here. Mapper 0 has
+    // no switchable window, so nothing there is counted.
     private void CountSwitchableWindowAccess(ushort address)
     {
-        if (nmiDepth > 0 && mapper != 0 && address is >= 0x8000 and < 0xC000)
+        if (nmiDepth > 0 && mapper != 0 && IsSwitchablePrgAddress(address))
         {
             switchableWindowAccesses++;
         }
     }
+
+    private bool IsSwitchablePrgAddress(ushort address) =>
+        address switch
+        {
+            >= 0x8000 and < 0xA000 => !PrgBankMode1,
+            >= 0xA000 and < 0xC000 => true,
+            >= 0xC000 and < 0xE000 => PrgBankMode1,
+            _ => false,
+        };
 
     private void Push(byte value) => ram[NesRuntimeMemoryLayout.Stack.Start | stackPointer--] = value;
     private byte Pop() => ram[NesRuntimeMemoryLayout.Stack.Start | ++stackPointer];
