@@ -9,7 +9,6 @@ namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
 {
-    internal const string CodeBankedProfileName = "nes-mmc3-tvrom-codebank-v1";
     internal const string MainPlacementUnitName = "program:main";
     internal const string MainInitPlacementUnitName = MainPlacementUnitName + ":init";
     internal const string MainFramePlacementUnitName = MainPlacementUnitName + ":frame";
@@ -18,19 +17,6 @@ internal static class NesRomBuilder
     private const ushort Mmc3BootPaletteAddress = 0xA000;
     private const ushort Mmc3BootNameTableAddress = 0xA020;
     internal const string WorldPackLabel = "worldpack_default";
-    internal const string WorldPackValidateLabel = "worldpack_validate";
-    internal const string WorldPackVisualDecodeLabel = "worldpack_decode_visual";
-    internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
-    internal const string WorldPackVisualLookupPreparedLabel = "worldpack_visual_lookup_prepared";
-    internal const string WorldPackInitializeLabel = "worldpack_initialize";
-    internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
-    internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
-    internal const string WorldPackReadByteLabel = "worldpack_read_byte";
-    internal const string WorldPackProbeLabel = "worldpack_probe";
-    internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
-    internal const string WorldPackCommitEdgeLabel = "worldpack_commit_edge";
-    internal const string WorldPackReleaseReversedEdgeLabel = "worldpack_release_reversed_edge";
-    internal const string WorldPackAttributesLabel = "worldpack_attributes";
     private const string Mmc3IrqHandlerLabel = "mmc3_irq_handler";
 
     public static byte[] Build(
@@ -377,7 +363,7 @@ internal static class NesRomBuilder
             ? NesPhysicalFrameScheduler.Create(
                 builder,
                 program,
-                CodeBankedProfileName,
+                NesPhysicalFrameScheduler.CodeBankedProfileName,
                 layout.UseFourScreenNametables,
                 usePackedCamera,
                 layout.EmitMmc3Foundation && usePackedCamera)
@@ -430,11 +416,11 @@ internal static class NesRomBuilder
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {
-            builder.CallSubroutine(WorldPackValidateLabel);
-            builder.CallSubroutine(WorldPackInitializeLabel);
+            builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackValidateLabel);
+            builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackInitializeLabel);
             if (worldPackProbe is not null)
             {
-                builder.CallSubroutine(WorldPackProbeLabel);
+                builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackProbeLabel);
             }
         }
 
@@ -671,26 +657,26 @@ internal static class NesRomBuilder
             ? new Dictionary<string, ushort>()
             : new Dictionary<string, ushort>
             {
-                [WorldPackValidateLabel] = builder.AddressOfLabel(WorldPackValidateLabel),
-                [WorldPackVisualDecodeLabel] = builder.AddressOfLabel(WorldPackVisualDecodeLabel),
-                [WorldPackVisualLookupLabel] = builder.AddressOfLabel(WorldPackVisualLookupLabel),
-                [WorldPackCollisionDecodeLabel] = builder.AddressOfLabel(WorldPackCollisionDecodeLabel),
-                [WorldPackCollisionLookupLabel] = builder.AddressOfLabel(WorldPackCollisionLookupLabel),
-                [WorldPackReadByteLabel] = builder.AddressOfLabel(WorldPackReadByteLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackValidateLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackValidateLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackVisualLookupLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel),
+                [NesWorldPackRuntimeEmitter.WorldPackReadByteLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackReadByteLabel),
             };
         if (worldPackRuntime is not null)
         {
-            fixedSymbols[WorldPackInitializeLabel] = builder.AddressOfLabel(WorldPackInitializeLabel);
+            fixedSymbols[NesWorldPackRuntimeEmitter.WorldPackInitializeLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackInitializeLabel);
         }
         if (worldPackProbe is not null)
         {
-            fixedSymbols[WorldPackProbeLabel] = builder.AddressOfLabel(WorldPackProbeLabel);
+            fixedSymbols[NesWorldPackRuntimeEmitter.WorldPackProbeLabel] = builder.AddressOfLabel(NesWorldPackRuntimeEmitter.WorldPackProbeLabel);
         }
         if (worldPackRuntime is not null && program.UsesCameraRuntime)
         {
-            fixedSymbols[WorldPackPrepareEdgeLabel] = builder.AddressOfLabel(WorldPackPrepareEdgeLabel);
-            fixedSymbols[WorldPackCommitEdgeLabel] = builder.AddressOfLabel(WorldPackCommitEdgeLabel);
-            fixedSymbols[WorldPackReleaseReversedEdgeLabel] = builder.AddressOfLabel(WorldPackReleaseReversedEdgeLabel);
+            fixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel] = builder.AddressOfLabel(NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel);
+            fixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel] = builder.AddressOfLabel(NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel);
+            fixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackReleaseReversedEdgeLabel] = builder.AddressOfLabel(NesPackedCameraRuntimeEmitter.WorldPackReleaseReversedEdgeLabel);
         }
         foreach (var table in program.GeneratedRomTables.Values)
         {

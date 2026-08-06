@@ -454,7 +454,7 @@ internal sealed partial class NesSdkOperationLowerer
         var success = builder.CreateLabel("nes_packed_collision_success");
         var done = builder.CreateLabel("nes_packed_collision_done");
         builder.Label(PackedCollisionFlagsSubroutineLabel);
-        builder.CallSubroutine(NesRomBuilder.WorldPackCollisionLookupLabel);
+        builder.CallSubroutine(NesWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel);
         builder.CompareImmediate((byte)NesWorldPackResult.Success);
         builder.BranchRelative(0xF0, success);
         builder.LoadAImmediate(0);

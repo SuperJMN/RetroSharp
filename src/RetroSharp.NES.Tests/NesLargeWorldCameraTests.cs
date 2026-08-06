@@ -113,7 +113,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         cpu.SetRam(FrameCounterLow, 7);
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
@@ -125,7 +125,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 32);
         var prepareSlices = RunResumableColumnPrepare(
             cpu,
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]);
 
         Assert.All(
             prepareSlices,
@@ -175,10 +175,10 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackInitializeLabel], 5_000_000).A);
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
         cpu.SetRam(CommitWorldEdgeLow, 32);
@@ -189,7 +189,7 @@ public sealed class NesLargeWorldCameraTests
 
         var prepareSlices = RunResumableColumnPrepare(
             cpu,
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]);
 
         Assert.All(
             prepareSlices,
@@ -220,10 +220,10 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, programBank);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackInitializeLabel], 5_000_000).A);
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
         cpu.SetRam(CommitWorldEdgeLow, 52);
@@ -239,7 +239,7 @@ public sealed class NesLargeWorldCameraTests
         {
             var writesBefore = cpu.R6BankWrites.Count;
             slices.Add(cpu.RunRoutine(
-                result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+                result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel],
                 maxInstructions: 5_000_000));
             writesPerSlice.Add(cpu.R6BankWrites.Skip(writesBefore).ToArray());
         }
@@ -296,7 +296,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
         cpu.SetRam(CommitWorldEdgeLow, 53);
@@ -306,7 +306,7 @@ public sealed class NesLargeWorldCameraTests
 
         _ = RunResumableColumnPrepare(
             cpu,
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]);
         var edge = runtime.Layout.EdgeSlots[0];
         var metatileCells = packed.Pack.Descriptor.MetatileWidth * packed.Pack.Descriptor.MetatileHeight;
         var tileMismatches = new List<string>();
@@ -372,7 +372,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackValidateLabel], 5_000_000).A);
         cpu.SetRam(FrameCounterLow, 11);
         cpu.SetRam(CommitAxis, Row);
         cpu.SetRam(CommitDirection, Positive);
@@ -386,7 +386,7 @@ public sealed class NesLargeWorldCameraTests
         var bankWritesBeforePrepare = cpu.R6BankWrites.Count;
 
         var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel],
             maxInstructions: 5_000_000);
 
         Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
@@ -456,7 +456,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 32);
         _ = RunResumableColumnPrepare(
             cpu,
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]);
         var bankWritesBeforeCommit = cpu.R6BankWrites.Count;
         var commitStartCycles = cpu.Cycles;
 
@@ -682,7 +682,7 @@ public sealed class NesLargeWorldCameraTests
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
             cpu.RunRoutine(
-                result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+                result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel],
                 maxInstructions: 5_000_000).A);
         var edge = runtime.Layout.EdgeSlots[0];
         for (var attribute = 0; attribute < 9; attribute++)
@@ -738,8 +738,8 @@ public sealed class NesLargeWorldCameraTests
             directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: packed.SerializedBytes);
-        var prepare = result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel];
-        var commit = result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel];
+        var prepare = result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel];
+        var commit = result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel];
         var prepareCall = new byte[] { 0x20, (byte)prepare, (byte)(prepare >> 8) };
         var commitCall = new byte[] { 0x20, (byte)commit, (byte)(commit >> 8) };
 
@@ -776,7 +776,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel], 5_000_000).A);
         CopyPendingDescriptor(cpu, NesRuntimeMemoryLayout.PackedCamera.Slot0, PendingColumn);
         cpu.SetRam(CommitAxis, Row);
         cpu.SetRam(CommitWorldEdgeLow, 5);
@@ -785,7 +785,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 32);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel], 5_000_000).A);
         CopyPendingDescriptor(cpu, NesRuntimeMemoryLayout.PackedCamera.Slot1, PendingRow);
         cpu.SetRam(PendingAxes, Column | Row);
         var retainedRow = Enumerable.Range(0, NesPackedCameraRuntime.SlotMetadataBytes)
@@ -811,7 +811,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
         Assert.Equal(
             NesPackedCameraRuntime.NoSlot,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]).A);
         Assert.Equal(retainedColumn, Enumerable.Range(0, NesPackedCameraRuntime.SlotMetadataBytes)
             .Select(offset => cpu.Ram((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)))
             .ToArray());
@@ -819,7 +819,7 @@ public sealed class NesLargeWorldCameraTests
             .Select(offset => cpu.Ram((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot1 + offset)))
             .ToArray());
 
-        var firstCommit = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+        var firstCommit = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Success, firstCommit.A);
         Assert.Equal(Released, cpu.Ram(Slot0State));
@@ -832,7 +832,7 @@ public sealed class NesLargeWorldCameraTests
             .ToArray());
         Assert.Equal(1, cpu.Ram(CommitCount));
 
-        var firstRowPhase = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+        var firstRowPhase = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
         Assert.Equal((byte)NesWorldPackResult.Success, firstRowPhase.A);
         Assert.Equal(Committing, cpu.Ram(Slot1State));
         Assert.Equal(1, cpu.Ram((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.CommitPhaseOffset)));
@@ -848,11 +848,11 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel], 5_000_000).A);
         CopyPendingDescriptor(cpu, NesRuntimeMemoryLayout.PackedCamera.Slot0, PendingColumn);
         cpu.SetRam(PendingAxes, Column | Row);
 
-        var interleavedColumn = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+        var interleavedColumn = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
         Assert.Equal((byte)NesWorldPackResult.Success, interleavedColumn.A);
         Assert.Equal(Released, cpu.Ram(Slot0State));
         Assert.Equal(Committing, cpu.Ram(Slot1State));
@@ -860,13 +860,13 @@ public sealed class NesLargeWorldCameraTests
 
         for (var phase = 2; phase <= 4; phase++)
         {
-            var rowPhase = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+            var rowPhase = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
             Assert.Equal((byte)NesWorldPackResult.Success, rowPhase.A);
             Assert.Equal(Committing, cpu.Ram(Slot1State));
             Assert.Equal(phase, cpu.Ram((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.CommitPhaseOffset)));
         }
 
-        var rowAttributes = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+        var rowAttributes = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
         Assert.Equal((byte)NesWorldPackResult.Success, rowAttributes.A);
         Assert.Equal(Released, cpu.Ram(Slot1State));
         Assert.Equal(3, cpu.Ram(CommitCount));
@@ -954,7 +954,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel], 5_000_000).A);
         CopyPendingDescriptor(cpu, NesRuntimeMemoryLayout.PackedCamera.Slot0, PendingColumn);
         cpu.SetRam((ushort)(PendingColumn + NesPackedCameraRuntime.WorldEdgeHighOffset), 1);
         cpu.SetRam(PendingAxes, Column);
@@ -962,7 +962,7 @@ public sealed class NesLargeWorldCameraTests
             .Select(offset => cpu.Ram((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)))
             .ToArray();
 
-        var commit = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCommitEdgeLabel]);
+        var commit = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackCommitEdgeLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Miss, commit.A);
         Assert.Equal(metadata, Enumerable.Range(0, NesPackedCameraRuntime.SlotMetadataBytes)
@@ -998,7 +998,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitDirection, Positive);
         cpu.SetRam(CommitPayloadLength, payloadLength);
 
-        var prepare = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel]);
+        var prepare = cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Miss, prepare.A);
         Assert.Equal(0, cpu.Ram(Slot0State));
@@ -1032,7 +1032,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
 
         var prepare = cpu.RunRoutine(
-            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+            result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel],
             maxInstructions: 5_000_000);
 
         Assert.Equal((byte)NesWorldPackResult.Malformed, prepare.A);
@@ -1072,7 +1072,7 @@ public sealed class NesLargeWorldCameraTests
         cpu.SetRam(CommitPayloadLength, 8);
         Assert.Equal(
             (byte)NesWorldPackResult.Success,
-            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel], 5_000_000).A);
+            cpu.RunRoutine(result.Report.FixedSymbols[NesPackedCameraRuntimeEmitter.WorldPackPrepareEdgeLabel], 5_000_000).A);
         cpu.SetRam(CommitDirection, 1);
 
         var release = cpu.RunRoutine(result.Report.FixedSymbols["worldpack_release_reversed_edge"]);

@@ -141,7 +141,7 @@ public sealed class NesMmc3PrgBoardTests
             .Create(NesCartridgeProfile.Mmc3Tvrom, useFourScreenNametables: true, 16)
             .R6PoolBanks;
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, result.Report.SelectedProfile);
         Assert.Equal(128 * 1_024, result.Report.PrgRomSize);
         Assert.Equal(0, world.PhysicalBank);
 

@@ -106,7 +106,7 @@ public partial class NesRomCompilerTests
             .Where(segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, result.Report.SelectedProfile);
         Assert.Equal(0, world.PhysicalBank);
         Assert.InRange(program.Length, 2, 3);
         Assert.DoesNotContain(program, segment => segment.PhysicalBank == world.PhysicalBank);
@@ -151,7 +151,7 @@ public partial class NesRomCompilerTests
 
         var callerBank = cpu.CurrentR6Bank;
         cpu.SetPackOffset(0);
-        var read = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackReadByteLabel]);
+        var read = cpu.RunRoutine(result.Report.FixedSymbols[NesWorldPackRuntimeEmitter.WorldPackReadByteLabel]);
 
         Assert.Equal(result.Rom[16 + world.PhysicalStart], read.A);
         Assert.Equal(callerBank, cpu.CurrentR6Bank);
@@ -175,7 +175,7 @@ public partial class NesRomCompilerTests
             .Where(segment => segment.Owner.StartsWith("program:r6:", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, first.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, first.Report.SelectedProfile);
         Assert.Equal(first.Report.SelectedProfile, first.Report.CpuWork.Profile);
         Assert.InRange(programSegments.Length, 2, 4);
         Assert.Equal(programSegments.Length, programSegments.Select(segment => segment.PhysicalBank).Distinct().Count());
@@ -221,7 +221,7 @@ public partial class NesRomCompilerTests
             Path.GetDirectoryName(sourcePath));
         var unit = Assert.Single(result.Report.PlacementUnits);
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, result.Report.SelectedProfile);
         Assert.Equal(NesRomBuilder.MainInitPlacementUnitName, unit.Name);
         Assert.Equal(NesPrgResidence.ProgramR6, unit.Residence);
         Assert.Equal(NesPrgPlacementPhase.OneShot, unit.Phase);
@@ -248,7 +248,7 @@ public partial class NesRomCompilerTests
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromCodeBankTestsWithReport(source);
         var program = Assert.Single(result.Report.Segments, segment => segment.Owner == "program:r6:0");
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, result.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, result.Report.SelectedProfile);
         Assert.Equal(result.Report.SelectedProfile, result.Report.CpuWork.Profile);
         Assert.Equal("R6 program $8000-$9FFF", program.Window);
         Assert.Equal(0, program.PhysicalBank);

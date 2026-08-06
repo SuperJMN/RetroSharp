@@ -29,7 +29,7 @@ public sealed class NesPhaseBankPlacementCanaryTests(ITestOutputHelper output)
         var candidate = BuildCandidate();
         var control = BuildControl();
 
-        Assert.Equal(NesRomBuilder.CodeBankedProfileName, candidate.Report.SelectedProfile);
+        Assert.Equal(NesPhysicalFrameScheduler.CodeBankedProfileName, candidate.Report.SelectedProfile);
         Assert.Equal("nes-mmc3-tvrom-v1", control.Report.SelectedProfile);
 
         var placement = Assert.IsType<NesProgramBankPlacementReport>(candidate.Report.BankPlacement);
