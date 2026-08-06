@@ -309,7 +309,7 @@ internal static class ArchitectureSymbolAssertions
         }
     }
 
-    private static IEnumerable<FieldInfo> ReferencedFields(MethodBase source)
+    public static IEnumerable<FieldInfo> ReferencedFields(MethodBase source)
     {
         foreach (var instruction in Instructions(source))
         {
