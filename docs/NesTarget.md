@@ -247,7 +247,42 @@ Compile-time operands are monomorphised into the specialization instead: the
 first shape gets `user_fn_<Name>`, further shapes get `user_fn_<Name>__<n>`.
 Nothing is pushed, no parameter frame is reserved, and zero-page pressure is
 unchanged. Functions that need a *computed* runtime argument therefore stay
-inline; giving them a real argument frame is a separate slice.
+inline.
+
+`NesUserFunctionOutliner.Candidates` reports every reachable user function with
+the gate that decided it (`FrameReachable`, `ValueHelper`, `SingleCallSite`,
+`StreamBearing`, or `None`), so outlining headroom is auditable from a build
+rather than re-derived by an investigation.
+`NesUserFunctionArgumentFrameProbe` prints that attribution against #523's
+accounting for every NES sample and validation fixture.
+
+### Measured headroom for a computed-argument frame
+
+#514 proposes giving computed arguments a statically allocated frame so those
+call sites can be outlined too. That was measured across all 23 NES samples and
+all 4 validation fixtures before being built, and the prize is **zero bytes**:
+
+| Gate | Functions | Duplicated bytes |
+| --- | ---: | ---: |
+| `FrameReachable` | 227 | 10,214 |
+| `SingleCallSite` | 159 | 0 |
+| `StreamBearing` | 18 | 0 |
+| `ValueHelper` | 8 | 0 |
+| `None` (reaches the argument gate) | 0 | 0 |
+
+All 10,214 B of measured user-function duplication sits behind `FrameReachable`,
+which is `Hot` code that #514 leaves to its B3 cost model. Cold and one-shot
+duplication is 0 B, and no function in any shipped program passes the
+function-level gates, so today the argument gate is never reached at all. The 18
+cold/one-shot functions with more than one call site are all SDK dot-call shims
+rejected as `StreamBearing`, and each carries 0 B of duplication.
+
+The gate is real but unexercised: an otherwise eligible cold helper outlines to
+one 53-byte body with a constant argument and expands to three copies (112 B of
+duplication) with a computed one. An argument frame is therefore only worth
+building once a program exists whose cold path actually needs it; on today's
+programs it would add a reserved-region frame allocator, acyclicity validation,
+and a size-eligibility model in exchange for no recovered bytes.
 
 Outlined bodies are emitted outside every placement unit, so they stay
 fixed-resident and every banked caller reaches them with a same-bank `JSR`.

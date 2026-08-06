@@ -6,6 +6,38 @@ using RetroSharp.Sdk;
 namespace RetroSharp.NES;
 
 /// <summary>
+/// Why one reachable user function is not outlined, in the order
+/// <see cref="NesUserFunctionOutliner.Plan(NesVideoProgram)"/> tests the gates.
+/// </summary>
+internal enum NesUserFunctionOutlineRejection
+{
+    /// <summary>Nothing rejected it; it is outlined.</summary>
+    None,
+
+    /// <summary>Reached from the frame placement unit, so #514's cost model owns it.</summary>
+    FrameReachable,
+
+    /// <summary>A value helper, kept on the expression substitution path.</summary>
+    ValueHelper,
+
+    /// <summary>Called from exactly one site, where a <c>JSR</c>/<c>RTS</c> pair saves nothing.</summary>
+    SingleCallSite,
+
+    /// <summary>Its closure consumes the positional SDK operation stream or a target intrinsic.</summary>
+    StreamBearing,
+}
+
+/// <summary>
+/// One reachable user function and the gate that decided its fate, so that outlining headroom is
+/// auditable from a build instead of re-derived by an investigation.
+/// </summary>
+internal sealed record NesUserFunctionOutlineCandidate(
+    string Function,
+    NesUserFunctionPhase Phase,
+    int CallSites,
+    NesUserFunctionOutlineRejection Rejection);
+
+/// <summary>
 /// One user function the outliner decided to emit once and reach with <c>JSR</c>.
 /// </summary>
 internal sealed record NesOutlinedUserFunctionDecision(
@@ -39,8 +71,11 @@ internal sealed record NesOutlinedUserFunctionBody(
 /// program actually contains: <c>JSR body</c> / <c>RTS</c>, with no argument marshalling at all.
 /// Every argument must be a compile-time operand (a constant, or a stable reference to storage the
 /// body can address directly), so it is baked into the specialization key instead of being passed.
-/// A call whose argument is a computed expression falls back to inline expansion; giving it a real
-/// argument frame is #514's job, not this slice's.
+/// A call whose argument is a computed expression falls back to inline expansion. #514 proposes
+/// giving those a statically allocated argument frame; measured against every NES sample and
+/// validation fixture that recovers 0 B today, because no shipped program has a cold or one-shot
+/// function that reaches this gate at all. <see cref="Candidates"/> reports the gate that really
+/// rejected each function so that headroom stays auditable instead of assumed.
 /// </para>
 /// </remarks>
 internal sealed class NesUserFunctionOutliner
@@ -55,23 +90,30 @@ internal sealed class NesUserFunctionOutliner
     ];
 
     private readonly IReadOnlyDictionary<string, NesOutlinedUserFunctionDecision> decisions;
+    private readonly IReadOnlyList<NesUserFunctionOutlineCandidate> candidates;
     private readonly Dictionary<string, string> labelsBySpecialization = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> specializationsByFunction = new(StringComparer.Ordinal);
     private readonly Queue<NesOutlinedUserFunctionBody> pending = new();
     private readonly List<NesOutlinedUserFunctionBody> bodies = [];
 
-    private NesUserFunctionOutliner(IReadOnlyDictionary<string, NesOutlinedUserFunctionDecision> decisions)
+    private NesUserFunctionOutliner(
+        IReadOnlyDictionary<string, NesOutlinedUserFunctionDecision> decisions,
+        IReadOnlyList<NesUserFunctionOutlineCandidate> candidates)
     {
         this.decisions = decisions;
+        this.candidates = candidates;
     }
 
     internal static NesUserFunctionOutliner Empty { get; } =
-        new(new Dictionary<string, NesOutlinedUserFunctionDecision>(StringComparer.Ordinal));
+        new(new Dictionary<string, NesOutlinedUserFunctionDecision>(StringComparer.Ordinal), []);
 
     /// <summary>Functions this plan will outline, ordered by name.</summary>
     internal IReadOnlyList<NesOutlinedUserFunctionDecision> Decisions => decisions.Values
         .OrderBy(decision => decision.Function, StringComparer.Ordinal)
         .ToArray();
+
+    /// <summary>Every reachable user function with the gate that decided it, ordered by name.</summary>
+    internal IReadOnlyList<NesUserFunctionOutlineCandidate> Candidates => candidates;
 
     /// <summary>Bodies actually reached and therefore emitted, in emission order.</summary>
     internal IReadOnlyList<NesOutlinedUserFunctionBody> Bodies => bodies;
@@ -114,6 +156,7 @@ internal sealed class NesUserFunctionOutliner
         }
 
         var decisions = new Dictionary<string, NesOutlinedUserFunctionDecision>(StringComparer.Ordinal);
+        var candidates = new List<NesUserFunctionOutlineCandidate>();
         foreach (var name in reachable.OrderBy(name => name, StringComparer.Ordinal))
         {
             if (!functions.TryGetValue(name, out var function))
@@ -124,28 +167,10 @@ internal sealed class NesUserFunctionOutliner
             var phase = hasFrameLoop
                 ? hot.Contains(name) ? NesUserFunctionPhase.Hot : NesUserFunctionPhase.Cold
                 : NesUserFunctionPhase.OneShot;
-
-            // #514 owns hot outlining, gated on its cost model. This slice never spends frame time.
-            if (phase is NesUserFunctionPhase.Hot)
-            {
-                continue;
-            }
-
-            // Value helpers stay substituted: they are lowered through the expression path and an
-            // `inline` value helper is never overridable.
-            if (!string.Equals(function.Type, "void", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            // A single call site would pay ~4 bytes for JSR/RTS and save nothing.
             var sites = callSites.GetValueOrDefault(name);
-            if (sites < 2)
-            {
-                continue;
-            }
-
-            if (!IsStreamFree(name, functions, targetIntrinsics, resourceDeclarations, new HashSet<string>(StringComparer.Ordinal)))
+            var rejection = Reject(phase, function, sites, functions, targetIntrinsics, resourceDeclarations);
+            candidates.Add(new NesUserFunctionOutlineCandidate(name, phase, sites, rejection));
+            if (rejection is not NesUserFunctionOutlineRejection.None)
             {
                 continue;
             }
@@ -153,7 +178,48 @@ internal sealed class NesUserFunctionOutliner
             decisions.Add(name, new NesOutlinedUserFunctionDecision(name, phase, sites, function.IsInline));
         }
 
-        return new NesUserFunctionOutliner(decisions);
+        return new NesUserFunctionOutliner(decisions, candidates);
+    }
+
+    /// <summary>
+    /// The single place the function-level gates are decided, so the build can report why a
+    /// function was not outlined instead of leaving the reason implicit in control flow.
+    /// </summary>
+    private static NesUserFunctionOutlineRejection Reject(
+        NesUserFunctionPhase phase,
+        FunctionSyntax function,
+        int callSites,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        TargetIntrinsicCatalog targetIntrinsics,
+        SdkResourceDeclarationRegistry resourceDeclarations)
+    {
+        // #514 owns hot outlining, gated on its cost model. This slice never spends frame time.
+        if (phase is NesUserFunctionPhase.Hot)
+        {
+            return NesUserFunctionOutlineRejection.FrameReachable;
+        }
+
+        // Value helpers stay substituted: they are lowered through the expression path and an
+        // `inline` value helper is never overridable.
+        if (!string.Equals(function.Type, "void", StringComparison.Ordinal))
+        {
+            return NesUserFunctionOutlineRejection.ValueHelper;
+        }
+
+        // A single call site would pay ~4 bytes for JSR/RTS and save nothing.
+        if (callSites < 2)
+        {
+            return NesUserFunctionOutlineRejection.SingleCallSite;
+        }
+
+        return IsStreamFree(
+            function.Name,
+            functions,
+            targetIntrinsics,
+            resourceDeclarations,
+            new HashSet<string>(StringComparer.Ordinal))
+            ? NesUserFunctionOutlineRejection.None
+            : NesUserFunctionOutlineRejection.StreamBearing;
     }
 
     /// <summary>
