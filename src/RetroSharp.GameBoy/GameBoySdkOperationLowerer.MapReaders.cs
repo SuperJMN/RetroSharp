@@ -19,7 +19,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadA(GameBoyRuntimeMemoryLayout.Camera.ScreenTileFlagsColumnHigh);
             builder.LoadDFromA();
             builder.LoadHl(checked((ushort)row));
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel);
             return;
         }
 
@@ -35,7 +35,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadDFromA();
             builder.Emit(0x69); // LD L,C
             builder.LoadHImmediate(0);
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel);
             return;
         }
 
@@ -49,7 +49,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadEFromA();
             builder.LoadDImmediate(0);
             builder.LoadHl(checked((ushort)row));
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel);
             return;
         }
 
@@ -88,7 +88,7 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.LoadDImmediate(0);
             builder.Emit(0x69); // LD L,C
             builder.LoadHImmediate(0);
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel);
             return;
         }
 

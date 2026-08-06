@@ -25,24 +25,11 @@ internal static class GameBoyRomBuilder
     private const string WindowTileMapLabel = "window_tilemap";
     internal const string MapDataLabel = "map_data";
     internal const string MapFlagDataLabel = "map_flags_data";
+    internal const string WorldPackLabel = "worldpack_default";
     private const string ProgramStartLabel = "program_start";
     private const string ProgramMainEndLabel = "program_main_end";
     internal const string ProgramBankContinuationLabel = "program_bank_continue";
     internal const string Mbc1FarReadByteLabel = "mbc1_far_read_byte";
-    internal const string WorldPackLabel = "worldpack_default";
-    internal const string WorldPackValidateLabel = "worldpack_validate";
-    internal const string WorldPackVisualDecodeLabel = "worldpack_decode_visual";
-    internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
-    internal const string WorldPackVisualEdgeLookupLabel = "worldpack_visual_edge_lookup";
-    internal const string WorldPackVisualEdgeContinueLabel = "worldpack_visual_edge_continue";
-    internal const string WorldPackVisualEdgeExpansionLabel = "worldpack_visual_edge_expansion";
-    internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
-    internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
-    internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
-    internal const string WorldPackWaitOutsideVBlankLabel = "worldpack_wait_outside_vblank";
-    internal const string WorldPackWaitIfInVBlankLabel = "worldpack_wait_if_in_vblank";
-    internal const string WorldPackWaitAudioTickLabel = "worldpack_wait_audio_tick";
-    internal const string WorldPackObserveFrameWrapLabel = "worldpack_observe_frame_wrap";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -430,11 +417,11 @@ internal static class GameBoyRomBuilder
         foreach (var label in new[]
                  {
                      Mbc1FarReadByteLabel,
-                     WorldPackValidateLabel,
-                     WorldPackVisualDecodeLabel,
-                     WorldPackVisualLookupLabel,
-                     WorldPackCollisionDecodeLabel,
-                     WorldPackCollisionLookupLabel,
+                     GameBoyWorldPackRuntimeEmitter.WorldPackValidateLabel,
+                     GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel,
+                     GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel,
+                     GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel,
+                     GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel,
                  })
         {
             if (builder.TryLabelAddress(label, out var address) && address < BankedWindowStart)
@@ -629,7 +616,7 @@ internal static class GameBoyRomBuilder
         {
             var validated = builder.CreateLabel("worldpack_startup_validated");
             var invalid = builder.CreateLabel("worldpack_startup_invalid");
-            builder.JumpAbsolute(0xCD, WorldPackValidateLabel);
+            builder.JumpAbsolute(0xCD, GameBoyWorldPackRuntimeEmitter.WorldPackValidateLabel);
             builder.LoadAFromB();
             builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
             builder.JumpAbsolute(0xCA, validated);

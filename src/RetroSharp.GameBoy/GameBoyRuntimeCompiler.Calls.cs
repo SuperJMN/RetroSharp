@@ -180,7 +180,7 @@ internal sealed partial class GameBoyRuntimeCompiler
 
         if (operation is SdkAudioOperation.UpdateAudio && UsesPackedCameraRuntime)
         {
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+            builder.JumpAbsolute(0xCD, WorldPackWaitAudioTickLabel);
             return;
         }
 

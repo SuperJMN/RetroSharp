@@ -80,11 +80,11 @@ public sealed class GameBoyWorldPackReaderTests
 
         Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");
         Assert.DoesNotContain(result.Report.Segments, segment => segment.Owner == "legacy-world-data:default");
-        Assert.InRange(result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackValidateLabel], 0x0150, 0x3FFF);
-        Assert.InRange(result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel], 0x0150, 0x3FFF);
-        Assert.InRange(result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel], 0x0150, 0x3FFF);
-        Assert.InRange(result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel], 0x0150, 0x3FFF);
-        Assert.InRange(result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel], 0x0150, 0x3FFF);
+        Assert.InRange(result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackValidateLabel], 0x0150, 0x3FFF);
+        Assert.InRange(result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel], 0x0150, 0x3FFF);
+        Assert.InRange(result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel], 0x0150, 0x3FFF);
+        Assert.InRange(result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel], 0x0150, 0x3FFF);
+        Assert.InRange(result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel], 0x0150, 0x3FFF);
     }
 
     [Fact]
@@ -135,12 +135,12 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             checked((ushort)hardwareX),
             checked((ushort)hardwareY));
         var firstLookupBankWrites = cpu.RomBankWrites.Count;
         var cachedLookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             checked((ushort)hardwareX),
             checked((ushort)hardwareY));
         var cachedLookupBankWrites = cpu.RomBankWrites.Count - firstLookupBankWrites;
@@ -178,7 +178,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX: 3,
             hardwareY: 4);
 
@@ -224,7 +224,7 @@ public sealed class GameBoyWorldPackReaderTests
         Assert.Equal(0x7FFF, firstIdPhysicalAddress);
         var cpu = new GameBoyTestCpu(result.Rom);
         var validationStatus = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 0);
         Assert.Equal(GameBoyWorldPackResult.Success, validationStatus);
@@ -233,7 +233,7 @@ public sealed class GameBoyWorldPackReaderTests
         var hardwareY = repeated ? (ushort)0 : (ushort)6;
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX,
             hardwareY);
 
@@ -257,7 +257,7 @@ public sealed class GameBoyWorldPackReaderTests
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new GameBoyTestCpu(result.Rom);
-        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
+        var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
 
         var first = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 0, hardwareY: 0);
         var second = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 7, hardwareY: 7);
@@ -276,7 +276,7 @@ public sealed class GameBoyWorldPackReaderTests
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new GameBoyTestCpu(result.Rom);
-        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
+        var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
 
         AssertLookup(0, 0, WorldTileFlags.Solid, expectedDecodes: 1);
         AssertLookup(8, 0, WorldTileFlags.Hazard, expectedDecodes: 2);
@@ -308,7 +308,7 @@ public sealed class GameBoyWorldPackReaderTests
         var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
         var rom = result.Rom.ToArray();
         var cpu = new GameBoyTestCpu(rom);
-        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
+        var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
 
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 0, 0).Status);
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 8, 0).Status);
@@ -332,8 +332,8 @@ public sealed class GameBoyWorldPackReaderTests
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new GameBoyTestCpu(result.Rom);
-        var lookupEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
-        var decodeEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel];
+        var lookupEntry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
+        var decodeEntry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel];
 
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 0, 0).Status);
         Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
@@ -357,7 +357,7 @@ public sealed class GameBoyWorldPackReaderTests
             FullStage1ValidationFixture.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var cpu = new GameBoyTestCpu(result.Rom);
-        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
+        var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel];
 
         var start = cpu.Cycles;
         var first = cpu.RunWorldPackCollisionLookup(entry, hardwareX: 9, hardwareY: 38);
@@ -427,7 +427,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX: 0,
             hardwareY: 0);
 
@@ -465,7 +465,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX: 0,
             hardwareY: 0);
 
@@ -497,7 +497,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX: 0,
             hardwareY: 0);
 
@@ -622,7 +622,7 @@ public sealed class GameBoyWorldPackReaderTests
 
         var cpu = new GameBoyTestCpu(rom);
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel],
             hardwareX,
             hardwareY);
 
@@ -668,7 +668,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX: 0,
             hardwareY: 0);
 
@@ -689,7 +689,7 @@ public sealed class GameBoyWorldPackReaderTests
             "void Main() { u8 value = 0;\n" + filler + "\n }",
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: fixture.SerializedBytes);
-        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel];
+        var entry = result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel];
 
         RunAndAssertRestored(result.Rom, 0, 0, GameBoyWorldPackResult.Success);
         RunAndAssertRestored(result.Rom, 1, 0, GameBoyWorldPackResult.Miss);
@@ -738,7 +738,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var status = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 1);
 
@@ -777,7 +777,7 @@ public sealed class GameBoyWorldPackReaderTests
         cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
 
         var status = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 0);
 
@@ -823,7 +823,7 @@ public sealed class GameBoyWorldPackReaderTests
             0x4000);
 
         var status = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 0);
 
@@ -850,11 +850,11 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(result.Rom);
 
         var visualStatus = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualDecodeLabel],
             chunkIndex: 0,
             slot: 0);
         var collisionStatus = cpu.RunWorldPackDecode(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionDecodeLabel],
             chunkIndex: 0,
             slot: 1);
 
@@ -890,7 +890,7 @@ public sealed class GameBoyWorldPackReaderTests
         }
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel],
             hardwareX: 3,
             hardwareY: 4);
 
@@ -920,11 +920,11 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(result.Rom);
 
         var visual = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel],
             hardwareX,
             hardwareY);
         var collision = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             hardwareX,
             hardwareY);
 
@@ -943,7 +943,7 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(result.Rom);
 
         var visual = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackVisualLookupLabel],
             hardwareX: 1,
             hardwareY: 0);
 
@@ -977,7 +977,7 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(result.Rom);
 
         var packedLookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             0,
             38);
         Assert.Equal(GameBoyWorldPackResult.Success, packedLookup.Status);
@@ -1039,7 +1039,7 @@ public sealed class GameBoyWorldPackReaderTests
         var bankWritesBeforeLookup = cpu.RomBankWrites.Count;
 
         var lookup = cpu.RunWorldPackCollisionLookup(
-            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            result.Report.FixedSymbols[GameBoyWorldPackRuntimeEmitter.WorldPackCollisionLookupLabel],
             checked((ushort)(collisionCell % canonical.Pack.Descriptor.HardwareWidth)),
             checked((ushort)(collisionCell / canonical.Pack.Descriptor.HardwareWidth)));
 

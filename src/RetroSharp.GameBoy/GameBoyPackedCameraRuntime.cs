@@ -38,12 +38,16 @@ internal static class GameBoyPackedCameraRuntime
 
 internal static class GameBoyPackedCameraRuntimeEmitter
 {
+    internal const string WorldPackWaitOutsideVBlankLabel = "worldpack_wait_outside_vblank";
+    internal const string WorldPackWaitIfInVBlankLabel = "worldpack_wait_if_in_vblank";
+    internal const string WorldPackObserveFrameWrapLabel = "worldpack_observe_frame_wrap";
+
     private const byte SafeActiveScanlineEnd = 128;
     private const byte SafeRowPlaneScanlineEnd = 136;
 
     internal static void EmitWaitOutsideVBlank(GbBuilder builder)
     {
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
+        builder.JumpAbsolute(0xCD, WorldPackWaitOutsideVBlankLabel);
     }
 
     internal static void EmitWaitIfInVBlank(GbBuilder builder)
@@ -52,7 +56,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.LoadHighRamA(0x44); // LY
         builder.CompareImmediate(143);
         builder.JumpAbsolute(0xDA, safe);
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitIfInVBlankLabel);
+        builder.JumpAbsolute(0xCD, WorldPackWaitIfInVBlankLabel);
         builder.Label(safe);
     }
 
@@ -111,7 +115,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         var waitForSafeActive = builder.CreateLabel("packed_world_wait_for_safe_active");
         var audioAlreadyTicked = builder.CreateLabel("packed_world_audio_already_ticked");
         var safeActive = builder.CreateLabel("packed_world_safe_active");
-        builder.Label(GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
+        builder.Label(WorldPackWaitOutsideVBlankLabel);
         builder.Emit(0xF5); // PUSH AF; the guard is transparent to callers when LCD timing is inactive.
         builder.LoadHighRamA(0x40); // LCDC
         builder.AndImmediate(0x80);
@@ -142,7 +146,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.WaitAudioTicked);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, wrappedWithoutAudio);
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        builder.JumpAbsolute(0xCD, GameBoyRuntimeCompiler.WorldPackWaitAudioTickLabel);
         builder.Label(wrappedWithoutAudio);
         builder.LoadAImmediate(0);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.WaitAudioTicked);
@@ -167,7 +171,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.JumpAbsolute(0xC2, audioAlreadyTicked);
         builder.LoadAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.WaitAudioTicked);
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        builder.JumpAbsolute(0xCD, GameBoyRuntimeCompiler.WorldPackWaitAudioTickLabel);
         builder.Label(audioAlreadyTicked);
         builder.Label(waitForSafeActive);
         builder.LoadHighRamA(0x44);
@@ -191,7 +195,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         var initialize = builder.CreateLabel("packed_world_observe_initialize");
         var store = builder.CreateLabel("packed_world_observe_store");
         var done = builder.CreateLabel("packed_world_observe_done");
-        builder.Label(GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
+        builder.Label(WorldPackObserveFrameWrapLabel);
         builder.Emit(0xF5); // PUSH AF
         builder.Emit(0xC5); // PUSH BC
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.WaitAudioEnabled);
@@ -213,7 +217,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.WaitAudioTicked);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, store);
-        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        builder.JumpAbsolute(0xCD, GameBoyRuntimeCompiler.WorldPackWaitAudioTickLabel);
         builder.JumpAbsolute(store);
         builder.Label(initialize);
         builder.LoadAImmediate(1);
@@ -231,7 +235,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
     {
         var wait = builder.CreateLabel("packed_world_wait_while_in_vblank");
         var done = builder.CreateLabel("packed_world_wait_if_in_vblank_done");
-        builder.Label(GameBoyRomBuilder.WorldPackWaitIfInVBlankLabel);
+        builder.Label(WorldPackWaitIfInVBlankLabel);
         builder.Emit(0xF5); // PUSH AF
         builder.LoadHighRamA(0x40); // LCDC
         builder.AndImmediate(0x80);
@@ -245,7 +249,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.JumpAbsolute(0xD2, wait);
         if (enablePackedAudioService)
         {
-            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
+            builder.JumpAbsolute(0xCD, WorldPackObserveFrameWrapLabel);
         }
 
         builder.Label(done);
