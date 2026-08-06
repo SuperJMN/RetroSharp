@@ -3,12 +3,26 @@ using RetroSharp.Sdk;
 
 namespace RetroSharp.GameBoy;
 
-internal sealed class Sdk2DStreamReader(
-    IReadOnlyList<Sdk2DStreamItem> main,
-    IReadOnlyDictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutines)
+// Thin Game Boy-owned entry point over the shared SdkStreamReader<TItem, TOperation>
+// stack machine (RetroSharp.Core.Sdk). All traversal logic (cursor tracking,
+// subroutine frames, exhaustion/mismatch diagnostics) lives in Core; this
+// wrapper only knows how to build a reader from a GameBoyVideoProgram and how
+// to word its diagnostics.
+internal sealed class Sdk2DStreamReader
 {
-    private readonly Stack<StreamFrame> stack = [];
-    private StreamFrame current = new("main", main);
+    private static readonly SdkStreamReaderDiagnostics Diagnostics = new(
+        CallPrefix: "Game Boy SDK",
+        OperationNoun: "SDK operation",
+        StreamNoun: "SDK stream");
+
+    private readonly SdkStreamReader<Sdk2DStreamItem, Sdk2DOperation> reader;
+
+    private Sdk2DStreamReader(
+        IReadOnlyList<Sdk2DStreamItem> main,
+        IReadOnlyDictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutines)
+    {
+        reader = new SdkStreamReader<Sdk2DStreamItem, Sdk2DOperation>(main, subroutines, Diagnostics);
+    }
 
     public static Sdk2DStreamReader ForProgram(GameBoyVideoProgram program)
     {
@@ -22,96 +36,35 @@ internal sealed class Sdk2DStreamReader(
         return new Sdk2DStreamReader(program.SdkProgram.Main, program.SdkProgram.Subroutines);
     }
 
-    public Sdk2DOperation ConsumeOperation(string callName)
-    {
-        if (current.Cursor >= current.Items.Count)
-        {
-            throw new InvalidOperationException($"Game Boy SDK call '{callName}' has no collected SDK operation in stream '{current.Name}'.");
-        }
+    public Sdk2DOperation ConsumeOperation(string callName) => reader.ConsumeOperation(callName);
 
-        var item = current.Items[current.Cursor++];
-        return item is Sdk2DStreamItem.Op op
-            ? op.Operation
-            : throw new InvalidOperationException($"Game Boy SDK call '{callName}' expected a collected SDK operation in stream '{current.Name}', got {item.GetType().Name}.");
-    }
+    public void ConsumeSubroutineCall(string name) => reader.ConsumeSubroutineCall(name);
 
-    public void ConsumeSubroutineCall(string name)
-    {
-        if (current.Cursor >= current.Items.Count)
-        {
-            return;
-        }
+    public void EnterSubroutine(string name) => reader.EnterSubroutine(name);
 
-        if (current.Items[current.Cursor] is not Sdk2DStreamItem.CallSubroutine marker)
-        {
-            return;
-        }
+    public void LeaveSubroutine(string name) => reader.LeaveSubroutine(name);
 
-        if (!string.Equals(marker.Name, name, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Game Boy SDK stream expected subroutine call '{marker.Name}', got '{name}'.");
-        }
-
-        current.Cursor++;
-    }
-
-    public void EnterSubroutine(string name)
-    {
-        stack.Push(current);
-        current = new StreamFrame(
-            name,
-            subroutines.TryGetValue(name, out var stream)
-                ? stream
-                : []);
-    }
-
-    public void LeaveSubroutine(string name)
-    {
-        EnsureCurrentConsumed($"Game Boy SDK subroutine '{name}'");
-        current = stack.Pop();
-    }
-
-    public void EnsureAllConsumed(string context)
-    {
-        if (stack.Count != 0)
-        {
-            throw new InvalidOperationException($"{context} finished while SDK stream '{current.Name}' was still active.");
-        }
-
-        EnsureCurrentConsumed(context);
-    }
-
-    private void EnsureCurrentConsumed(string context)
-    {
-        if (current.Cursor == current.Items.Count)
-        {
-            return;
-        }
-
-        var item = current.Items[current.Cursor];
-        var description = item is Sdk2DStreamItem.Op op
-            ? op.Operation.GetType().Name
-            : item.GetType().Name;
-        throw new InvalidOperationException(
-            $"{context} consumed {current.Cursor} of {current.Items.Count} SDK stream item(s) in '{current.Name}'; next item is {description}.");
-    }
-
-    private sealed class StreamFrame(string name, IReadOnlyList<Sdk2DStreamItem> items)
-    {
-        public string Name { get; } = name;
-
-        public IReadOnlyList<Sdk2DStreamItem> Items { get; } = items;
-
-        public int Cursor { get; set; }
-    }
+    public void EnsureAllConsumed(string context) => reader.EnsureAllConsumed(context);
 }
 
-internal sealed class SdkAudioStreamReader(
-    IReadOnlyList<SdkAudioStreamItem> main,
-    IReadOnlyDictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutines)
+// Thin Game Boy-owned entry point over the shared reader for the portable
+// audio SDK stream. Identical shape to Sdk2DStreamReader above, parameterized
+// over SdkAudioStreamItem/SdkAudioOperation instead.
+internal sealed class SdkAudioStreamReader
 {
-    private readonly Stack<StreamFrame> stack = [];
-    private StreamFrame current = new("main", main);
+    private static readonly SdkStreamReaderDiagnostics Diagnostics = new(
+        CallPrefix: "Game Boy SDK audio",
+        OperationNoun: "SDK audio operation",
+        StreamNoun: "SDK audio stream");
+
+    private readonly SdkStreamReader<SdkAudioStreamItem, SdkAudioOperation> reader;
+
+    private SdkAudioStreamReader(
+        IReadOnlyList<SdkAudioStreamItem> main,
+        IReadOnlyDictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutines)
+    {
+        reader = new SdkStreamReader<SdkAudioStreamItem, SdkAudioOperation>(main, subroutines, Diagnostics);
+    }
 
     public static SdkAudioStreamReader ForProgram(GameBoyVideoProgram program)
     {
@@ -125,86 +78,13 @@ internal sealed class SdkAudioStreamReader(
         return new SdkAudioStreamReader(program.SdkAudioProgram.Main, program.SdkAudioProgram.Subroutines);
     }
 
-    public SdkAudioOperation ConsumeOperation(string callName)
-    {
-        if (current.Cursor >= current.Items.Count)
-        {
-            throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' has no collected SDK audio operation in stream '{current.Name}'.");
-        }
+    public SdkAudioOperation ConsumeOperation(string callName) => reader.ConsumeOperation(callName);
 
-        var item = current.Items[current.Cursor++];
-        return item is SdkAudioStreamItem.Op op
-            ? op.Operation
-            : throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' expected a collected SDK audio operation in stream '{current.Name}', got {item.GetType().Name}.");
-    }
+    public void ConsumeSubroutineCall(string name) => reader.ConsumeSubroutineCall(name);
 
-    public void ConsumeSubroutineCall(string name)
-    {
-        if (current.Cursor >= current.Items.Count)
-        {
-            return;
-        }
+    public void EnterSubroutine(string name) => reader.EnterSubroutine(name);
 
-        if (current.Items[current.Cursor] is not SdkAudioStreamItem.CallSubroutine marker)
-        {
-            return;
-        }
+    public void LeaveSubroutine(string name) => reader.LeaveSubroutine(name);
 
-        if (!string.Equals(marker.Name, name, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Game Boy SDK audio stream expected subroutine call '{marker.Name}', got '{name}'.");
-        }
-
-        current.Cursor++;
-    }
-
-    public void EnterSubroutine(string name)
-    {
-        stack.Push(current);
-        current = new StreamFrame(
-            name,
-            subroutines.TryGetValue(name, out var stream)
-                ? stream
-                : []);
-    }
-
-    public void LeaveSubroutine(string name)
-    {
-        EnsureCurrentConsumed($"Game Boy SDK audio subroutine '{name}'");
-        current = stack.Pop();
-    }
-
-    public void EnsureAllConsumed(string context)
-    {
-        if (stack.Count != 0)
-        {
-            throw new InvalidOperationException($"{context} finished while SDK audio stream '{current.Name}' was still active.");
-        }
-
-        EnsureCurrentConsumed(context);
-    }
-
-    private void EnsureCurrentConsumed(string context)
-    {
-        if (current.Cursor == current.Items.Count)
-        {
-            return;
-        }
-
-        var item = current.Items[current.Cursor];
-        var description = item is SdkAudioStreamItem.Op op
-            ? op.Operation.GetType().Name
-            : item.GetType().Name;
-        throw new InvalidOperationException(
-            $"{context} consumed {current.Cursor} of {current.Items.Count} SDK audio stream item(s) in '{current.Name}'; next item is {description}.");
-    }
-
-    private sealed class StreamFrame(string name, IReadOnlyList<SdkAudioStreamItem> items)
-    {
-        public string Name { get; } = name;
-
-        public IReadOnlyList<SdkAudioStreamItem> Items { get; } = items;
-
-        public int Cursor { get; set; }
-    }
+    public void EnsureAllConsumed(string context) => reader.EnsureAllConsumed(context);
 }

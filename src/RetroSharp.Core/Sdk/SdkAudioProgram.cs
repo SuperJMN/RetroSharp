@@ -1,10 +1,24 @@
 namespace RetroSharp.Core.Sdk;
 
-public abstract record SdkAudioStreamItem
+public abstract record SdkAudioStreamItem : ISdkStreamItem<SdkAudioOperation>
 {
-    public sealed record Op(SdkAudioOperation Operation) : SdkAudioStreamItem;
+    SdkAudioOperation? ISdkStreamItem<SdkAudioOperation>.Operation => OperationOrDefault;
 
-    public sealed record CallSubroutine(string Name) : SdkAudioStreamItem;
+    string? ISdkStreamItem<SdkAudioOperation>.SubroutineCallName => SubroutineCallNameOrDefault;
+
+    private protected virtual SdkAudioOperation? OperationOrDefault => null;
+
+    private protected virtual string? SubroutineCallNameOrDefault => null;
+
+    public sealed record Op(SdkAudioOperation Operation) : SdkAudioStreamItem
+    {
+        private protected override SdkAudioOperation? OperationOrDefault => Operation;
+    }
+
+    public sealed record CallSubroutine(string Name) : SdkAudioStreamItem
+    {
+        private protected override string? SubroutineCallNameOrDefault => Name;
+    }
 }
 
 public sealed record SdkAudioProgram(
