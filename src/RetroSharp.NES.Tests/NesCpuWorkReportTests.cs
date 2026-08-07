@@ -37,9 +37,9 @@ public sealed class NesCpuWorkReportTests
         Assert.Equal(report.Status, frame.Status);
         var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
         Assert.Equal(2_273, videoSafe.Capacity);
-        Assert.Equal(513, videoSafe.KnownLower);
-        Assert.Equal(514, videoSafe.KnownUpper);
-        Assert.Equal(SdkCpuWorkStatuses.Incomplete, videoSafe.Status);
+        Assert.Equal(770, videoSafe.KnownLower);
+        Assert.Equal(770, videoSafe.KnownUpper);
+        Assert.Equal(SdkCpuWorkStatuses.Fits, videoSafe.Status);
 
         var transfer = Assert.Single(report.Contributors, contributor => contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
         Assert.Equal(SdkCpuWorkContributorCategories.TargetRuntime, transfer.Category);

@@ -1,6 +1,7 @@
 namespace RetroSharp.NES.Tests;
 
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
 using Xunit;
 
@@ -17,6 +18,14 @@ public sealed class NesCapacityReportTests
 
     /// <summary>The banked canary that owns a frame loop, so it has a hot phase to place.</summary>
     private const string BankedSample = "samples/phase-banked-frame/phase-banked-frame.retrosharp.json";
+
+    /// <summary>A versioned fixture with retained sprites and a frame boundary.</summary>
+    private const string BankedFrameLoadFixture =
+        "validation/fixtures/nes-banked-frame-load-v1/nes-banked-frame-load-v1.retrosharp.json";
+
+    /// <summary>A versioned fixture whose banked program has a hot frame phase.</summary>
+    private const string PrgBoardEscalationFixture =
+        "validation/fixtures/nes-prg-board-escalation-v1/nes-prg-board-escalation-v1.retrosharp.json";
 
     [Fact]
     public void Mapper0_sample_reports_its_profile_size_and_fixed_headroom()
@@ -40,7 +49,7 @@ public sealed class NesCapacityReportTests
         Assert.Contains(report.Notes, note => note.Contains("fixed-resident", StringComparison.Ordinal));
         Assert.DoesNotContain(
             report.Warnings,
-            warning => warning.Region == NesCapacityReportProjection.BankedRegionName);
+            warning => warning.Resource == NesCapacityReportProjection.BankedRegionName);
     }
 
     [Fact]
@@ -107,10 +116,85 @@ public sealed class NesCapacityReportTests
         Assert.True(nearCliff.FixedRegion.HeadroomBytes < larger.FixedRegion.HeadroomBytes);
         var warning = Assert.Single(nearCliff.Warnings);
         Assert.Equal(NesCapacityReportProjection.NearCliffCategory, warning.Category);
-        Assert.Equal(NesCapacityReportProjection.FixedRegionName, warning.Region);
-        Assert.Equal(nearCliff.FixedRegion.HeadroomBytes, warning.HeadroomBytes);
+        Assert.Equal(NesCapacityReportProjection.FixedRegionName, warning.Resource);
+        Assert.Equal(nearCliff.FixedRegion.HeadroomBytes, warning.Headroom);
         Assert.True(warning.HeadroomPercent < warning.ThresholdPercent);
         Assert.Contains("warning, not an error", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Fixture_video_safe_report_matches_the_enforced_frame_plan_cost()
+    {
+        var build = NesSampleProjectBuilds.Build(BankedFrameLoadFixture);
+        var expectedPlan = NesFramePlan.Create(
+            build.Report.SelectedProfile,
+            hasFrameBoundary: true,
+            usesRetainedOam: true,
+            retainedOamByteCount: 4,
+            usesPackedCameraRuntime: false,
+            useSequentialOamPublication: false,
+            useFourScreenNametables: false);
+        var imposed = expectedPlan.VideoSafeCycleCost(null);
+
+        var report = NesCapacityReportProjection.Create(build);
+
+        var videoSafe = Assert.Single(
+            report.CpuWork.Windows,
+            window => window.Window == SdkCpuWorkWindowIds.VideoSafe);
+        Assert.Equal(imposed, videoSafe.KnownLowerCycles);
+        Assert.Equal(imposed, videoSafe.KnownUpperCycles);
+        Assert.InRange(imposed, 700, 800);
+
+        var videoSafeResource = AssertResource(report, SdkCpuWorkWindowIds.VideoSafe);
+        Assert.Equal(imposed, videoSafeResource.Used);
+        Assert.Equal(videoSafe.CapacityCycles, videoSafeResource.Capacity);
+    }
+
+    [Fact]
+    public void Resources_share_one_vocabulary_and_the_binding_constraint_has_the_lowest_relative_headroom()
+    {
+        var report = NesCapacityReportProjection.Create(NesSampleProjectBuilds.Build(PrgBoardEscalationFixture));
+
+        Assert.False(string.IsNullOrWhiteSpace(report.BindingConstraint.Name));
+        AssertResource(report, NesCapacityReportProjection.FixedRegionName);
+        AssertResource(report, NesCapacityReportProjection.BankedRegionName);
+        AssertResource(report, NesCapacityReportProjection.HotPhaseBankPrefix + report.BankedProgram!.HotPhaseUnit);
+        AssertResource(report, SdkCpuWorkWindowIds.Frame);
+        AssertResource(report, SdkCpuWorkWindowIds.VideoSafe);
+        Assert.All(report.Resources, resource =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(resource.Name));
+            Assert.False(string.IsNullOrWhiteSpace(resource.Unit));
+            Assert.InRange(resource.Used, 0, resource.Capacity);
+            Assert.Equal(resource.Capacity - resource.Used, resource.Headroom);
+            Assert.False(string.IsNullOrWhiteSpace(resource.NextUnit));
+            Assert.True(resource.NextUnitCost > 0);
+            Assert.False(string.IsNullOrWhiteSpace(resource.Remedy));
+        });
+
+        var binding = Assert.Single(report.Resources, resource => resource.IsBindingConstraint);
+        var lowestRelativeHeadroom = report.Resources
+            .Where(resource => resource.Capacity > 0)
+            .Min(resource => resource.Headroom / (double)resource.Capacity);
+        Assert.Equal(report.BindingConstraint.Name, binding.Name);
+        Assert.Equal(lowestRelativeHeadroom, binding.Headroom / (double)binding.Capacity);
+    }
+
+    [Fact]
+    public void Near_cliff_warnings_cover_hot_phase_and_cpu_window_resources()
+    {
+        var report = NesCapacityReportProjection.Create(SyntheticNearCliffBuild());
+        var hotResource = NesCapacityReportProjection.HotPhaseBankPrefix + "program:main:frame";
+
+        Assert.Contains(report.Warnings, warning => warning.Resource == hotResource);
+        Assert.Contains(report.Warnings, warning => warning.Resource == SdkCpuWorkWindowIds.VideoSafe);
+        Assert.DoesNotContain(
+            report.Warnings,
+            warning => warning.Resource == NesCapacityReportProjection.BankedRegionName);
+        Assert.Contains(
+            report.BindingConstraint.Name,
+            report.BindingConstraint.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -124,6 +208,7 @@ public sealed class NesCapacityReportTests
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         Assert.Equal(NesCapacityReportProjection.Schema, root.GetProperty("schema").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("bindingConstraint").GetProperty("name").GetString()));
         Assert.Equal(
             build.Report.FixedHeadroomBytes,
             root.GetProperty("fixedRegion").GetProperty("headroomBytes").GetInt32());
@@ -131,6 +216,7 @@ public sealed class NesCapacityReportTests
             build.Report.BankPlacement!.ProgramR6HeadroomBytes,
             root.GetProperty("bankedProgram").GetProperty("region").GetProperty("headroomBytes").GetInt32());
         Assert.NotEmpty(root.GetProperty("bankedProgram").GetProperty("phases").EnumerateArray());
+        Assert.NotEmpty(root.GetProperty("resources").EnumerateArray());
         Assert.Contains(
             "ROM table",
             root.GetProperty("duplication").GetProperty("coverage").GetString()!,
@@ -146,8 +232,76 @@ public sealed class NesCapacityReportTests
         Assert.InRange(region.UsedPercent, 0, 100);
     }
 
+    private static NesCapacityResource AssertResource(NesCapacityReport report, string expectedName) =>
+        Assert.Single(report.Resources, resource => resource.Name == expectedName);
+
     private static NesCapacityReport Report(string source) =>
         NesCapacityReportProjection.Create(RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(source));
+
+    private static NesRomBuildResult SyntheticNearCliffBuild()
+    {
+        var hotCapacity = NesProgramBankPlanner.ProgramBankSize - NesProgramBankPlanner.BankEdgeJumpSize;
+        var hotBytes = hotCapacity - 16;
+        var placement = new NesProgramBankPlacementReport(
+            [
+                new NesProgramPhaseBankPlacement(
+                    "program:main:frame",
+                    NesPrgPlacementPhase.Hot,
+                    [4],
+                    hotBytes),
+            ],
+            HotPhasePhysicalBank: 4,
+            HotPhaseUnitName: "program:main:frame",
+            HotPhaseBytes: hotBytes,
+            ProgramR6HeadroomBytes: 12_000,
+            DuplicatedSharedBytes: 0,
+            [
+                new NesProgramBankOccupancy(4, hotBytes, NesProgramBankPlanner.ProgramBankSize),
+                new NesProgramBankOccupancy(5, 0, NesProgramBankPlanner.ProgramBankSize),
+            ]);
+        var videoSafeContributor = SdkCpuWorkContributor.Create(
+            SdkCpuWorkContributorIds.WorldCommit,
+            SdkCpuWorkContributorCategories.TargetRuntime,
+            "synthetic near-cliff video-safe budget",
+            count: 1,
+            unitLower: 2_200,
+            unitUpper: 2_200,
+            calibration: "test");
+        var cpuWork = SdkCpuWorkReport.Create(
+            "nes",
+            "synthetic",
+            "cpu-cycles",
+            29_780,
+            [],
+            [],
+            [
+                SdkCpuWorkWindowReport.Create(SdkCpuWorkWindowIds.Frame, 29_780, [], []),
+                SdkCpuWorkWindowReport.Create(SdkCpuWorkWindowIds.VideoSafe, 2_273, [videoSafeContributor], []),
+            ]);
+        var buildReport = new NesRomBuildReport(
+            "synthetic",
+            PrgRomSize: 65_536,
+            ChrRomSize: 8_192,
+            FixedPayloadBytes: 1_000,
+            ProgramR6Bytes: hotBytes,
+            FixedVeneerBytes: 0,
+            PinnedR7Bytes: 0,
+            BootR7Bytes: 0,
+            ResidentChrBytes: 0,
+            Segments: [],
+            FixedSymbols: new Dictionary<string, ushort>(StringComparer.Ordinal),
+            BankedSymbols: new Dictionary<string, NesPrgSymbol>(StringComparer.Ordinal),
+            PlacementUnits: [],
+            UserVariables: [],
+            RuntimeRegions: [],
+            SharedSdkSubroutines: [],
+            CpuWork: cpuWork,
+            FixedHeadroomBytes: 8_000,
+            BankPlacement: placement,
+            UserFunctionCalls: NesUserFunctionCallAccountingReport.Empty,
+            OutlinedUserFunctions: []);
+        return new NesRomBuildResult([], buildReport);
+    }
 
     /// <summary>
     /// A program whose emitted size grows linearly with <paramref name="statements"/>, so a test can

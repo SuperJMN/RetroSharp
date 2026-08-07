@@ -245,7 +245,7 @@ internal sealed class NesPhysicalFrameScheduler
                 report.Unknowns.Where(unknown => unknown.Id != SdkCpuWorkContributorIds.SpritePublish));
         }
 
-        return plan.ProjectCpuWork(report);
+        return plan.ProjectCpuWork(report, packedColumnCommit);
     }
 
     internal string SelectedProfile => plan.CartridgeProfile;

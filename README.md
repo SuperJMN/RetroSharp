@@ -313,14 +313,16 @@ The option requires `--target nes`, a single target, and cannot be combined with
 `retrosharp.nes-capacity/v1` JSON object to stdout and does not change a single
 emitted byte: the ROM is identical with and without it.
 
-The report names the selected profile and PRG/CHR size; the fixed PRG region's
-used bytes, remaining headroom and capacity; the banked program's phase-to-bank
-map with per-bank occupancy and remaining R6 headroom; the bytes attributed to
-fixed veneers, pinned R7, boot R7 and resident CHR; the top user-function
-duplication holders; and per-frame CPU work for each named window.
-`fixedRegion.headroomBytes` and `bankedProgram.region.headroomBytes` are the two
-headline numbers: how much room is left, and where. Region capacity is used plus
-headroom as the build measured it, not a re-derived board constant, and
+The report leads with `bindingConstraint`, the scarce resource currently
+closest to its own capacity. It also names the selected profile and PRG/CHR
+size; the fixed PRG region's used bytes, remaining headroom and capacity; the
+banked program's phase-to-bank map with per-bank occupancy and remaining R6
+headroom; the bytes attributed to fixed veneers, pinned R7, boot R7 and
+resident CHR; the top user-function duplication holders; and per-frame CPU work
+for each named window. `resources` repeats fixed PRG, whole R6, the hot phase's
+per-bank cap, and the CPU windows with the same vocabulary: name, unit, use,
+capacity, headroom, binding status, next unit cost, and named remedy. Region
+capacity is used plus headroom as the build measured it, not a re-derived board constant, and
 `bankedProgram` is `null` for a program that is entirely fixed-resident. Shared
 SDK subroutines and outlined user functions are counted with their call sites
 rather than sized, because the build measures no byte total for either.
@@ -332,14 +334,16 @@ never reach the user-function path, so it is not total recoverable headroom.
 iterations, so it is a lower bound where `repeatsPerFrame` is set and an upper
 bound over mutually exclusive branches otherwise. `cpuWork` is an observation
 per named window — `frame` is the whole NTSC frame, `video-safe` is the VBlank
-window — and its known cycles cover only calibrated contributors, so an
-`incomplete` status means the real cost is higher than the figure shown and is
-not the video-safe cost the frame plan enforces at build time.
+window. The `video-safe` figure is the full cost the NES frame plan already
+imposes, including NMI entry reserve, frame-boundary bookkeeping, packed column
+commit, and retained-OAM publication. Other `incomplete` CPU windows still mean
+uncalibrated work exists outside the known figure.
 
-When fixed or R6 headroom falls below five per cent of its region, the report
-adds a `near-cliff` warning and the CLI repeats it on stderr. That is a warning,
-never a gate: spilling into R6 and escalating the board are designed behaviours,
-so the build still succeeds and nothing here can fail it.
+When any reported resource's headroom falls below five per cent, including the
+hot phase's per-bank cap or a CPU window, the report adds a `near-cliff` warning
+and the CLI repeats it on stderr. That is a warning, never a gate: spilling into
+R6 and escalating the board are designed behaviours where allowed, so the build
+still succeeds and nothing here can fail it.
 
 Project paths are resolved relative to the JSON file. `--target`, `--out`, and
 additional `--lib-path` options still work as command-line overrides. Use

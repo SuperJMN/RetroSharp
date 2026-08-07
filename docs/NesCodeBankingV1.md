@@ -236,17 +236,21 @@ change the public `retrosharp.nes.runtime-abi` v1 sidecar or its schema.
 `NesCapacityReportProjection` turns a finished build into the author-facing
 `retrosharp.nes-capacity/v1` report, which the CLI writes to stdout for
 `--capacity-report` (see `README.md`). It names the selected profile, PRG/CHR
-size, both headroom figures against the region that owns them, the phase-to-bank
-map with per-bank occupancy, the bytes attributed to fixed veneers, pinned R7,
-boot R7 and resident CHR, the top user-function duplication holders, and
-per-frame CPU work per named window. Shared SDK subroutines and outlined user
-functions are counted with their call sites rather than sized, because no build
-report measures their bytes. Region capacity is reported as used
-plus headroom exactly as the build measured it, never as a re-derived board
-constant. The report is diagnostic: when fixed or R6 headroom falls below five
-per cent of its region it emits a `near-cliff` warning and the build still
-succeeds, because spilling into R6 and escalating the board are the designed
-behaviours. The only build-time failures in this area stay
+size, the current `bindingConstraint`, both headroom figures against the region
+that owns them, the phase-to-bank map with per-bank occupancy, the bytes
+attributed to fixed veneers, pinned R7, boot R7 and resident CHR, the top
+user-function duplication holders, and per-frame CPU work per named window.
+`resources` repeats fixed PRG, whole R6, the hot phase's per-bank cap, and the
+CPU windows with one vocabulary: use, capacity, headroom, binding status, next
+unit cost, and named remedy. Shared SDK subroutines and outlined user functions
+are counted with their call sites rather than sized, because no build report
+measures their bytes. Region capacity is reported as used plus headroom exactly
+as the build measured it, never as a re-derived board constant. The video-safe
+CPU window reports the complete `NesFramePlan` cost the build already imposes,
+not only the calibrated retained-OAM contributor. The report is diagnostic: when
+any resource's headroom falls below five per cent it emits a `near-cliff`
+warning and the build still succeeds, because warnings do not add gates. The
+only build-time failures in this area stay
 `NesProgramBankCapacityException` and `NesFramePlan.RequireVideoSafeBudget`.
 
 ## Stable evidence
