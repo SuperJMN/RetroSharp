@@ -163,7 +163,7 @@ internal sealed record NesFramePlan(
             layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
             layout.UseFourScreenNametables,
             usesPackedCameraRuntime,
-            layout.EmitMmc3Foundation && usesPackedCameraRuntime);
+            useSequentialOamPublication: false);
     }
 
     internal static NesFramePlan Create(
@@ -216,7 +216,7 @@ internal sealed record NesFramePlan(
         if (useSequentialOamPublication && retainedOamByteCount > MaximumSequentialOamBytes)
         {
             throw new InvalidOperationException(
-                "NES MMC3 retained OAM publication supports at most 38 hardware sprites within the current VBlank budget.");
+                "Legacy sequential NES retained OAM publication supports at most 38 hardware sprites within the current VBlank budget.");
         }
 
         var work = new List<NesFrameWork>();

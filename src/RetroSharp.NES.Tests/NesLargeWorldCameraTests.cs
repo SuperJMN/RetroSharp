@@ -618,12 +618,12 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
-    public void Mmc3_packed_retained_oam_rejects_more_than_38_hardware_sprites()
+    public void Mmc3_packed_retained_oam_accepts_sixty_hardware_sprites()
     {
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 39).Select(index =>
-                $"Sprite.Draw(marker, {8 + index * 5 % 232}, {8 + index * 5 % 216}, 0, false, 0);"));
+            Enumerable.Range(0, 60).Select(index =>
+                $"Sprite.Draw(marker, {8 + index % 8 * 24}, {16 + index / 8 * 24}, 0, false, 0);"));
         var source = $$"""
             void Main() {
                 World.Load("tall.tmj");
@@ -637,15 +637,20 @@ public sealed class NesLargeWorldCameraTests
             }
             """;
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
-                source,
-                RepositoryDirectory("samples/tiled-tall"),
-                sdkLibraryImports: [SdkImportResolver.Portable2D]));
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            RepositoryDirectory("samples/tiled-tall"),
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
-        Assert.Equal(
-            "NES MMC3 retained OAM publication supports at most 38 hardware sprites within the current VBlank budget.",
-            exception.Message);
+        Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
+        var videoSafe = Assert.Single(
+            result.Report.CpuWork.Windows,
+            window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
+        var publication = Assert.Single(
+            videoSafe.Contributors,
+            contributor => contributor.Id == SdkCpuWorkContributorIds.SpritePublish);
+        Assert.Equal(NesFramePlan.OamDmaCycles, publication.TotalUpper);
+        Assert.True(videoSafe.KnownUpper <= videoSafe.Capacity);
     }
 
     [Fact]

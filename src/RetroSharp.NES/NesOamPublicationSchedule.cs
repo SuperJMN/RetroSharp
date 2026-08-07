@@ -1,8 +1,8 @@
 namespace RetroSharp.NES;
 
 /// <summary>
-/// Sequential retained-OAM publication through <c>$2004</c>, used by profiles that do not
-/// publish page <c>$02</c> through <c>$4014</c>.
+/// Legacy sequential retained-OAM publication through <c>$2004</c>, retained as the comparison
+/// control for the DMA publication path.
 /// </summary>
 /// <remarks>
 /// The publication shares one hardware VBlank with the packed background commit, so its cost is

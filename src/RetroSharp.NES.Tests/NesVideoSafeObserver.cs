@@ -45,7 +45,7 @@ internal static class NesVideoSafeObserver
         bool IsUnsafe(long cycle, bool rendering) =>
             rendering && cpu.PpuTiming(cycle, true).Phase != "vblank";
 
-        var bursts = Bursts(ppuWrites);
+        var bursts = Bursts(ppuWrites, oamWrites);
         return new VideoSafeObservation(
             ppuWrites.Count(write => IsUnsafe(write.Cycle, write.RenderingEnabled)),
             oamWrites.Count(write => IsUnsafe(write.Cycle, write.RenderingEnabled)),
@@ -110,13 +110,16 @@ internal static class NesVideoSafeObserver
         return scanline * 341 + timing.Dot;
     }
 
-    // One burst is one frame's video-safe work: PPU register writes separated by less than a
-    // few scanlines of idle time.
-    private static List<Burst> Bursts(IReadOnlyList<NesPpuWrite> writes)
+    // One burst is one frame's video-safe work: PPU register writes and OAM publication bytes
+    // separated by less than a few scanlines of idle time.
+    private static List<Burst> Bursts(IReadOnlyList<NesPpuWrite> ppuWrites, IReadOnlyList<NesOamWrite> oamWrites)
     {
         var bursts = new List<Burst>();
         Burst? current = null;
-        foreach (var write in writes)
+        foreach (var write in ppuWrites
+            .Select(write => VideoSafeWrite.Ppu(write.Cycle, write.Register))
+            .Concat(oamWrites.Select(write => VideoSafeWrite.Oam(write.Cycle)))
+            .OrderBy(write => write.Cycle))
         {
             if (current is null || write.Cycle - current.End > 400)
             {
@@ -125,11 +128,11 @@ internal static class NesVideoSafeObserver
             }
 
             current.End = write.Cycle;
-            if (write.Register == 0x2007)
+            if (write.IsPpuData)
             {
                 current.DataWrites++;
             }
-            else if (write.Register == 0x2004)
+            else if (write.IsOam)
             {
                 current.OamWrites++;
             }
@@ -173,6 +176,13 @@ internal static class NesVideoSafeObserver
         public int DataWrites { get; set; }
 
         public int OamWrites { get; set; }
+    }
+
+    private sealed record VideoSafeWrite(long Cycle, bool IsPpuData, bool IsOam)
+    {
+        public static VideoSafeWrite Ppu(long cycle, ushort register) => new(cycle, register == 0x2007, false);
+
+        public static VideoSafeWrite Oam(long cycle) => new(cycle, false, true);
     }
 }
 

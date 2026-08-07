@@ -40,8 +40,9 @@ under `sprite.publish`, not the complete contributor: the emitted immediate
 load and `$4014` store wrapper still require a selected-profile descriptor.
 Thus 29,266..29,267 is only a transfer-subtracted arithmetic remainder, not
 available headroom. Input, camera, collision, logical draw preparation, and
-generated actor work also remain uncalibrated. MMC3 sequential publication
-must use a different descriptor, and idle wait time is excluded.
+generated actor work also remain uncalibrated. Legacy `$2004` sequential
+publication remains a diagnostic comparison only, and idle wait time is
+excluded.
 
 The common range algebra, no-blanket-reserve rule, stable contributor ids,
 future `GCP1001`/`GCP1002` policy, exact GCP-0.1 named-work calculations, and
@@ -62,17 +63,13 @@ contract. Construction rejects a row deadline that disagrees with the emitted
 tile phases plus final attribute phase. The report keeps the
 whole-frame compatibility fields and
 adds ordered `frame` (29,780 CPU cycles) and conservative `video-safe` (2,273
-CPU cycles) windows. The same plan rejects a sequential retained OAM prefix
-above 152 bytes before emission; incomplete window coverage never claims
-headroom.
-Reachable mapper-0 streams that use `Sprite.Draw(...)` add
-`sprite.publish.transfer` as the numeric `513..514` contributor. The MMC3
-sequential profile instead reports the complete emitted `sprite.publish`
-publication from `NesOamPublicationSchedule`: `8 * retained-bytes + 6`, the
-cost of the straight-line form it emits, so the cost cannot drift from the
-code. That is 614 cycles at 76 bytes and 1,222 at 152 bytes. It
-does not claim a DMA transfer. Programs with no retained sprite publication
-claim neither. The report also names the remaining
+CPU cycles) windows. Incomplete window coverage never claims headroom.
+Reachable NES streams that use `Sprite.Draw(...)` add
+`sprite.publish.transfer` as the numeric `513..514` contributor. The selected
+frame plan reports the complete emitted `sprite.publish` boundary as 514
+cycles for mapper-0, non-packed, and MMC3 packed profiles because all publish
+retained OAM from page `$0200` through `$4014`. Programs with no retained
+sprite publication claim neither. The report also names the remaining
 stable generated/runtime/user-loop unknowns, so arbitrary source loops are not
 assigned fabricated exact costs. There is no public source cycle API, and the
 CLI does not reject current programs merely because coverage is incomplete.
@@ -83,7 +80,7 @@ The packed background column commit and the retained-OAM publication run in the
 same hardware VBlank, one after the other. Each used to carry its own isolated
 cap and neither was checked against the other, so a program could be emitted
 whose joint work overran the 2,273-cycle window and continued writing `$2007`
-and `$2004` on rendered scanlines. That is visible corruption on hardware, and
+or OAM on rendered scanlines. That is visible corruption on hardware, and
 nothing warned at build time.
 
 `NesFramePlan.RequireVideoSafeBudget(...)` now rejects such a program before
@@ -100,13 +97,12 @@ disagree about how much work the commit performs. Its terms are:
 | Static band, per tile | 9 | `LDA payload,X` plus `STA $2007`. |
 | Static band, per attribute nametable | 8 | Reload of the shared attribute high byte. |
 | Static band, per attribute byte | 23 | `STY`/`LDA #`/`ORA`/`STA` address pair plus the payload store. |
-| Sequential OAM publication | `8n + 6` | `NesOamPublicationSchedule`. |
-| `$4014` sprite DMA | 514 | Non-packed and mapper-0 profiles. |
+| `$4014` sprite DMA | 514 | Mapper-0, non-packed, and MMC3 packed profiles. |
 
-The overrun this replaced is recognisable in a PPU timeline as one retained-OAM
-byte every ~42 dots on scanline 261 and beyond, which is the ~14 CPU cycles per
-byte of the old counted publication loop. The straight-line form is 8 cycles,
-or ~24 dots, and completes inside VBlank.
+The old sequential publication overrun is recognisable in a PPU timeline as
+retained-OAM bytes on scanline 261 and beyond. Publishing through `$4014`
+instead has a flat 514-cycle cost, so retained sprite count no longer moves the
+video-safe window.
 
 These are upper bounds, not equalities: `Modelled_video_safe_cost_bounds_measured_consumption`
 pins that the model is at least what `NesTestCpu` observes the emitted ROM
@@ -114,11 +110,11 @@ spend. The diagnostic names the offending `Camera.Init` stream height, the
 retained OAM byte count, the computed cost and the limit; it never silently
 clamps.
 
-The maximum shape the staging layout can express — a 40-row static band with 11
-attribute bytes together with 152 retained OAM bytes — costs about 2,691
-cycles and is rejected. The runner's shipping configuration (40-row band, 23
-hardware sprites) is modelled at 2,211 and measured at 2,162, which is the
-closest any sample sits to the window.
+The maximum static-band shape the staging layout can express — a 40-row static
+band with 11 attribute bytes together with a full OAM page publication — costs
+about 1,983 cycles and fits. Camera-relative commits still use the more
+expensive runtime address path and can be rejected when their joint work cannot
+fit the same window.
 
 `NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame` (32) and
 `MaxAttributeWritesPerFrame` (11) are a different contract: they bound one
@@ -184,18 +180,20 @@ not weaken or require changes to the ownership guard.
 
 Runtime sprite lowering is implemented for logical PNG sprite sheets and transitional JSON assets through `Sdk2DOperation.DrawLogicalSprite`; `Sprite.Draw(...)` is provided by the SDK library over a role-bearing `sprite_draw` target intrinsic. `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, `Music.Stop()`, and `Sfx.Play(name)` are also provided by the SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop`/`sfx_play` target intrinsics (`music_play` and `sfx_play` carry the audio asset as a compile-time `AssetRef` operand), and `Music.Asset(...)` / `Sfx.Asset(...)` are package resource declarations. Camera-relative `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)`, plus screen-space `Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)`, are likewise provided by the SDK library over role-bearing `camera_aabb_tiles`/`camera_aabb_hit_top`/`camera_screen_aabb_tiles`/`camera_screen_aabb_hit_top` target intrinsics matching the Game Boy target.
 
-Logical sprite programs use retained OAM page `$0200`. Mapper-0 and non-packed
-profiles publish it through `$4014` while rendering is in VBlank. MMC3 packed
-profiles avoid AprNes' non-completing page-$02 DMA: they publish only the
-statically used bytes sequentially through `$2004`, after a fresh NMI and
-hardware VBlank check. The publication is emitted straight-line rather than as a
-counted loop, so it costs eight CPU cycles per retained byte plus a six-cycle
-`$2003` reset; it is bounded to 38 hardware sprites/152 bytes, or at most 1,222
-NTSC CPU cycles. That publication shares one hardware VBlank with the packed
-background column commit, and the two are budgeted jointly (see *Video-safe
-budget* below) rather than against separate isolated caps. Both paths then reset the statically allocated
-logical call-site bytes to `$FF`, so an unexecuted conditional draw cannot
-retain an earlier sprite. Startup initializes the full shadow and hardware OAM;
+Logical sprite programs use retained OAM page `$0200`. Mapper-0, non-packed,
+and MMC3 packed profiles publish it through `$4014` while rendering is in
+VBlank, after a fresh NMI and hardware VBlank check. Earlier MMC3 packed builds
+published only the statically used bytes sequentially through `$2004` because
+AprNes was observed to hang on OAM DMA; later minimal ROMs showed the observed
+AprNes variable was mapper 4, not page `$02`, and that hardware OAM DMA is a
+CPU/PPU transfer in which the mapper does not participate. The emulator issue
+is tracked outside the closeout gate; the production route uses the flat
+514-cycle `$4014` DMA. That publication shares one hardware VBlank with the
+packed background column commit, and the two are budgeted jointly (see
+*Video-safe budget* below) rather than against separate isolated caps. The frame
+path then resets the statically allocated logical call-site bytes to `$FF`, so
+an unexecuted conditional draw cannot retain an earlier sprite. Startup
+initializes the full shadow and hardware OAM;
 source calls that accept projectile/effect requests after their `Draw()` phase
 cannot publish those new logical slots until a later `Draw()` and the following
 retained-OAM publication boundary. GCP-2.1 records that source-order contract
@@ -433,7 +431,7 @@ Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct 6
 
 `Sprite.Asset(name, path[, frameWidth, frameHeight])` loads a logical sprite asset. PNG sheets require explicit frame dimensions and are quantized into NES sprite colors where transparent pixels become color `0` and opaque pixels become colors `1..3`. The PNG compiler picks up to three representative opaque source colors for the base metasprite layer, derives nearest NES hardware colors, and applies that derived sprite palette to each `Sprite.Draw(...)` logical palette slot that uses the asset unless that slot has raw `Palette.Set(...)` overrides. If additional opaque source colors remain, NES emits transparent optional overlay pieces for those pixels, derives a second sprite palette, and draws those overlay pieces with the next physical sprite palette slot; drawing such an asset from base slot `3` fails because sprite palette slot `4` does not exist. If two PNG assets drawn with the same logical slot derive incompatible palettes, the backend can place one asset in a free physical sprite palette range and emit the matching OAM attributes, so shared Game Boy/NES source does not need a NES-only palette slot literal. Overlay pieces are emitted after base pieces, count as real OAM usage, and are treated as optional detail for scanline-pressure diagnostics. The compiler preserves the universal background color in sprite palette entry `0`, because NES sprite palette color `0` mirrors the background universal color. JSON assets remain supported through `platforms.nes.frames`, with rows using NES color indexes `0`, `1`, `2`, and `3`; JSON assets do not derive a hardware palette. For PNG paths, the compiler first looks for a platform variant next to the requested file: `Mario.png` resolves to `Mario.nes.png`/`Mario.NES.png` when present, then falls back to `Mario.png`. If the source still names another platform variant such as `Mario.gb.png`, NES strips that suffix while looking for the matching NES variant. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
 
-`Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite into the retained shadow. Mapper-0 and non-packed profiles perform page-$02 OAM DMA. MMC3 packed-camera profiles publish the bounded retained prefix sequentially through `$2004` only at the accepted fresh-VBlank boundary; draw calls never write `$2004` from mainline code. `x`, `y`, `frame`, and `flipX` can be byte-backed constants or storage locations in the shared SDK operation model. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` remains a compile-time logical sprite palette slot and must fit the NES sprite palette slots `0..3`.
+`Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite into the retained shadow. Mapper-0, non-packed, and MMC3 packed-camera profiles perform page-$02 OAM DMA through `$4014` only at the accepted fresh-VBlank boundary; draw calls never write `$2004` from mainline code. `x`, `y`, `frame`, and `flipX` can be byte-backed constants or storage locations in the shared SDK operation model. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` remains a compile-time logical sprite palette slot and must fit the NES sprite palette slots `0..3`.
 
 The preferred `Sprite.Draw(...)` spelling is declared by the `RetroSharp.Portable2D` source package as an inline helper over the NES `sprite_draw` target intrinsic. That intrinsic descriptor marks the sprite name as a compile-time asset reference and the palette slot as a compile-time constant while keeping X, Y, frame, and flipX as runtime operands. Collection still produces `Sdk2DOperation.DrawLogicalSprite`, so sprite asset lookup, palette-slot validation, frame-budget validation, and ROM emission are shared with the common sprite draw operation.
 
