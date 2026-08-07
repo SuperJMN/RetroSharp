@@ -73,6 +73,8 @@ internal sealed record NesFramePlan(
     // alignment penalty.
     internal const long OamDmaCycles = 514;
 
+    private const string VideoSafeBudgetCalibration = "NesFramePlan.VideoSafeBudget/v1";
+
     internal long VideoSafeCycleLimit =>
         Windows.Single(window => window.Id == SdkCpuWorkWindowIds.VideoSafe).Capacity;
 
@@ -276,7 +278,9 @@ internal sealed record NesFramePlan(
         return frame;
     }
 
-    internal SdkCpuWorkReport ProjectCpuWork(SdkCpuWorkReport wholeFrame)
+    internal SdkCpuWorkReport ProjectCpuWork(
+        SdkCpuWorkReport wholeFrame,
+        NesPackedColumnCommit? videoSafeColumnCommit = null)
     {
         ArgumentNullException.ThrowIfNull(wholeFrame);
         if (wholeFrame.Target != "nes" || wholeFrame.Profile != CartridgeProfile)
@@ -291,8 +295,62 @@ internal sealed record NesFramePlan(
                 window.Capacity,
                 wholeFrame.Contributors,
                 wholeFrame.Unknowns)
+            : window.Id == SdkCpuWorkWindowIds.VideoSafe
+                ? ProjectVideoSafeWindow(window, videoSafeColumnCommit)
             : ProjectWindow(window, wholeFrame)).ToArray();
         return wholeFrame with { Windows = windows };
+    }
+
+    private SdkCpuWorkWindowReport ProjectVideoSafeWindow(
+        NesPhysicalFrameWindow window,
+        NesPackedColumnCommit? columnCommit)
+    {
+        var contributors = new List<SdkCpuWorkContributor>
+        {
+            SdkCpuWorkContributor.Create(
+                SdkCpuWorkContributorIds.FrameBoundaryActive,
+                SdkCpuWorkContributorCategories.TargetRuntime,
+                "NMI entry reserve and frame-boundary bookkeeping",
+                count: 1,
+                unitLower: NmiEntryReserveCycles + FrameBoundaryOverheadCycles,
+                unitUpper: NmiEntryReserveCycles + FrameBoundaryOverheadCycles,
+                calibration: VideoSafeBudgetCalibration),
+        };
+
+        var unknowns = new List<SdkCpuWorkUnknown>();
+        if (columnCommit is { } commit)
+        {
+            var commitCycles = PackedColumnCommitCycles(commit);
+            contributors.Add(SdkCpuWorkContributor.Create(
+                SdkCpuWorkContributorIds.WorldCommit,
+                SdkCpuWorkContributorCategories.TargetRuntime,
+                "one packed background column commit",
+                count: 1,
+                unitLower: commitCycles,
+                unitUpper: commitCycles,
+                calibration: VideoSafeBudgetCalibration));
+        }
+        else if (UsesPackedCameraRuntime)
+        {
+            unknowns.Add(new SdkCpuWorkUnknown(
+                SdkCpuWorkContributorIds.WorldCommit,
+                "Packed column commit shape was not configured when this projection was made."));
+        }
+
+        var retainedOamCycles = RetainedOamPublicationCycles;
+        if (retainedOamCycles > 0)
+        {
+            contributors.Add(SdkCpuWorkContributor.Create(
+                SdkCpuWorkContributorIds.SpritePublish,
+                SdkCpuWorkContributorCategories.TargetRuntime,
+                "one retained OAM publication boundary",
+                count: 1,
+                unitLower: retainedOamCycles,
+                unitUpper: retainedOamCycles,
+                calibration: VideoSafeBudgetCalibration));
+        }
+
+        return SdkCpuWorkWindowReport.Create(window.Id, window.Capacity, contributors, unknowns);
     }
 
     private SdkCpuWorkWindowReport ProjectWindow(

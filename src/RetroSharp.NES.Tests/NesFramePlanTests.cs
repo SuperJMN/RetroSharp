@@ -76,7 +76,9 @@ public sealed class NesFramePlanTests
             report.Windows.Select(window => window.Id));
         var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
         Assert.Equal(2_273, videoSafe.Capacity);
-        Assert.Contains(videoSafe.Unknowns, unknown => unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
+        Assert.Equal(plan.VideoSafeCycleCost(null), videoSafe.KnownUpper);
+        Assert.Equal(SdkCpuWorkStatuses.Fits, videoSafe.Status);
+        Assert.DoesNotContain(videoSafe.Unknowns, unknown => unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
         Assert.DoesNotContain(videoSafe.Unknowns, unknown => unknown.Id == SdkCpuWorkContributorIds.UserDynamicLoop);
     }
 }

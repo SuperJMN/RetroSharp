@@ -92,12 +92,37 @@ internal sealed record NesCapacityCpuWork(
     IReadOnlyList<NesCapacityCpuWindow> Windows,
     IReadOnlyList<string> UncalibratedContributors);
 
-/// <summary>A region close enough to full that the next change is likely to move placement.</summary>
+/// <summary>The resource currently closest to its own capacity.</summary>
+internal sealed record NesCapacityBindingConstraint(
+    string Name,
+    string Unit,
+    long Used,
+    long Capacity,
+    long Headroom,
+    double UsedPercent,
+    string Remedy,
+    string Message);
+
+/// <summary>One scarce resource expressed with the common author-facing capacity vocabulary.</summary>
+internal sealed record NesCapacityResource(
+    string Name,
+    string Unit,
+    long Used,
+    long Capacity,
+    long Headroom,
+    double UsedPercent,
+    bool IsBindingConstraint,
+    string NextUnit,
+    long NextUnitCost,
+    string Remedy);
+
+/// <summary>A resource close enough to full that the next change is likely to move placement.</summary>
 internal sealed record NesCapacityWarning(
     string Category,
-    string Region,
-    int HeadroomBytes,
-    int CapacityBytes,
+    string Resource,
+    string Unit,
+    long Headroom,
+    long Capacity,
     double HeadroomPercent,
     double ThresholdPercent,
     string Message);
@@ -109,6 +134,7 @@ internal sealed record NesCapacityWarning(
 internal sealed record NesCapacityReport(
     string Schema,
     string Target,
+    NesCapacityBindingConstraint BindingConstraint,
     string SelectedProfile,
     int PrgRomSizeBytes,
     int ChrRomSizeBytes,
@@ -117,6 +143,7 @@ internal sealed record NesCapacityReport(
     NesCapacityAttribution Attribution,
     NesCapacityDuplication Duplication,
     NesCapacityCpuWork CpuWork,
+    IReadOnlyList<NesCapacityResource> Resources,
     IReadOnlyList<NesCapacityWarning> Warnings,
     IReadOnlyList<string> Notes);
 
@@ -126,7 +153,7 @@ internal sealed record NesCapacityReport(
 /// </summary>
 /// <remarks>
 /// Everything here already exists on <see cref="NesRomBuildReport"/>; this type only names it,
-/// relates the two headroom figures to the regions that own them, and raises a near-cliff warning.
+/// relates each headroom figure to the resource that owns it, and raises near-cliff warnings.
 /// It never measures, never changes placement, and never fails a build: the only build-time
 /// failures in this area stay <see cref="NesProgramBankCapacityException"/> and
 /// <see cref="NesFramePlan.RequireVideoSafeBudget"/>.
@@ -142,9 +169,31 @@ internal static class NesCapacityReportProjection
 
     internal const string BankedRegionName = "program-r6";
 
+    internal const string HotPhaseBankPrefix = "hot-phase:";
+
     internal const string NearCliffCategory = "near-cliff";
 
     private const int TopDuplicationHolders = 5;
+
+    private const string ByteUnit = "bytes";
+
+    private const string CycleUnit = "cpu-cycles";
+
+    private const string ByteNextUnit = "byte";
+
+    private const string CycleNextUnit = "cpu-cycle";
+
+    private const string FixedPrgRemedy =
+        "Reduce fixed-resident runtime/data, veneers, pinned R7/DPCM data, or move cold logic into banked program space.";
+
+    private const string ProgramR6Remedy =
+        "Reduce banked program/world code, or let the compiler escalate to a larger MMC3 board when the R6 pool is the only exhausted resource.";
+
+    private const string FrameWindowRemedy =
+        "Reduce per-frame gameplay, actor, camera, or audio work; keep incomplete CPU-work figures diagnostic until their contributors are calibrated.";
+
+    private const string VideoSafeWindowRemedy =
+        "Reduce retained sprites, shrink the packed streamed band height, or switch to a flatter OAM publication path when that target observer is available.";
 
     private const string DuplicationCoverage =
         "Lower bound. Pure functions the compiler answered from a generated ROM table never reach " +
@@ -171,10 +220,14 @@ internal static class NesCapacityReportProjection
         var report = result.Report;
         var fixedRegion = Region(FixedRegionName, report.FixedPayloadBytes, report.FixedHeadroomBytes);
         var banked = BankedProgram(report.BankPlacement);
+        var cpuWork = CpuWork(report.CpuWork);
+        var resources = Resources(fixedRegion, report.BankPlacement, banked?.Region, cpuWork);
+        var binding = BindingConstraint(resources);
 
         return new NesCapacityReport(
             Schema,
             "nes",
+            binding,
             report.SelectedProfile,
             report.PrgRomSize,
             report.ChrRomSize,
@@ -182,8 +235,9 @@ internal static class NesCapacityReportProjection
             banked,
             Attribution(report),
             Duplication(report),
-            CpuWork(report.CpuWork),
-            Warnings(fixedRegion, banked?.Region),
+            cpuWork,
+            resources,
+            Warnings(resources),
             Notes(report));
     }
 
@@ -282,28 +336,152 @@ internal static class NesCapacityReportProjection
             work.Unknowns.Select(unknown => unknown.Id).ToArray());
     }
 
-    private static IReadOnlyList<NesCapacityWarning> Warnings(
+    private static IReadOnlyList<NesCapacityResource> Resources(
         NesCapacityRegion fixedRegion,
-        NesCapacityRegion? bankedRegion) =>
-        new[] { fixedRegion, bankedRegion }
-            .OfType<NesCapacityRegion>()
+        NesProgramBankPlacementReport? placement,
+        NesCapacityRegion? bankedRegion,
+        NesCapacityCpuWork cpuWork)
+    {
+        var resources = new List<NesCapacityResource>
+        {
+            Resource(
+                FixedRegionName,
+                ByteUnit,
+                fixedRegion.UsedBytes,
+                fixedRegion.CapacityBytes,
+                ByteNextUnit,
+                1,
+                FixedPrgRemedy),
+        };
+
+        if (bankedRegion is not null)
+        {
+            resources.Add(Resource(
+                BankedRegionName,
+                ByteUnit,
+                bankedRegion.UsedBytes,
+                bankedRegion.CapacityBytes,
+                ByteNextUnit,
+                1,
+                ProgramR6Remedy));
+        }
+
+        if (HotPhaseResource(placement) is { } hotPhase)
+        {
+            resources.Add(hotPhase);
+        }
+
+        resources.AddRange(cpuWork.Windows.Select(CpuWindowResource));
+
+        var binding = resources
+            .OrderByDescending(resource => resource.UsedPercent)
+            .ThenBy(resource => resource.Headroom)
+            .ThenBy(resource => resource.Name, StringComparer.Ordinal)
+            .First();
+        return resources
+            .Select(resource => resource with
+            {
+                IsBindingConstraint = string.Equals(resource.Name, binding.Name, StringComparison.Ordinal),
+            })
+            .ToArray();
+    }
+
+    private static NesCapacityBindingConstraint BindingConstraint(IReadOnlyList<NesCapacityResource> resources)
+    {
+        var resource = resources.Single(resource => resource.IsBindingConstraint);
+        var message =
+            $"Binding constraint: NES {resource.Name} uses {Number(resource.Used)} of " +
+            $"{Quantity(resource.Capacity, resource.Unit)} " +
+            $"({resource.UsedPercent.ToString("0.##", CultureInfo.InvariantCulture)}%), leaving " +
+            $"{Quantity(resource.Headroom, resource.Unit)}. Remedy: {resource.Remedy}";
+        return new NesCapacityBindingConstraint(
+            resource.Name,
+            resource.Unit,
+            resource.Used,
+            resource.Capacity,
+            resource.Headroom,
+            resource.UsedPercent,
+            resource.Remedy,
+            message);
+    }
+
+    private static NesCapacityResource? HotPhaseResource(NesProgramBankPlacementReport? placement)
+    {
+        if (placement?.HotPhaseUnitName is not { } unitName || placement.HotPhaseBytes <= 0)
+        {
+            return null;
+        }
+
+        var nonEmptyPhases = placement.Phases.Where(phase => phase.Bytes > 0).ToArray();
+        var hotPhaseIndex = Array.FindIndex(
+            nonEmptyPhases,
+            phase => string.Equals(phase.UnitName, unitName, StringComparison.Ordinal));
+        var hotPhaseEndsProgram = hotPhaseIndex >= 0 && hotPhaseIndex == nonEmptyPhases.Length - 1;
+        var capacity = hotPhaseEndsProgram
+            ? NesProgramBankPlanner.ProgramBankSize
+            : NesProgramBankPlanner.ProgramBankSize - NesProgramBankPlanner.BankEdgeJumpSize;
+        return Resource(
+            HotPhaseBankPrefix + unitName,
+            ByteUnit,
+            placement.HotPhaseBytes,
+            capacity,
+            ByteNextUnit,
+            1,
+            HotPhaseRemedy(unitName));
+    }
+
+    private static string HotPhaseRemedy(string unitName) =>
+        $"Reduce hot frame code in {unitName}, apply runtime-indexed retained-OAM slots, " +
+        "outline generated spawn activation, or split the hot phase only through the bank-aware ABI roadmap.";
+
+    private static NesCapacityResource CpuWindowResource(NesCapacityCpuWindow window)
+    {
+        var used = window.KnownUpperCycles ?? window.KnownLowerCycles;
+        var remedy = string.Equals(window.Window, SdkCpuWorkWindowIds.VideoSafe, StringComparison.Ordinal)
+            ? VideoSafeWindowRemedy
+            : FrameWindowRemedy;
+        return Resource(window.Window, CycleUnit, used, window.CapacityCycles, CycleNextUnit, 1, remedy);
+    }
+
+    private static NesCapacityResource Resource(
+        string name,
+        string unit,
+        long used,
+        long capacity,
+        string nextUnit,
+        long nextUnitCost,
+        string remedy) =>
+        new(
+            name,
+            unit,
+            used,
+            capacity,
+            checked(capacity - used),
+            Percent(used, capacity) ?? 0,
+            false,
+            nextUnit,
+            nextUnitCost,
+            remedy);
+
+    private static IReadOnlyList<NesCapacityWarning> Warnings(IReadOnlyList<NesCapacityResource> resources) =>
+        resources
             .Select(NearCliff)
             .OfType<NesCapacityWarning>()
             .ToArray();
 
     /// <summary>
-    /// A region whose remaining share has fallen under <see cref="NearCliffHeadroomPercent"/>. This
-    /// is an early warning, never a gate: spilling past a full region is designed behaviour, so the
-    /// build still succeeds.
+    /// A resource whose remaining share has fallen under <see cref="NearCliffHeadroomPercent"/>. This
+    /// is an early warning, never a gate: it only reports that a succeeding build is close to an
+    /// existing resource limit.
     /// </summary>
-    private static NesCapacityWarning? NearCliff(NesCapacityRegion region)
+    private static NesCapacityWarning? NearCliff(NesCapacityResource resource)
     {
-        if (region.CapacityBytes <= 0)
+        if (resource.Capacity <= 0)
         {
             return null;
         }
 
-        var headroomPercent = Percent(region.HeadroomBytes, region.CapacityBytes) ?? 0;
+        var headroomPercent = Percent(resource.Headroom, resource.Capacity) ?? 0;
         if (headroomPercent >= NearCliffHeadroomPercent)
         {
             return null;
@@ -311,16 +489,18 @@ internal static class NesCapacityReportProjection
 
         return new NesCapacityWarning(
             NearCliffCategory,
-            region.Region,
-            region.HeadroomBytes,
-            region.CapacityBytes,
+            resource.Name,
+            resource.Unit,
+            resource.Headroom,
+            resource.Capacity,
             headroomPercent,
             NearCliffHeadroomPercent,
-            $"NES {region.Region} region has {Number(region.HeadroomBytes)} of {Number(region.CapacityBytes)} " +
-            $"bytes left ({headroomPercent.ToString("0.##", CultureInfo.InvariantCulture)}%), below the " +
+            $"NES {resource.Name} has {Quantity(resource.Headroom, resource.Unit)} of " +
+            $"{Quantity(resource.Capacity, resource.Unit)} left " +
+            $"({headroomPercent.ToString("0.##", CultureInfo.InvariantCulture)}%), below the " +
             $"{NearCliffHeadroomPercent.ToString("0.##", CultureInfo.InvariantCulture)}% near-cliff share. " +
-            "The next change of any size is likely to move placement or escalate the board. This is a " +
-            "warning, not an error: the build succeeded.");
+            $"Next {resource.NextUnit} costs {Quantity(resource.NextUnitCost, resource.Unit)}. " +
+            $"Remedy: {resource.Remedy} This is a warning, not an error: the build succeeded.");
     }
 
     private static IReadOnlyList<string> Notes(NesRomBuildReport report)
@@ -330,10 +510,13 @@ internal static class NesCapacityReportProjection
             "Diagnostic only. Nothing in this report fails or gates a build.",
             "Region capacity is used plus headroom as the build measured it, not a board constant.",
             "cpuWork is an observation, never a gate. The frame window is the whole NTSC frame and " +
-            "video-safe is the VBlank window; both capacities are the ones the build already uses. Known " +
-            "cycles cover only calibrated contributors, so an incomplete status means real cost is higher " +
-            "than the figure shown and is not the video-safe cost the frame plan enforces. Read each " +
-            "figure against its own window.",
+            "video-safe is the VBlank window; both capacities are the ones the build already uses. The " +
+            "video-safe window reports the complete cost imposed by the frame plan, while incomplete " +
+            "frame status still means uncalibrated whole-frame work is higher than the known figure shown. " +
+            "Read each figure against its own window.",
+            "resources repeats the scarce budgets with one vocabulary: name, capacity, use, headroom, " +
+            "binding status, next unit cost, and named remedy. Warnings come from this diagnostic surface " +
+            "and never add a build gate.",
             "callsPerFrame is static: it is not path sensitive and does not multiply loop iterations, so " +
             "it is a lower bound where repeatsPerFrame is set and an upper bound over mutually exclusive " +
             "branches otherwise.",
@@ -360,5 +543,18 @@ internal static class NesCapacityReportProjection
     private static double? Percent(long value, long capacity) =>
         capacity <= 0 ? null : Math.Round(value * 100.0 / capacity, 2, MidpointRounding.AwayFromZero);
 
-    private static string Number(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
+    private static string Number(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string Quantity(long value, string unit) =>
+        $"{Number(value)} {SingularizeUnit(value, unit)}";
+
+    private static string SingularizeUnit(long value, string unit) =>
+        value is 1 or -1
+            ? unit switch
+            {
+                ByteUnit => "byte",
+                CycleUnit => "cpu-cycle",
+                _ => unit,
+            }
+            : unit;
 }
