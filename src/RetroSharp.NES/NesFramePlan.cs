@@ -280,7 +280,8 @@ internal sealed record NesFramePlan(
 
     internal SdkCpuWorkReport ProjectCpuWork(
         SdkCpuWorkReport wholeFrame,
-        NesPackedColumnCommit? videoSafeColumnCommit = null)
+        NesPackedColumnCommit? videoSafeColumnCommit = null,
+        IReadOnlyList<SdkCpuWorkContributor>? videoSafeSourceContributors = null)
     {
         ArgumentNullException.ThrowIfNull(wholeFrame);
         if (wholeFrame.Target != "nes" || wholeFrame.Profile != CartridgeProfile)
@@ -289,6 +290,7 @@ internal sealed record NesFramePlan(
                 $"NES frame plan '{CartridgeProfile}' cannot project {wholeFrame.Target}/{wholeFrame.Profile} CPU work.");
         }
 
+        var sourceContributors = videoSafeSourceContributors ?? [];
         var windows = Windows.Select(window => window.Id == SdkCpuWorkWindowIds.Frame
             ? SdkCpuWorkWindowReport.Create(
                 window.Id,
@@ -296,14 +298,15 @@ internal sealed record NesFramePlan(
                 wholeFrame.Contributors,
                 wholeFrame.Unknowns)
             : window.Id == SdkCpuWorkWindowIds.VideoSafe
-                ? ProjectVideoSafeWindow(window, videoSafeColumnCommit)
+                ? ProjectVideoSafeWindow(window, videoSafeColumnCommit, sourceContributors)
             : ProjectWindow(window, wholeFrame)).ToArray();
         return wholeFrame with { Windows = windows };
     }
 
     private SdkCpuWorkWindowReport ProjectVideoSafeWindow(
         NesPhysicalFrameWindow window,
-        NesPackedColumnCommit? columnCommit)
+        NesPackedColumnCommit? columnCommit,
+        IReadOnlyList<SdkCpuWorkContributor> sourceContributors)
     {
         var contributors = new List<SdkCpuWorkContributor>
         {
@@ -350,6 +353,7 @@ internal sealed record NesFramePlan(
                 calibration: VideoSafeBudgetCalibration));
         }
 
+        contributors.AddRange(sourceContributors);
         return SdkCpuWorkWindowReport.Create(window.Id, window.Capacity, contributors, unknowns);
     }
 

@@ -14,6 +14,7 @@ public static partial class ActorFrameworkLowerer
         private const string ActorStructName = "Actor";
         private const string AnimationFrameIntrinsic = "animation_frame";
         private const string CameraScreenAabbHitTopIntrinsic = "camera_screen_aabb_hit_top";
+        private const string NesFixedSpawnActivationAttribute = "__rs_nes_fixed_spawn_activation";
         private const int SpawnSpatialIndexThreshold = 32;
 
         private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
@@ -357,7 +358,8 @@ public static partial class ActorFrameworkLowerer
         public static IEnumerable<FunctionSyntax> GeneratedFunctions(ActorFrameworkState state) =>
             GeneratedLookupFunctions(state.Actors.EnemyDefs, state.Actors.UsedEnemyLookupMethods)
                 .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers, state.Actors.EnemyDefs))
-                .Concat(GeneratedSpawnCandidateFunctions(state.Spawns.Layers, state.ScreenWidth));
+                .Concat(GeneratedSpawnCandidateFunctions(state.Spawns.Layers, state.ScreenWidth))
+                .Concat(GeneratedSpawnActivationFunctions(state));
 
         public static IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedSpawnRomTables(
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
@@ -373,7 +375,8 @@ public static partial class ActorFrameworkLowerer
         {
             var layer = state.Spawns.Layer(SpawnLayerKey(call));
             var pool = state.Actors.Pool(layer.PoolName);
-            return RuntimeSpawnActivationStatements(layer, state.GeneratedCalls.NextActivationPrefix(layer), state.ScreenWidth, pool.Capacity);
+            var functionName = state.GeneratedCalls.NextActivationPrefix(layer, state.ScreenWidth, pool.Capacity);
+            return [new ExpressionStatementSyntax(new FunctionCall(functionName, []))];
         }
 
         private static ActorSpawnLayerKey SpawnLayerKey(ActorFrameworkCall call)
@@ -470,6 +473,32 @@ public static partial class ActorFrameworkLowerer
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
             int screenWidth) =>
             SpawnCandidateColumns(spawnLayers, screenWidth).Select(SpawnLookupFunction);
+
+        private static IEnumerable<FunctionSyntax> GeneratedSpawnActivationFunctions(ActorFrameworkState state) =>
+            state.GeneratedCalls.Activations.Select(SpawnActivationFunction);
+
+        private static FunctionSyntax SpawnActivationFunction(ActorSpawnActivation activation) =>
+            new(
+                "void",
+                activation.Prefix,
+                [],
+                new BlockSyntax(RuntimeSpawnActivationStatements(
+                    activation.Layer,
+                    activation.Prefix,
+                    activation.ScreenWidth,
+                    activation.PoolCapacity).ToList()),
+                isInline: true,
+                attributes:
+                [
+                    new FunctionAttributeSyntax(
+                        NesFixedSpawnActivationAttribute,
+                        [
+                            Constant(activation.Layer.Spawns.Count),
+                            Constant(activation.PoolCapacity),
+                            Constant(activation.Layer.WindowWidth ?? activation.ScreenWidth),
+                        ]),
+                ],
+                isCompilerGenerated: true);
 
         private static IEnumerable<SpawnLookupColumn> SpawnLookupColumns(
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
@@ -668,6 +697,13 @@ public static partial class ActorFrameworkLowerer
                             $"Actors.{layer.MethodName} layer '{layer.LayerName}' spatial candidate lookup function");
                     }
                 }
+            }
+
+            foreach (var activation in state.GeneratedCalls.Activations)
+            {
+                yield return new GeneratedName(
+                    activation.Prefix,
+                    $"Actors.{activation.Layer.MethodName} layer '{activation.Layer.LayerName}' activation function");
             }
         }
 

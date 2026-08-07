@@ -327,12 +327,19 @@ them: it is not path-sensitive and does not multiply loop iterations, so
 `falling-blocks Locate` reports ten static calls per frame and was entered twice.
 
 Outlined bodies are emitted outside every placement unit, so they stay
-fixed-resident and every banked caller reaches them with a same-bank `JSR`.
+fixed-resident and every banked caller reaches them with a bank-neutral `JSR`.
 `NesRomBuildReport.OutlinedUserFunctions` names each emitted body, its label,
 CPU address, phase, call-site count, and whether it overrode an `inline` hint.
 Overriding `inline` on a cold `void` helper is deliberate: the helper's `inline`
 hint buys nothing measurable on a startup path, and the duplication it costs is
-the dominant PRG consumer in banked programs.
+the dominant PRG consumer in banked programs. NES actor spawn activation bodies
+are the hot generated-code exception: they are marked by compiler provenance,
+not by a user-writable source attribute, have no runtime arguments, and move
+authored-content-scaled activation code into fixed PRG without moving the
+VBlank publication path. If source order places one of those calls between
+`Video.WaitVBlank()` and `Camera.Apply()`, the video-safe report charges a
+conservative upper for the complete outlined activation instead of counting only
+the `JSR`.
 
 Accounting keeps #516's two projections intact across outlining. An outlined
 function reports `EmittedCopies == 1` and `DuplicatedBytes == 0`, while `Calls`
@@ -624,7 +631,7 @@ The former AprNes/FCEUmm/Nestopia comparison is retained only as the historical
 #327 record in
 [`NesRunnerVisualParityAcceptance.md`](history/NesRunnerVisualParityAcceptance.md).
 
-`samples/actor-framework/actors.rs` is the focused Game Boy/NES acceptance sample for the actor framework. It uses `Actors.Pool`, `Enemies.Def`, Tiled object-layer spawn data, runtime camera-window activation, `enemies.Update()`, `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and `enemies.Draw()` over the same source. The framework lowers before NES target emission to fixed `Actor` arrays with split X/Y world coordinates, generated spawn helpers plus `used[]`, direct kind branches, camera-relative 2-axis collision, and ordinary `Sprite.Draw(...)` calls.
+`samples/actor-framework/actors.rs` is the focused Game Boy/NES acceptance sample for the actor framework. It uses `Actors.Pool`, `Enemies.Def`, Tiled object-layer spawn data, runtime camera-window activation, `enemies.Update()`, `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and `enemies.Draw()` over the same source. The framework lowers before NES target emission to fixed `Actor` arrays with split X/Y world coordinates, generated spawn helpers plus `used[]`, fixed-resident NES spawn activation bodies reached by direct `JSR`, direct kind branches, camera-relative 2-axis collision, and ordinary `Sprite.Draw(...)` calls.
 
 Varying fields in those generated spawn helpers are immutable byte columns in
 fixed PRG ROM, in authored order; uniform fields remain immediate constants.

@@ -13,6 +13,7 @@ public class FunctionSyntax : Syntax
     public bool IsPure { get; }
     public bool IsExtern { get; }
     public IReadOnlyList<FunctionAttributeSyntax> Attributes { get; }
+    public bool IsCompilerGenerated { get; }
 
     public FunctionSyntax(
         string type,
@@ -23,7 +24,8 @@ public class FunctionSyntax : Syntax
         bool isInline = false,
         bool isPure = false,
         bool isExtern = false,
-        IReadOnlyList<FunctionAttributeSyntax>? attributes = null)
+        IReadOnlyList<FunctionAttributeSyntax>? attributes = null,
+        bool isCompilerGenerated = false)
     {
         Type = type;
         Name = name;
@@ -34,6 +36,7 @@ public class FunctionSyntax : Syntax
         IsPure = isPure;
         IsExtern = isExtern;
         Attributes = attributes ?? [];
+        IsCompilerGenerated = isCompilerGenerated;
     }
 
     public override void Accept(ISyntaxVisitor visitor)

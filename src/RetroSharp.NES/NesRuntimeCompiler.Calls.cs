@@ -31,6 +31,7 @@ internal sealed partial class NesRuntimeCompiler
                 return true;
             case TargetIntrinsicOperation.WaitFrame:
                 EmitSdkOperation<Sdk2DOperation.WaitFrame>(call.Name);
+                BeginPotentialVideoSafePrefix();
                 return true;
             case TargetIntrinsicOperation.PollInput:
                 EmitSdkOperation<Sdk2DOperation.PollInput>(call.Name);
@@ -57,6 +58,7 @@ internal sealed partial class NesRuntimeCompiler
                 EmitSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
                 return true;
             case TargetIntrinsicOperation.ApplyCamera:
+                EndPotentialVideoSafePrefix();
                 EmitSdkOperation<Sdk2DOperation.ApplyCamera>(call.Name);
                 return true;
             case TargetIntrinsicOperation.CameraVerticalScrollMax:
@@ -68,6 +70,19 @@ internal sealed partial class NesRuntimeCompiler
             default:
                 throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
+    }
+
+    private void BeginPotentialVideoSafePrefix()
+    {
+        if (builder.CurrentPlacementPhase is NesPrgPlacementPhase.Hot)
+        {
+            potentialVideoSafePrefixActive = true;
+        }
+    }
+
+    private void EndPotentialVideoSafePrefix()
+    {
+        potentialVideoSafePrefixActive = false;
     }
 
     private void EmitSdkPluginOperation(

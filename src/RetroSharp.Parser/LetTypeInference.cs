@@ -79,7 +79,8 @@ public static class LetTypeInference
                 function.IsInline,
                 function.IsPure,
                 function.IsExtern,
-                function.Attributes);
+                function.Attributes,
+                function.IsCompilerGenerated);
         }
 
         private BlockSyntax ResolveBlock(BlockSyntax block, TypeScope scope)

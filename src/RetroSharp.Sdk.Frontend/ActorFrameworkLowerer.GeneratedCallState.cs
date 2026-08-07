@@ -7,12 +7,17 @@ public static partial class ActorFrameworkLowerer
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> projectileRequestCallCounts = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> effectRequestCallCounts = new(StringComparer.Ordinal);
+        private readonly List<ActorSpawnActivation> activations = [];
 
-        public string NextActivationPrefix(ActorSpawnLayer spawnLayer)
+        public IReadOnlyList<ActorSpawnActivation> Activations => activations;
+
+        public string NextActivationPrefix(ActorSpawnLayer spawnLayer, int screenWidth, int poolCapacity)
         {
             activationCallCounts.TryGetValue(spawnLayer.RuntimeName, out var count);
             activationCallCounts[spawnLayer.RuntimeName] = count + 1;
-            return $"{spawnLayer.RuntimeName}_call{count}";
+            var prefix = $"{spawnLayer.RuntimeName}_call{count}";
+            activations.Add(new ActorSpawnActivation(spawnLayer, prefix, screenWidth, poolCapacity));
+            return prefix;
         }
 
         public string NextProjectileRequestPrefix(ProjectilePool pool)
@@ -30,4 +35,10 @@ public static partial class ActorFrameworkLowerer
             return $"__{pool.Name}_{purpose}_call{count}";
         }
     }
+
+    private sealed record ActorSpawnActivation(
+        ActorSpawnLayer Layer,
+        string Prefix,
+        int ScreenWidth,
+        int PoolCapacity);
 }

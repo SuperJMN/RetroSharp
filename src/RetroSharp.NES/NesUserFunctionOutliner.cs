@@ -74,8 +74,11 @@ internal sealed record NesOutlinedUserFunctionBody(
 /// A call whose argument is a computed expression falls back to inline expansion. #514 proposes
 /// giving those a statically allocated argument frame; measured against every NES sample and
 /// validation fixture that recovers 0 B today, because no shipped program has a cold or one-shot
-/// function that reaches this gate at all. <see cref="Candidates"/> reports the gate that really
-/// rejected each function so that headroom stays auditable instead of assumed.
+/// function that reaches this gate at all. Generated actor spawn activation bodies are the one
+/// hot-frame exception: they are compiler-generated, have no runtime arguments, and move
+/// content-scaled code out of the phase unit while their call-site runtime work remains visible
+/// to the video-safe prefix report. <see cref="Candidates"/> reports the gate that really rejected
+/// each function so that headroom stays auditable instead of assumed.
 /// </para>
 /// </remarks>
 internal sealed class NesUserFunctionOutliner
@@ -193,6 +196,14 @@ internal sealed class NesUserFunctionOutliner
         TargetIntrinsicCatalog targetIntrinsics,
         SdkResourceDeclarationRegistry resourceDeclarations)
     {
+        // Actor-framework spawn activation is generated content-scaled work. The trusted
+        // compiler-generated marker lets it move to fixed PRG without opening the hot outliner to
+        // user-authored functions; source-order video-safe delay is accounted at its call site.
+        if (NesGeneratedSpawnActivationWork.IsTrustedFixedActivation(function))
+        {
+            return NesUserFunctionOutlineRejection.None;
+        }
+
         // #514 owns hot outlining, gated on its cost model. This slice never spends frame time.
         if (phase is NesUserFunctionPhase.Hot)
         {

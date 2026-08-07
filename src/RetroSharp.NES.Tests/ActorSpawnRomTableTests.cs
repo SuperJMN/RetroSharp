@@ -120,7 +120,7 @@ public partial class NesRomCompilerTests
         Assert.Equal(Enumerable.Range(112, 32).Select(index => (byte)index), candidateTables["__enemies_spawn_0_candidate_7"].Data);
         Assert.Equal(Enumerable.Range(224, 16).Select(index => (byte)index), candidateTables["__enemies_spawn_0_candidate_14"].Data);
 
-        var lowered = PrintedFunction(prepared.VideoProgram, "Main");
+        var lowered = PrintedFunction(prepared.VideoProgram, "__enemies_spawn_0_call0");
         Assert.Contains("__enemies_spawn_0_candidate_0", lowered);
         Assert.DoesNotContain("__enemies_spawn_0_call0_i<240", Compact(lowered));
     }
@@ -137,7 +137,7 @@ public partial class NesRomCompilerTests
             sdkLibraryRegistry: null,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             sdkPluginRegistry: null);
-        var lowered = Compact(PrintedFunction(prepared.VideoProgram, "Main"));
+        var lowered = Compact(PrintedFunction(prepared.VideoProgram, "__enemies_spawn_0_call0"));
 
         var slotClaim = lowered.IndexOf("if(enemies[__enemies_spawn_0_call0_slot].active==0)", StringComparison.Ordinal);
         var usedMark = lowered.IndexOf("__enemies_spawn_0_used[__enemies_spawn_0_call0_i]=1", StringComparison.Ordinal);

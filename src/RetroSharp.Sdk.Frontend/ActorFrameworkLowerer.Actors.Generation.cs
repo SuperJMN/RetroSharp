@@ -982,11 +982,11 @@ public static partial class ActorFrameworkLowerer
                 return SingletonSpawnActivationStatements(layer, prefix, windowLeft, windowWidth);
             }
 
-            var statements = SpawnRecycleStatements(layer, prefix, windowLeft, windowWidth).ToList();
+            var statements = SpawnRecycleStatements(layer, prefix, windowLeft, windowWidth, poolCapacity).ToList();
 
             if (layer.Spawns.Count != 0)
             {
-                statements.AddRange(SpawnActivationStatements(layer, prefix, windowLeft, windowWidth));
+                statements.AddRange(SpawnActivationStatements(layer, prefix, windowLeft, windowWidth, poolCapacity));
             }
 
             return statements;
@@ -1066,7 +1066,12 @@ public static partial class ActorFrameworkLowerer
                 Constant(1)));
         }
 
-        private static IReadOnlyList<StatementSyntax> SpawnRecycleStatements(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)
+        private static IReadOnlyList<StatementSyntax> SpawnRecycleStatements(
+            ActorSpawnLayer layer,
+            string prefix,
+            int windowLeft,
+            int windowWidth,
+            int poolCapacity)
         {
             var indexName = $"{prefix}_recycle_i";
             var projectionPrefix = $"{prefix}_recycle";
@@ -1078,7 +1083,7 @@ public static partial class ActorFrameworkLowerer
                 windowWidth);
 
             var loop = PoolLoop(
-                new ActorPool(layer.PoolName, 0),
+                new ActorPool(layer.PoolName, poolCapacity),
                 indexName,
                 new IfElseSyntax(
                     new BinaryExpressionSyntax(PoolField(layer.PoolName, indexName, "active"), new ConstantSyntax("0"), Operator.NotEqual),
@@ -1095,11 +1100,16 @@ public static partial class ActorFrameworkLowerer
                 .ToList();
         }
 
-        private static IReadOnlyList<StatementSyntax> SpawnActivationStatements(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)
+        private static IReadOnlyList<StatementSyntax> SpawnActivationStatements(
+            ActorSpawnLayer layer,
+            string prefix,
+            int windowLeft,
+            int windowWidth,
+            int poolCapacity)
         {
             if (BuildSpawnSpatialIndex(layer, windowWidth) is { } spatialIndex)
             {
-                return SpawnSpatialIndexedActivationStatements(layer, prefix, windowLeft, windowWidth, spatialIndex);
+                return SpawnSpatialIndexedActivationStatements(layer, prefix, windowLeft, windowWidth, poolCapacity, spatialIndex);
             }
 
             var indexName = $"{prefix}_i";
@@ -1129,7 +1139,7 @@ public static partial class ActorFrameworkLowerer
                 projection.Visible,
                 new BlockSyntax([
                     new DeclarationSyntax("u8", assignedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new ConstantSyntax("0"))),
-                    PoolLoop(new ActorPool(layer.PoolName, 0), slotName, assignSlot),
+                    PoolLoop(new ActorPool(layer.PoolName, poolCapacity), slotName, assignSlot),
                 ]),
                 Maybe<BlockSyntax>.None));
 
@@ -1157,6 +1167,7 @@ public static partial class ActorFrameworkLowerer
             string prefix,
             int windowLeft,
             int windowWidth,
+            int poolCapacity,
             SpawnSpatialIndex spatialIndex)
         {
             var statements = SpawnCameraXDeclarations(prefix, windowLeft).ToList();
@@ -1175,7 +1186,7 @@ public static partial class ActorFrameworkLowerer
                     Maybe<BlockSyntax>.None));
             }
 
-            statements.Add(SpawnSelectedCandidateLoop(layer, prefix, windowLeft, windowWidth, spatialIndex));
+            statements.Add(SpawnSelectedCandidateLoop(layer, prefix, windowLeft, windowWidth, poolCapacity, spatialIndex));
             return statements;
         }
 
@@ -1184,6 +1195,7 @@ public static partial class ActorFrameworkLowerer
             string prefix,
             int windowLeft,
             int windowWidth,
+            int poolCapacity,
             SpawnSpatialIndex spatialIndex)
         {
             var bucketName = $"{prefix}_bucket";
@@ -1206,7 +1218,7 @@ public static partial class ActorFrameworkLowerer
                 Maybe<BlockSyntax>.None)));
             body.Add(new IfElseSyntax(
                 new BinaryExpressionSyntax(used, Constant(0), Operator.Equal),
-                new BlockSyntax(SpawnCandidateStatements(layer, prefix, indexName, prefix, windowLeft, windowWidth).ToList()),
+                new BlockSyntax(SpawnCandidateStatements(layer, prefix, indexName, prefix, windowLeft, windowWidth, poolCapacity).ToList()),
                 Maybe<BlockSyntax>.None));
 
             return new ForSyntax(
@@ -1225,7 +1237,8 @@ public static partial class ActorFrameworkLowerer
             string indexName,
             string cameraPrefix,
             int windowLeft,
-            int windowWidth)
+            int windowWidth,
+            int poolCapacity)
         {
             var declarations = SpawnValueDeclarations(layer, valuePrefix, indexName).ToList();
             var projection = BuildSpawnScreenProjection(
@@ -1253,7 +1266,7 @@ public static partial class ActorFrameworkLowerer
                 projection.Visible,
                 new BlockSyntax([
                     new DeclarationSyntax("u8", assignedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
-                    PoolLoop(new ActorPool(layer.PoolName, 0), slotName, assignSlot),
+                    PoolLoop(new ActorPool(layer.PoolName, poolCapacity), slotName, assignSlot),
                 ]),
                 Maybe<BlockSyntax>.None));
 
@@ -1495,9 +1508,12 @@ public static partial class ActorFrameworkLowerer
 
         private static ForSyntax PoolLoop(ActorPool pool, string indexName, IReadOnlyList<StatementSyntax> bodyStatements)
         {
+            ExpressionSyntax upperBound = pool.Capacity > 0
+                ? Constant(pool.Capacity)
+                : new CountOfSyntax(pool.Name);
             return new ForSyntax(
                 Maybe.From<StatementSyntax>(new DeclarationSyntax("u8", indexName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new ConstantSyntax("0")))),
-                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(new IdentifierSyntax(indexName), new CountOfSyntax(pool.Name), Operator.LessThan)),
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(new IdentifierSyntax(indexName), upperBound, Operator.LessThan)),
                 Maybe.From<ExpressionSyntax>(new AssignmentSyntax(new IdentifierLValue(indexName), "+=", new ConstantSyntax("1"))),
                 new BlockSyntax(bodyStatements.ToList()));
         }

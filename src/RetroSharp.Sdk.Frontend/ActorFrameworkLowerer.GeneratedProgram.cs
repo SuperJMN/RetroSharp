@@ -30,7 +30,8 @@ public static partial class ActorFrameworkLowerer
                     function.IsInline,
                     function.IsPure,
                     function.IsExtern,
-                    function.Attributes))
+                    function.Attributes,
+                    function.IsCompilerGenerated))
                 .ToList();
 
             ValidateNameCollisions(program, contributions.SelectMany(contribution => contribution.GeneratedNames(state)));

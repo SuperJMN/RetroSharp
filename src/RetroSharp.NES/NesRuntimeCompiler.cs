@@ -29,11 +29,13 @@ internal sealed partial class NesRuntimeCompiler
     private readonly NesSdkStreamReader sdkOperations;
     private readonly NesSdkOperationLowerer sdkOperationLowerer;
     private readonly NesUserFunctionCallRecorder callRecorder;
+    private readonly List<NesVideoSafeGeneratedCall> videoSafeGeneratedCalls = [];
     private byte nextVariableAddress = checked((byte)NesRuntimeMemoryLayout.UserLocals.Start);
     private int nextForLoopId;
     private int nextWhileLoopId;
     private int nextInlineVariableScopeId;
     private bool apuBodySubroutineReferenced;
+    private bool potentialVideoSafePrefixActive;
 
     private const string ApuBodySubroutineLabel = "nes_apu_body";
 
@@ -107,6 +109,7 @@ internal sealed partial class NesRuntimeCompiler
 
     public void Emit(BlockSyntax block)
     {
+        potentialVideoSafePrefixActive = false;
         EmitBlock(block);
         EmitOutlinedUserFunctions();
         sdkOperations.EnsureAllConsumed("NES runtime");
@@ -114,7 +117,15 @@ internal sealed partial class NesRuntimeCompiler
 
     internal void EmitPlacementUnit(BlockSyntax block)
     {
-        EmitBlock(block);
+        try
+        {
+            potentialVideoSafePrefixActive = false;
+            EmitBlock(block);
+        }
+        finally
+        {
+            potentialVideoSafePrefixActive = false;
+        }
     }
 
     internal void EnsureProgramConsumed()
@@ -124,8 +135,10 @@ internal sealed partial class NesRuntimeCompiler
 
     internal NesSdkOperationLowerer SdkOperationLowerer => sdkOperationLowerer;
 
-    /// <summary>Cold and one-shot user functions this compiler emitted once and reached by <c>JSR</c>.</summary>
+    /// <summary>User/generated functions this compiler emitted once and reached by <c>JSR</c>.</summary>
     internal NesUserFunctionOutliner Outliner => outliner;
+
+    internal IReadOnlyList<NesVideoSafeGeneratedCall> VideoSafeGeneratedCalls => videoSafeGeneratedCalls;
 
     private static NesUserFunctionOutliner PlanOutlining(NesVideoProgram program)
     {

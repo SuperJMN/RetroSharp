@@ -220,7 +220,7 @@ public partial class GameBoyRomCompilerTests
             sdkLibraryRegistry: null,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             sdkPluginRegistry: null);
-        var lowered = Compact(PrintedFunction(prepared, "Main"));
+        var lowered = Compact(PrintedFunction(prepared, "__enemies_spawn_0_call0"));
 
         Assert.DoesNotContain("for(u8__enemies_spawn_0_call0_recycle_i", lowered);
         Assert.DoesNotContain("for(u8__enemies_spawn_0_call0_i", lowered);
@@ -302,7 +302,7 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(Enumerable.Range(120, 20).Select(index => (byte)index), candidateTables["__enemies_spawn_0_candidate_12"].Data);
         Assert.Equal(Enumerable.Range(230, 10).Select(index => (byte)index), candidateTables["__enemies_spawn_0_candidate_23"].Data);
 
-        var lowered = PrintedFunction(prepared, "Main");
+        var lowered = PrintedFunction(prepared, "__enemies_spawn_0_call0");
         Assert.Contains("__enemies_spawn_0_candidate_0", lowered);
         Assert.DoesNotContain("__enemies_spawn_0_call0_i<240", Compact(lowered));
     }
@@ -319,7 +319,7 @@ public partial class GameBoyRomCompilerTests
             sdkLibraryRegistry: null,
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             sdkPluginRegistry: null);
-        var lowered = Compact(PrintedFunction(prepared, "Main"));
+        var lowered = Compact(PrintedFunction(prepared, "__enemies_spawn_0_call0"));
 
         var slotClaim = lowered.IndexOf("if(enemies[__enemies_spawn_0_call0_slot].active==0)", StringComparison.Ordinal);
         var usedMark = lowered.IndexOf("__enemies_spawn_0_used[__enemies_spawn_0_call0_i]=1", StringComparison.Ordinal);

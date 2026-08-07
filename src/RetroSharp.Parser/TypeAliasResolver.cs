@@ -34,7 +34,8 @@ public static class TypeAliasResolver
                 function.IsInline,
                 function.IsPure,
                 function.IsExtern,
-                function.Attributes))
+                function.Attributes,
+                function.IsCompilerGenerated))
             .ToList();
 
         return new ProgramSyntax(program.Imports, [], constants, program.Enums, structs, functions);

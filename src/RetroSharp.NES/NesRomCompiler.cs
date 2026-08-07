@@ -477,6 +477,7 @@ internal sealed class NesVideoProgram
         targetIntrinsics ??= NesTarget.Intrinsics;
         resourceDeclarations ??= SdkResourceDeclarationRegistry.Default;
         program = ConstantFolder.Fold(program);
+        NesGeneratedSpawnActivationWork.ValidateReservedAttributes(program.Functions);
 
         var main = program.Functions.FirstOrDefault(f => f.Name == "Main")
                    ?? throw new InvalidOperationException("NES target requires a Main function.");

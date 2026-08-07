@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="96" height="2" tilewidth="16" tileheight="16" infinite="0" nextlayerid="4" nextobjectid="9">
+ <properties>
+  <property name="retrosharpStreamY" type="int" value="0"/>
+  <property name="retrosharpWorldHeight" type="int" value="2"/>
+  <property name="retrosharpWorldY" type="int" value="0"/>
+ </properties>
+ <tileset firstgid="1" source="../../../../samples/shared/platformer-assets/tilesets/stage1.tsx"/>
+ <layer id="1" name="background" width="96" height="2">
+  <data encoding="csv">
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+  </data>
+ </layer>
+ <layer id="2" name="world" width="96" height="2">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  </data>
+ </layer>
+ <objectgroup id="3" name="actors">
+  <object id="1" type="Goomba" x="0" y="0"/>
+  <object id="2" type="Goomba" x="192" y="0"/>
+  <object id="3" type="Goomba" x="384" y="0"/>
+  <object id="4" type="Goomba" x="576" y="0"/>
+  <object id="5" type="Goomba" x="768" y="0"/>
+  <object id="6" type="Goomba" x="960" y="0"/>
+  <object id="7" type="Goomba" x="1152" y="0"/>
+  <object id="8" type="Goomba" x="1344" y="0"/>
+ </objectgroup>
+</map>
