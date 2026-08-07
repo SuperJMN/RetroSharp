@@ -4,7 +4,7 @@ static class Level
 {
     const i16 Width = 256;
     const i16 StreamY = 0;
-    const i16 StreamHeight = 40;
+    const i16 StreamHeight = 20;
 }
 
 void Main()

@@ -664,16 +664,21 @@ internal sealed class NesTestCpu
 
         if (address == 0x4014)
         {
+            var dmaStartCycle = cycles;
             var source = value << 8;
             var sourceSnapshot = Enumerable.Range(0, 256)
                 .Select(index => Read((ushort)(source + index)))
                 .ToArray();
-            OamDmaTransfers.Add(new(value, cycles, (byte[])ram.Clone(), sourceSnapshot, scrollX, scrollY, ppuControl, RenderingEnabled));
+            OamDmaTransfers.Add(new(value, dmaStartCycle, (byte[])ram.Clone(), sourceSnapshot, scrollX, scrollY, ppuControl, RenderingEnabled));
             for (var index = 0; index < 256; index++)
             {
                 var target = oamAddress++;
                 oam[target] = sourceSnapshot[index];
-                OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + target), oam[target], cycles, RenderingEnabled));
+                OamWrites.Add(new NesOamWrite(
+                    (ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + target),
+                    oam[target],
+                    dmaStartCycle + 1 + index * 2L,
+                    RenderingEnabled));
             }
 
             cycles += 513;

@@ -366,7 +366,7 @@ internal static class NesRomBuilder
                 NesPhysicalFrameScheduler.CodeBankedProfileName,
                 layout.UseFourScreenNametables,
                 usePackedCamera,
-                layout.EmitMmc3Foundation && usePackedCamera)
+                useSequentialOamPublication: false)
             : NesPhysicalFrameScheduler.Create(builder, program, layout, usePackedCamera);
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
         if (layout.EmitMmc3Foundation)

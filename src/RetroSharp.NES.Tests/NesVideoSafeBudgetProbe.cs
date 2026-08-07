@@ -12,10 +12,9 @@ using Xunit.Abstractions;
 /// hardware VBlank: the packed background column commit
 /// (<see cref="NesPackedCameraRuntime.MaximumColumnPayloadLength"/> tiles plus
 /// <see cref="NesPackedCameraRuntime.MaximumAttributeBytes"/> attribute bytes) and the
-/// sequential retained-OAM publication through <c>$2004</c> (up to 152 bytes). Each has its own
-/// isolated cap; neither is checked against the other, and their sum can exceed the ~2,273 CPU
-/// cycles of NTSC VBlank. When it does, the tail of the OAM publication lands on the pre-render
-/// and visible scanlines, which is real hardware corruption.
+/// retained-OAM DMA publication through <c>$4014</c>. Their sum must fit the ~2,273 CPU cycles
+/// of NTSC VBlank; if it does not, the tail lands on the pre-render and visible scanlines, which
+/// is real hardware corruption.
 /// </para>
 /// <para>
 /// This harness only measures and reports. It intentionally asserts nothing about the budget so

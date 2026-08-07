@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 /// The NES packed-camera profile performs two independent pieces of work inside one hardware
 /// VBlank: the packed background column commit and the retained-OAM publication. Each used to
 /// carry its own isolated cap and neither was checked against the other, so a program could be
-/// emitted whose joint commit overran VBlank and wrote to <c>$2007</c>/<c>$2004</c> on rendered
+/// emitted whose joint commit overran VBlank and wrote to <c>$2007</c>/OAM on rendered
 /// scanlines. On hardware that is visible corruption.
 /// <para>
 /// These tests hold the terminal condition: every shipping NES sample completes its video-safe
@@ -86,8 +86,8 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     /// build-time diagnostic would accept a program that still corrupts the display.
     /// </summary>
     [Theory]
-    [InlineData("samples/runner/runner.retrosharp.json", 40, 92)]
-    [InlineData("samples/phase-banked-frame/phase-banked-frame.retrosharp.json", 4, 76)]
+    [InlineData("validation/fixtures/nes-oam-dma-v1/sixty-sprites.retrosharp.json", 20, 240)]
+    [InlineData("validation/fixtures/nes-banked-frame-load-v1/nes-banked-frame-load-v1.retrosharp.json", 4, 76)]
     public void Modelled_video_safe_cost_bounds_measured_consumption(
         string projectRelativePath,
         int streamHeight,
@@ -97,9 +97,9 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
             NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamBytes,
+            retainedOamByteCount: retainedOamBytes,
             usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: true);
         var modelled = plan.VideoSafeCycleCost(new NesPackedColumnCommit(0, streamHeight));
 
@@ -117,17 +117,17 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Joint_commit_that_cannot_fit_vblank_is_rejected_with_the_offending_numbers()
+    public void Camera_relative_joint_commit_that_cannot_fit_vblank_is_rejected_with_the_offending_numbers()
     {
         var plan = NesFramePlan.Create(
             NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamByteCount: 152,
+            retainedOamByteCount: 256,
             usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: true);
-        var commit = new NesPackedColumnCommit(0, NesPackedCameraBudget.MaximumColumnPayloadTiles);
+        var commit = new NesPackedColumnCommit(null, NesPackedCameraBudget.MaximumColumnPayloadTiles);
 
         var error = Assert.Throws<InvalidOperationException>(
             () => plan.RequireVideoSafeBudget(commit, "NES camera streamed band height 40"));
@@ -135,7 +135,7 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
         output.WriteLine(error.Message);
         Assert.Contains("band height 40", error.Message, StringComparison.Ordinal);
         Assert.Contains("40 column tiles", error.Message, StringComparison.Ordinal);
-        Assert.Contains("152 retained OAM bytes", error.Message, StringComparison.Ordinal);
+        Assert.Contains("256 retained OAM bytes", error.Message, StringComparison.Ordinal);
         Assert.Contains(plan.VideoSafeCycleLimit.ToString(), error.Message, StringComparison.Ordinal);
         Assert.Contains(
             plan.VideoSafeCycleCost(commit).ToString(),
@@ -154,18 +154,18 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
             NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamByteCount: 152,
+            retainedOamByteCount: 256,
             usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: true);
         var scheduler = new NesPhysicalFrameScheduler(new PrgBuilder(), plan);
         var config = new NesCameraConfig(
             MapWidth: 312,
             MapHeight: 40,
-            StreamY: 0,
+            StreamY: 1,
             StreamHeight: NesPackedCameraBudget.MaximumColumnPayloadTiles,
             UseFourScreenNametables: true);
-        Assert.True(config.UsesStaticColumnBand);
+        Assert.False(config.UsesStaticColumnBand);
 
         var error = Assert.Throws<InvalidOperationException>(() => scheduler.ConfigurePackedColumnBand(config));
 
@@ -174,29 +174,30 @@ public sealed class NesVideoSafeBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Shipping_band_and_sprite_shapes_are_accepted()    {
-        // The runner: a full 40-row static band together with 23 retained hardware sprites.
-        var runner = NesFramePlan.Create(
+    public void Maximum_static_band_and_sixty_sprite_shape_is_accepted()
+    {
+        // The nes-oam-dma-v1 high-sprite publication, paired with the maximum static column band.
+        var fullBandAndSprites = NesFramePlan.Create(
             NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamByteCount: 92,
+            retainedOamByteCount: 240,
             usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: true);
-        runner.RequireVideoSafeBudget(
+        fullBandAndSprites.RequireVideoSafeBudget(
             new NesPackedColumnCommit(0, NesPackedCameraBudget.MaximumColumnPayloadTiles),
-            "runner");
+            "nes-oam-dma-v1");
 
-        // audio-mixed-load: no background commit, but the largest supported sprite publication.
+        // A sprite-only frame with the largest hardware OAM page publication.
         var sprites = NesFramePlan.Create(
             NesPhysicalFrameScheduler.CodeBankedProfileName,
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamByteCount: 152,
+            retainedOamByteCount: 256,
             usesPackedCameraRuntime: false,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: false);
-        sprites.RequireVideoSafeBudget(null, "audio-mixed-load");
+        sprites.RequireVideoSafeBudget(null, "sprite-only");
     }
 }

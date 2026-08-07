@@ -19,6 +19,10 @@ cannot fit the 64 KiB R6 pool. It is the stable canary for MMC3 PRG board
 selection: the linker must escalate to the next larger board, keep the bank
 roles unchanged, and still boot and tick safely.
 
+`nes-oam-dma-v1` freezes a packed MMC3 NES scene with a static WorldPack commit
+and one-vs-sixty retained hardware sprite publications. It is the stable budget
+fixture for proving OAM publication cost stays flat as sprite count changes.
+
 Normal runner edits never update fixtures or baselines. Add a new versioned
 fixture when a contract needs a materially different stable input; do not
 silently replace an existing version.

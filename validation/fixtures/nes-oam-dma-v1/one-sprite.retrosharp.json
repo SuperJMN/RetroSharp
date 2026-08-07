@@ -1,0 +1,5 @@
+{
+  "targets": ["nes"],
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": ["src/one-sprite.rs"]
+}

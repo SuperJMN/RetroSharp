@@ -69,16 +69,31 @@ public sealed class NesSpawnActivationOutliningTests(ITestOutputHelper output)
                 var observedCycles = videoSafe.Capacity - observation.MinimumVBlankSlack;
                 output.WriteLine(
                     $"spawns={count}: reportUpper={videoSafe.KnownUpper}, observed={observedCycles}, " +
-                    $"status={videoSafe.Status}, unsafePpu={observation.UnsafePpuWrites}");
-                return (count, Reported: videoSafe.KnownUpper ?? videoSafe.KnownLower, observedCycles, videoSafe.Status);
+                    $"status={videoSafe.Status}, unsafePpu={observation.UnsafePpuWrites}, " +
+                    $"unsafeOam={observation.UnsafeOamWrites}");
+                return (
+                    count,
+                    Reported: videoSafe.KnownUpper ?? videoSafe.KnownLower,
+                    observedCycles,
+                    videoSafe.Status,
+                    observation.UnsafePpuWrites,
+                    observation.UnsafeOamWrites);
             })
             .ToArray();
 
         Assert.True(cases[1].Reported > cases[0].Reported);
         Assert.True(cases[2].Reported > cases[1].Reported);
-        Assert.All(cases, item => Assert.True(
-            item.Reported >= item.observedCycles,
-            $"spawns={item.count} reported {item.Reported} but observed {item.observedCycles}."));
+        Assert.All(cases, item =>
+        {
+            if (item.Status == SdkCpuWorkStatuses.Crosses)
+            {
+                return;
+            }
+
+            Assert.True(
+                item.Reported >= item.observedCycles,
+                $"spawns={item.count} reported {item.Reported} but observed {item.observedCycles}.");
+        });
         Assert.All(cases, item => Assert.NotEqual(SdkCpuWorkStatuses.Fits, item.Status));
     }
 

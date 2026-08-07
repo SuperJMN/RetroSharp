@@ -6,21 +6,22 @@ using Xunit;
 public sealed class NesFramePlanTests
 {
     [Fact]
-    public void Packed_retained_profile_declares_physical_windows_and_bounded_staging()
+    public void Packed_retained_profile_declares_dma_publication_and_bounded_staging()
     {
         var plan = NesFramePlan.Create(
             "nes-mmc3-tvrom-v1",
             hasFrameBoundary: true,
             usesRetainedOam: true,
-            retainedOamByteCount: 152,
+            retainedOamByteCount: 240,
             usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
+            useSequentialOamPublication: false,
             useFourScreenNametables: true);
 
         Assert.Equal("nes-mmc3-tvrom-v1", plan.CartridgeProfile);
         Assert.True(plan.UsesRetainedOam);
-        Assert.Equal(152, plan.RetainedOamByteCount);
-        Assert.True(plan.UseSequentialOamPublication);
+        Assert.Equal(240, plan.RetainedOamByteCount);
+        Assert.False(plan.UseSequentialOamPublication);
+        Assert.Equal(NesFramePlan.OamDmaCycles, plan.RetainedOamPublicationCycles);
         Assert.Equal(8, plan.MaximumCameraWalkStepsPerFrame);
         Assert.Equal(8, plan.CameraRowTileWritesPerFrame);
         Assert.Equal(4, plan.CameraRowAttributePhase);
@@ -43,7 +44,7 @@ public sealed class NesFramePlanTests
     }
 
     [Fact]
-    public void Sequential_publication_rejects_an_oam_prefix_outside_the_accepted_window_profile()
+    public void Legacy_sequential_publication_rejects_an_oam_prefix_outside_the_accepted_window_profile()
     {
         var exception = Assert.Throws<InvalidOperationException>(() => NesFramePlan.Create(
             "nes-mmc3-tvrom-v1",
@@ -54,6 +55,7 @@ public sealed class NesFramePlanTests
             useSequentialOamPublication: true,
             useFourScreenNametables: true));
 
+        Assert.Contains("Legacy sequential NES retained OAM publication", exception.Message, StringComparison.Ordinal);
         Assert.Contains("at most 38 hardware sprites", exception.Message, StringComparison.Ordinal);
     }
 

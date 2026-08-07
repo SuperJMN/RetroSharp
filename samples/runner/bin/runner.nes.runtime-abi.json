@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "581b5b17bc08f59dcbb7d93522ab69d5734d766c84791ea82bb54f90f911ba2f",
-  "romSha256": "fc580b56a9059988560f33f77f42e6294778e990400ba8247b66829163e4e74a",
+  "abiFingerprint": "7a0f4434b84d9c35e75ffc77452ca153ac1543e1439d8a9d249b72a881906061",
+  "romSha256": "5b7c95d9d45c58952d5a77dd46d5c2023f0e1479511ad48dadd6da7a5de5cbd7",
   "ranges": [
     {
       "id": "UserLocals",
@@ -2237,25 +2237,25 @@
       "size": 2
     },
     {
-      "name": "__enemies_spawn_0_call0_camera_x_lo",
+      "name": "__retrosharp_inline_49___enemies_spawn_0_call0_camera_x_lo",
       "type": "u8",
       "address": 85,
       "size": 1
     },
     {
-      "name": "__enemies_spawn_0_call0_camera_x_hi",
+      "name": "__retrosharp_inline_49___enemies_spawn_0_call0_camera_x_hi",
       "type": "u8",
       "address": 86,
       "size": 1
     },
     {
-      "name": "__enemies_spawn_0_call0_recycle_screen_x",
+      "name": "__retrosharp_inline_49___enemies_spawn_0_call0_recycle_screen_x",
       "type": "u8",
       "address": 87,
       "size": 1
     },
     {
-      "name": "__enemies_spawn_0_call0_spawn_screen_x",
+      "name": "__retrosharp_inline_49___enemies_spawn_0_call0_spawn_screen_x",
       "type": "u8",
       "address": 88,
       "size": 1

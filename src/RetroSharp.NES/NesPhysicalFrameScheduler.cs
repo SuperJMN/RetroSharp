@@ -201,7 +201,7 @@ internal sealed class NesPhysicalFrameScheduler
         Create(
             builder,
             program,
-            useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
+            useFourScreenNametables || usesPackedCameraRuntime ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
             useFourScreenNametables,
             usesPackedCameraRuntime,
             useSequentialOamPublication);
