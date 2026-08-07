@@ -225,6 +225,84 @@ public partial class GameBoyRomCompilerTests
         Assert.Contains("enemies[0].kind==Goomba", lowered);
         Assert.Contains("enemies[0].x-=GoombaSpeed", lowered);
         Assert.Contains("enemies[0].timer+=1", lowered);
+        Assert.DoesNotContain("if(enemies[0].health!=0)", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Singleton_actor_update_with_defeated_frame_skips_behavior_and_animation_when_health_is_zero()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, animation: walk, speed: 1, defeatedFrame: 2);
+                                  enemies.Update();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.DoesNotContain("for(u8__enemies_update_i", lowered);
+        Assert.Contains("if(enemies[0].health!=0){enemies[0].x+=GoombaSpeed", lowered);
+        Assert.Contains("enemies[0].animTick+=1", lowered);
+        Assert.True(
+            lowered.IndexOf("if(enemies[0].health!=0)", StringComparison.Ordinal) <
+            lowered.IndexOf("enemies[0].animTick+=1", StringComparison.Ordinal),
+            "the defeated-frame health guard should enclose both behavior and animation updates.");
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Pooled_actor_update_with_defeated_frame_guards_each_slot_independently()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 2);
+                                  Enemies.Def(Goomba, behavior: Walker, animation: walk, speed: 1, defeatedFrame: 2);
+                                  enemies.Update();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.Contains("for(u8__enemies_update_i=0;__enemies_update_i<2", lowered);
+        Assert.Contains("if(enemies[__enemies_update_i].health!=0){enemies[__enemies_update_i].x+=GoombaSpeed", lowered);
+        Assert.Contains("enemies[__enemies_update_i].animTick+=1", lowered);
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Two_slot_defeatable_actor_draw_uses_one_stable_sprite_call_per_slot()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(goomba, "goomba.png", 16, 16);
+                                  Animation.Clip(walk, 0, 16, 16);
+                                  Actors.Pool(enemies, 2);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, animation: walk, hitboxWidth: 16, hitboxHeight: 16, defeatedFrame: 2);
+                                  enemies.DrawAndTouchPlayerTop(72, 40, 18, 32, 8);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = Compact(visitor.ToString());
+
+        Assert.Equal(1, CountOccurrences(lowered, "for(u8__enemies_draw_player_i"));
+        Assert.Equal(2, CountOccurrences(lowered, "RetroSharp_Portable2D_portable2d_sprite_draw(goomba"));
+        Assert.Contains("__enemies_draw_player_x_0", lowered);
+        Assert.Contains("__enemies_draw_player_x_1", lowered);
+        Assert.Contains("if(enemies[__enemies_draw_player_i].health!=0)", lowered);
     }
 
     [Fact]

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="156" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="2">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="156" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="3" nextobjectid="9">
  <properties>
   <property name="retrosharpStreamY" type="int" value="0"/>
   <property name="retrosharpWorldHeight" type="int" value="20"/>
@@ -32,6 +32,48 @@
  </layer>
  <objectgroup id="2" name="actors">
   <object id="1" class="Goomba" x="176" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="2" class="Goomba" x="320" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="3" class="Goomba" x="720" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="4" class="Goomba" x="880" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="5" class="Goomba" x="1120" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="6" class="Goomba" x="1280" y="288">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="7" class="Goomba" x="1840" y="272">
+   <properties>
+    <property name="facing" type="int" value="1"/>
+    <property name="health" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="8" class="Goomba" x="2240" y="272">
    <properties>
     <property name="facing" type="int" value="1"/>
     <property name="health" type="int" value="1"/>
