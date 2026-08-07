@@ -315,12 +315,14 @@ public static partial class ActorFrameworkLowerer
         string poolName,
         string phase,
         int screenWidth,
-        int screenHeight)
+        int screenHeight,
+        string? cameraPhase = null)
     {
-        var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
-        var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
-        var cameraYLow = $"__{poolName}_{phase}_camera_y_lo";
-        var cameraYHigh = $"__{poolName}_{phase}_camera_y_hi";
+        var cameraVariablePhase = cameraPhase ?? phase;
+        var cameraXLow = $"__{poolName}_{cameraVariablePhase}_camera_x_lo";
+        var cameraXHigh = $"__{poolName}_{cameraVariablePhase}_camera_x_hi";
+        var cameraYLow = $"__{poolName}_{cameraVariablePhase}_camera_y_lo";
+        var cameraYHigh = $"__{poolName}_{cameraVariablePhase}_camera_y_hi";
         var screenX = $"__{poolName}_{phase}_screen_x";
         var screenY = $"__{poolName}_{phase}_screen_y";
         var screenXIdentifier = new IdentifierSyntax(screenX);
