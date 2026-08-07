@@ -1365,7 +1365,8 @@ public static class Sdk2DOperationCollector
                 function.IsInline,
                 function.IsPure,
                 function.IsExtern,
-                function.Attributes);
+                function.Attributes,
+                function.IsCompilerGenerated);
             var receiverCall = new FunctionCall(function.Name, receiverArguments);
             return ParameterSubstitution.Substitute(receiverFunction, receiverCall, targetName);
         }

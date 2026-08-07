@@ -222,7 +222,9 @@ internal sealed class NesPhysicalFrameScheduler
                 usesPackedCameraRuntime,
                 useSequentialOamPublication));
 
-    internal SdkCpuWorkReport CreateCpuWorkReport(IEnumerable<Sdk2DOperation> operations)
+    internal SdkCpuWorkReport CreateCpuWorkReport(
+        IEnumerable<Sdk2DOperation> operations,
+        IReadOnlyList<SdkCpuWorkContributor>? videoSafeSourceContributors = null)
     {
         var report = SdkCpuWorkReportFactory.ForNes(
             plan.CartridgeProfile,
@@ -245,7 +247,7 @@ internal sealed class NesPhysicalFrameScheduler
                 report.Unknowns.Where(unknown => unknown.Id != SdkCpuWorkContributorIds.SpritePublish));
         }
 
-        return plan.ProjectCpuWork(report, packedColumnCommit);
+        return plan.ProjectCpuWork(report, packedColumnCommit, videoSafeSourceContributors ?? []);
     }
 
     internal string SelectedProfile => plan.CartridgeProfile;

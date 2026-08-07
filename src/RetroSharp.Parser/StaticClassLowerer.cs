@@ -24,7 +24,8 @@ public static class StaticClassLowerer
             method.IsInline,
             method.IsPure,
             method.IsExtern,
-            method.Attributes);
+            method.Attributes,
+            method.IsCompilerGenerated);
     }
 
     public static ProgramSyntax LowerStaticCalls(
@@ -55,7 +56,8 @@ public static class StaticClassLowerer
                 function.IsInline,
                 function.IsPure,
                 function.IsExtern,
-                function.Attributes))
+                function.Attributes,
+                function.IsCompilerGenerated))
             .ToList();
 
         return new ProgramSyntax(program.Imports, program.TypeAliases, constants, program.Enums, program.Structs, functions);

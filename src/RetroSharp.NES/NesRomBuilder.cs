@@ -469,7 +469,7 @@ internal static class NesRomBuilder
         movableProgramBytes = builder.PlacementUnits.Sum(unit => unit.Size);
 
         // Outlined bodies stay outside every placement unit, so they are fixed-resident and every
-        // banked caller reaches them with a same-bank JSR.
+        // banked caller reaches them with a bank-neutral JSR.
         runtimeCompiler.EmitOutlinedUserFunctions();
         runtimeCompiler.EmitReferencedSubroutines();
         if (worldPackRuntime is not null)
@@ -682,6 +682,16 @@ internal static class NesRomBuilder
         {
             fixedSymbols[table.Label] = builder.AddressOfLabel(table.Label);
         }
+        var hasFrameLoop = placementPlan.Units.Any(unit => unit.Phase is NesPrgPlacementPhase.Hot);
+        var callAccounting = runtimeCompiler.CreateCallAccountingReport(hasFrameLoop);
+        var videoSafeSourceContributors = NesGeneratedSpawnActivationWork.VideoSafeContributors(
+            runtimeCompiler.VideoSafeGeneratedCalls,
+            callAccounting,
+            program.Functions);
+        var cpuWork = frameScheduler.CreateCpuWorkReport(
+            NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram),
+            videoSafeSourceContributors);
+
         return new NesPrgBuild(
             prg,
             code.Length,
@@ -701,12 +711,11 @@ internal static class NesRomBuilder
             runtimeCompiler.UserVariables,
             DescribeSharedSdkSubroutines(builder),
             frameScheduler.SelectedProfile,
-            frameScheduler.CreateCpuWorkReport(NesSdkProgramOperations.ForRuntimeWork(program.SdkProgram)),
+            cpuWork,
             checked(layout.FixedTrailerStartAddress - layout.FixedRuntimeCpuBaseAddress
                 - fixedPayloadBeforeTrailer - (linkedProgram?.FixedVeneerBytes ?? 0)),
             linkedProgram?.BankPlacement,
-            runtimeCompiler.CreateCallAccountingReport(
-                placementPlan.Units.Any(unit => unit.Phase is NesPrgPlacementPhase.Hot)),
+            callAccounting,
             DescribeOutlinedUserFunctions(builder, runtimeCompiler.Outliner));
     }
 

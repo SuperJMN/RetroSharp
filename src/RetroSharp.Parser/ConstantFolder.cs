@@ -38,7 +38,8 @@ public static class ConstantFolder
             function.IsInline,
             function.IsPure,
             function.IsExtern,
-            function.Attributes)).ToList();
+            function.Attributes,
+            function.IsCompilerGenerated)).ToList();
 
         return new ProgramSyntax(program.Imports, program.TypeAliases, program.Constants, program.Enums, program.Structs, functions);
     }

@@ -95,7 +95,8 @@ multi-piece `DrawLogicalSprite` shape stores its runtime operands in
 single-use and one-piece shapes remain inline when a call would not save code.
 This is target-owned SDK lowering, not a user-function ABI. Startup, runtime
 initialization, target subroutines, `WorldPack` and MMC3 helpers, generated ROM
-tables, DPCM, NMI/IRQ/reset code, and vectors remain fixed.
+tables, NES actor spawn activation bodies, DPCM, NMI/IRQ/reset code, and vectors
+remain fixed.
 
 ### Interrupt residence and bank neutrality
 
@@ -154,10 +155,13 @@ The policy is:
   reports it as the `Mmc3HotPhaseSize` link constraint, which is deliberately
   outside the board-escalation set.
 
-V1 duplicates no shared bytes into phase banks. Shared SDK helper bodies are
-fixed-resident and are reached by ordinary bank-neutral `JSR`, so duplicating
-them into an R6 bank could only add bytes; `DuplicatedSharedBytes` is therefore
-structurally `0` in v1 rather than a tuning knob.
+V1 duplicates no shared bytes into phase banks. Shared SDK helper bodies and
+compiler-generated NES actor spawn activation bodies are fixed-resident and are
+reached by ordinary bank-neutral `JSR`, so duplicating them into an R6 bank
+could only add bytes. User-authored source cannot opt into the spawn-activation
+exception, and source-order video-safe reporting charges the complete outlined
+activation when it can delay `Camera.Apply()`. `DuplicatedSharedBytes` is
+therefore structurally `0` in v1 rather than a tuning knob.
 
 ## Linker module
 

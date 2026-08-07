@@ -136,6 +136,11 @@ internal sealed partial class NesRuntimeCompiler
             return false;
         }
 
+        var recordVideoSafeGeneratedCall =
+            potentialVideoSafePrefixActive
+            && builder.CurrentPlacementPhase is NesPrgPlacementPhase.Hot
+            && NesGeneratedSpawnActivationWork.IsTrustedFixedActivation(function);
+
         if (outliner.TryOutlineCall(function, call, OutlineOperandToken, out var label))
         {
             using (callRecorder.EnterCall(
@@ -146,6 +151,11 @@ internal sealed partial class NesRuntimeCompiler
                        label))
             {
                 builder.CallSubroutine(label);
+            }
+
+            if (recordVideoSafeGeneratedCall)
+            {
+                videoSafeGeneratedCalls.Add(new NesVideoSafeGeneratedCall(function.Name));
             }
 
             return true;
@@ -170,6 +180,11 @@ internal sealed partial class NesRuntimeCompiler
                     PopInlineVariableScope();
                 }
             }
+
+            if (recordVideoSafeGeneratedCall)
+            {
+                videoSafeGeneratedCalls.Add(new NesVideoSafeGeneratedCall(function.Name));
+            }
         }
         finally
         {
@@ -181,7 +196,7 @@ internal sealed partial class NesRuntimeCompiler
 
     /// <summary>
     /// Emits one body per outlined specialization, outside every placement unit so the bodies stay
-    /// fixed-resident and remain reachable by a same-bank <c>JSR</c> from any banked caller.
+    /// fixed-resident and remain reachable by a bank-neutral <c>JSR</c> from any banked caller.
     /// Emitting a body can discover further outlined calls, so the queue is drained.
     /// </summary>
     internal void EmitOutlinedUserFunctions()

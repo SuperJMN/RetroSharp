@@ -641,56 +641,6 @@ public partial class NesRomCompilerTests
             ]
             """);
 
-        var manualSource = $$"""
-                             struct Actor {
-                                 u8 kind;
-                                 u8 active;
-                                 u8 x;
-                                 u8 xHi;
-                                 u8 y;
-                                 u8 yHi;
-                                 i8 vx;
-                                 i8 vy;
-                                 u8 state;
-                                 u8 timer;
-                                 u8 facing;
-                                 u8 animTick;
-                                 u8 health;
-                             }
-
-                             const Goomba = 1;
-                             const Bat = 2;
-
-                             inline u8 __enemies_spawn_0_kind(u8 index) => Goomba;
-                             inline u8 __enemies_spawn_0_x(u8 index) => 24;
-                             inline u8 __enemies_spawn_0_xHi(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_y(u8 index) => 40;
-                             inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_active(u8 index) => 1;
-                             inline u8 __enemies_spawn_0_vx(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_vy(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_state(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_timer(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_facing(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_health(u8 index) => 0;
-
-                             void Main() {
-                                 World.Column(0, 0, 0);
-                                 World.Map(40, 10, 2);
-                                 Camera.Init(40, 10, 2);
-                                 Actor enemies[1];
-                                 u8 __enemies_spawn_0_used[2];
-
-                                 Camera.SetPosition(0, 0);
-                             {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call0")}}
-
-                                 Camera.SetPosition(128, 0);
-                             {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call1")}}
-                                 return;
-                             }
-                             """;
-
         const string actorSource = """
                                    void Main() {
                                        World.Column(0, 0, 0);
@@ -707,25 +657,19 @@ public partial class NesRomCompilerTests
                                    }
                                    """;
 
-        var manualRomTables = new Dictionary<string, CompilerGeneratedRomTable>(StringComparer.Ordinal)
-        {
-            ["__enemies_spawn_0_kind"] = new("__enemies_spawn_0_kind", [1, 2]),
-            ["__enemies_spawn_0_xHi"] = new("__enemies_spawn_0_xHi", [0, 1]),
-            ["__enemies_spawn_0_y"] = new("__enemies_spawn_0_y", [40, 32]),
-            ["__enemies_spawn_0_facing"] = new("__enemies_spawn_0_facing", [0, 1]),
-        };
-        var expected = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
-            manualSource,
-            sdkLibraryImports: [SdkImportResolver.Portable2D],
-            generatedRomTablesOverride: manualRomTables).Rom;
-        var actual = NesRomCompiler.CompileSource(actorSource, baseDirectory);
-        var firstDifference = Enumerable.Range(16, expected.Length - 16).FirstOrDefault(index => expected[index] != actual[index], -1);
-
-        Assert.True(
-            expected.SequenceEqual(actual),
-            firstDifference < 0
-                ? "NES runtime actor activation ROMs differ only in iNES header bytes."
-                : $"NES runtime actor activation ROMs differ at 0x{firstDifference:X4}: expected {BytesAround(expected, firstDifference)}, actual {BytesAround(actual, firstDifference)}.");
+        var actual = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            actorSource,
+            baseDirectory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        Assert.Contains(actual.Report.OutlinedUserFunctions, function => function.Function == "__enemies_spawn_0_call0");
+        Assert.Contains(actual.Report.OutlinedUserFunctions, function => function.Function == "__enemies_spawn_0_call1");
+        Assert.All(
+            actual.Report.OutlinedUserFunctions.Where(function => function.Function.StartsWith("__enemies_spawn_0_call", StringComparison.Ordinal)),
+            function =>
+            {
+                Assert.NotEqual(0, function.CpuAddress);
+                Assert.Equal(1, function.CallSites);
+            });
     }
 
     private static string WriteActorSpawnMap(string objectsJson)
@@ -753,66 +697,6 @@ public partial class NesRomCompilerTests
               }
               """);
         return directory;
-    }
-
-    private static string RuntimeSpawnActivationBlockForNes(string prefix)
-    {
-        return $$"""
-                     u8 {{prefix}}_recycle_camera_x_lo = __rs_actor_camera_x_lo();
-                     u8 {{prefix}}_recycle_camera_x_hi = __rs_actor_camera_x_hi();
-                     for (u8 {{prefix}}_recycle_i = 0; {{prefix}}_recycle_i < countof(enemies); {{prefix}}_recycle_i += 1) {
-                         if (enemies[{{prefix}}_recycle_i].active != 0) {
-                             u8 {{prefix}}_recycle_screen_x = enemies[{{prefix}}_recycle_i].x - {{prefix}}_recycle_camera_x_lo;
-                             if (!((enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi) && (enemies[{{prefix}}_recycle_i].x >= {{prefix}}_recycle_camera_x_lo) || (enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi + 1) && (enemies[{{prefix}}_recycle_i].x < {{prefix}}_recycle_camera_x_lo))) {
-                                 enemies[{{prefix}}_recycle_i].active = 0;
-                             }
-                         }
-                     }
-                     u8 {{prefix}}_camera_x_lo = __rs_actor_camera_x_lo();
-                     u8 {{prefix}}_camera_x_hi = __rs_actor_camera_x_hi();
-                     for (u8 {{prefix}}_i = 0; {{prefix}}_i < 2; {{prefix}}_i += 1) {
-                         if (__enemies_spawn_0_used[{{prefix}}_i] == 0) {
-                             u8 {{prefix}}_kind_value = __enemies_spawn_0_kind({{prefix}}_i);
-                             u8 {{prefix}}_x_value = __enemies_spawn_0_x({{prefix}}_i);
-                             u8 {{prefix}}_xHi_value = __enemies_spawn_0_xHi({{prefix}}_i);
-                             u8 {{prefix}}_y_value = __enemies_spawn_0_y({{prefix}}_i);
-                             u8 {{prefix}}_yHi_value = __enemies_spawn_0_yHi({{prefix}}_i);
-                             u8 {{prefix}}_active_value = __enemies_spawn_0_active({{prefix}}_i);
-                             u8 {{prefix}}_vx_value = __enemies_spawn_0_vx({{prefix}}_i);
-                             u8 {{prefix}}_vy_value = __enemies_spawn_0_vy({{prefix}}_i);
-                             u8 {{prefix}}_state_value = __enemies_spawn_0_state({{prefix}}_i);
-                             u8 {{prefix}}_timer_value = __enemies_spawn_0_timer({{prefix}}_i);
-                             u8 {{prefix}}_facing_value = __enemies_spawn_0_facing({{prefix}}_i);
-                             u8 {{prefix}}_animTick_value = __enemies_spawn_0_animTick({{prefix}}_i);
-                             u8 {{prefix}}_health_value = __enemies_spawn_0_health({{prefix}}_i);
-                             u8 {{prefix}}_screen_x = {{prefix}}_x_value - {{prefix}}_camera_x_lo;
-                             if ((({{prefix}}_xHi_value == {{prefix}}_camera_x_hi) && ({{prefix}}_x_value >= {{prefix}}_camera_x_lo)) || (({{prefix}}_xHi_value == {{prefix}}_camera_x_hi + 1) && ({{prefix}}_x_value < {{prefix}}_camera_x_lo))) {
-                                 u8 {{prefix}}_assigned = 0;
-                                 for (u8 {{prefix}}_slot = 0; {{prefix}}_slot < countof(enemies); {{prefix}}_slot += 1) {
-                                     if ({{prefix}}_assigned == 0) {
-                                         if (enemies[{{prefix}}_slot].active == 0) {
-                                             enemies[{{prefix}}_slot].kind = {{prefix}}_kind_value;
-                                             enemies[{{prefix}}_slot].x = {{prefix}}_x_value;
-                                             enemies[{{prefix}}_slot].xHi = {{prefix}}_xHi_value;
-                                             enemies[{{prefix}}_slot].y = {{prefix}}_y_value;
-                                             enemies[{{prefix}}_slot].yHi = {{prefix}}_yHi_value;
-                                             enemies[{{prefix}}_slot].vx = {{prefix}}_vx_value;
-                                             enemies[{{prefix}}_slot].vy = {{prefix}}_vy_value;
-                                             enemies[{{prefix}}_slot].state = {{prefix}}_state_value;
-                                             enemies[{{prefix}}_slot].timer = {{prefix}}_timer_value;
-                                             enemies[{{prefix}}_slot].facing = {{prefix}}_facing_value;
-                                             enemies[{{prefix}}_slot].animTick = {{prefix}}_animTick_value;
-                                             enemies[{{prefix}}_slot].health = {{prefix}}_health_value;
-                                             enemies[{{prefix}}_slot].active = {{prefix}}_active_value;
-                                             __enemies_spawn_0_used[{{prefix}}_i] = 1;
-                                             {{prefix}}_assigned = 1;
-                                         }
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 """;
     }
 
 }

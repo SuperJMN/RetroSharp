@@ -100,7 +100,7 @@ internal sealed record NesRomBuildReport(
     IReadOnlyList<NesOutlinedUserFunction> OutlinedUserFunctions);
 
 /// <summary>
-/// One cold or one-shot user function emitted once and reached by <see cref="CallSites"/> JSRs.
+/// One user or generated function emitted once and reached by <see cref="CallSites"/> JSRs.
 /// <see cref="OverridesInlineHint"/> names the helpers whose <c>inline</c> hint the target chose
 /// to override, so the decision is auditable from a production build report.
 /// </summary>
